@@ -1,0 +1,4 @@
+{
+  "extends": ["./.wxt/tsconfig.json", "@sitenote/tsconfig/react.json"],
+  "include": [".wxt/wxt.d.ts", "entrypoints", "wxt.config.ts"]
+}
