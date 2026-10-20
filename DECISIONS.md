@@ -82,24 +82,57 @@ One entry per decision: what was chosen, the alternatives, and why. Newest at th
 
 All versions are pinned exactly.
 
-| Package                   | Version | Where                                     |
-| ------------------------- | ------- | ----------------------------------------- |
-| pnpm                      | 11.1.3  | root `packageManager`                     |
-| turbo                     | 2.11.9  | root                                      |
-| typescript                | 6.0.3   | root                                      |
-| @types/node               | 24.19.2 | root                                      |
-| eslint                    | 10.13.0 | root                                      |
-| @eslint/js                | 10.0.1  | root                                      |
-| typescript-eslint         | 8.72.0  | root                                      |
-| eslint-plugin-react-hooks | 7.1.1   | root                                      |
-| eslint-config-prettier    | 10.1.8  | root                                      |
-| globals                   | 17.13.0 | root                                      |
-| prettier                  | 3.9.10  | root                                      |
-| vitest                    | 5.0.5   | root, `@sitenote/core`, `@sitenote/ui`    |
-| react                     | 19.3.1  | `@sitenote/ui` (dev, peer `>=19.0.0 <20`) |
-| react-dom                 | 19.3.1  | `@sitenote/ui` (dev, peer `>=19.0.0 <20`) |
-| @types/react              | 19.3.0  | `@sitenote/ui`                            |
-| @types/react-dom          | 19.3.0  | `@sitenote/ui`                            |
-| @testing-library/react    | 16.3.3  | `@sitenote/ui`                            |
-| @testing-library/dom      | 10.4.2  | `@sitenote/ui`                            |
-| happy-dom                 | 21.0.3  | `@sitenote/ui`                            |
+| Package                         | Version | Where                                                                          |
+| ------------------------------- | ------- | ------------------------------------------------------------------------------ |
+| pnpm                            | 11.1.3  | root `packageManager`                                                          |
+| turbo                           | 2.11.9  | root                                                                           |
+| typescript                      | 6.0.3   | root                                                                           |
+| @types/node                     | 24.19.2 | root                                                                           |
+| eslint                          | 10.13.0 | root                                                                           |
+| @eslint/js                      | 10.0.1  | root                                                                           |
+| typescript-eslint               | 8.72.0  | root                                                                           |
+| eslint-plugin-react-hooks       | 7.1.1   | root                                                                           |
+| eslint-config-prettier          | 10.1.8  | root                                                                           |
+| globals                         | 17.13.0 | root                                                                           |
+| prettier                        | 3.9.10  | root                                                                           |
+| vitest                          | 5.0.5   | root, `@sitenote/core`, `@sitenote/ui`                                         |
+| react                           | 19.3.1  | `@sitenote/ui` (dev, peer `>=19.0.0 <20`), `@sitenote/extension`               |
+| react-dom                       | 19.3.1  | `@sitenote/ui` (dev, peer `>=19.0.0 <20`), `@sitenote/extension`               |
+| @types/react                    | 19.3.0  | `@sitenote/ui`, `@sitenote/extension`                                          |
+| @types/react-dom                | 19.3.0  | `@sitenote/ui`, `@sitenote/extension`                                          |
+| @testing-library/react          | 16.3.3  | `@sitenote/ui`                                                                 |
+| @testing-library/dom            | 10.4.2  | `@sitenote/ui`                                                                 |
+| happy-dom                       | 21.0.3  | `@sitenote/ui`                                                                 |
+| wxt                             | 0.21.4  | `@sitenote/extension`                                                          |
+| vite                            | 8.3.4   | `@sitenote/extension` (required peer of `wxt`, same version Vitest 5 resolves) |
+| tailwindcss                     | 4.3.3   | `@sitenote/extension`                                                          |
+| @tailwindcss/vite               | 4.3.3   | `@sitenote/extension`                                                          |
+| postcss                         | 8.5.31  | `@sitenote/extension`                                                          |
+| postcss-rem-to-responsive-pixel | 7.0.8   | `@sitenote/extension`                                                          |
+
+## D-015 WXT extension package layout, TypeScript setup and dev runner
+
+- **Chosen:** `apps/extension` (`@sitenote/extension`) is a WXT 0.21 project with the default layout: `entrypoints/` at the package root, `wxt.config.ts`, output in `.output/` (`.output/chrome-mv3` for the Chrome build). Auto-imports are disabled (`imports: false`), so every WXT API is imported explicitly from `wxt/utils/*` and the code does not rely on generated globals. `tsconfig.json` extends `["./.wxt/tsconfig.json", "@sitenote/tsconfig/react.json"]`, in that order so the shared strict options win over WXT's, and its `include` lists `.wxt/wxt.d.ts`, `entrypoints` and `wxt.config.ts`. `.wxt/` is generated and gitignored, so the package has `"postinstall": "wxt prepare"`: `pnpm install` on a clean clone or in CI generates it before any `typecheck`. The manifest is built from `wxt.config.ts` (`name: "Sitenote"`, a one-line description) and takes `version` from `package.json`. No background script and no popup exist yet because phase 0 needs neither; WXT adds its dev-only background itself. There is no `test` script because the package has no unit tests; the extension is covered by Playwright end-to-end tests later. Dev runner: `webExt.disabled: true`, so `pnpm dev` builds and rebuilds into `.output/chrome-mv3` but never launches a browser. Load unpacked: open `chrome://extensions` (or `opera://extensions` in Opera GX), enable developer mode, choose "Load unpacked" and select `apps/extension/.output/chrome-mv3`. While `pnpm dev` runs, the dev build in that folder reloads on change; after a production `pnpm --filter @sitenote/extension build`, reload the extension manually.
+- **Alternatives:** WXT auto-imports; a single `extends: "./.wxt/tsconfig.json"` with the shared options copied in; `prepare` instead of `postinstall`; letting WXT open Chrome or Firefox through `web-ext`; `@wxt-dev/module-react` and `@vitejs/plugin-react`.
+- **Why:** explicit imports keep ESLint and `tsc` independent of generated globals. Extending both configs avoids duplicating the strict flags; WXT's own file only adds the `@`/`~` path aliases and `lib`/`module` defaults, and the shared config overrides the rest. `postinstall` is WXT's documented hook, pnpm runs it for workspace projects, and `wxt prepare` needs no browser. The owner uses Opera GX, which `web-ext` cannot launch. `@wxt-dev/module-react` only adds the React Vite plugin for fast refresh and auto-imports; Vite 8 already compiles JSX with the automatic runtime (see D-012) and a content script does not use fast refresh.
+
+## D-016 Content script mounts the UI in a Shadow DOM root
+
+- **Chosen:** `entrypoints/content/index.tsx` calls `createShadowRootUi` with `name: SITENOTE_ROOT_TAG` (from `@sitenote/core`), `position: "inline"` and `anchor: "body"`, and the content script sets `cssInjectionMode: "ui"` and `runAt: "document_idle"`. `onMount` creates a React 19 `createRoot` on the UI container and renders `HelloOverlay` from `@sitenote/ui`; `onRemove` unmounts that root. The CSS is imported from `entrypoints/content/style.css`, built into `content-scripts/content.css` and fetched by WXT into the shadow root; `content.css` is listed in `web_accessible_resources` for the same match patterns. The shadow root is `open` (the WXT default), so Playwright can pierce it.
+- **Alternatives:** `position: "overlay"` or `"modal"`; `cssInjectionMode: "manifest"` or `"manual"`; an `iframe` UI; `createIntegratedUi`; a closed shadow root.
+- **Why:** `HelloOverlay` positions itself with `fixed`, so the host element must not add layout: `inline` leaves the host as an empty inline element, `overlay` adds a zero-size relatively positioned block, and `modal` adds a full-viewport fixed layer that would swallow page clicks. `"manifest"` injection would put the Tailwind CSS, including preflight, into the host page. WXT's docs warn that the container may be `body`; in the installed `@webext-core/isolated-element` 3.0.0 it is a `div`, so `createRoot` is safe. Page styles cannot reach the overlay and its styles cannot reach the page; WXT resets inherited properties with `:host { all: initial !important }`.
+
+## D-017 Tailwind 4 inside the shadow root
+
+- **Chosen:** `style.css` is `@import "tailwindcss";` plus `@source "../../../../packages/ui/src";` and an `@source not` for `*.test.tsx` there. Tailwind 4.3.3 runs through `@tailwindcss/vite`. Three Shadow DOM pitfalls, each checked in the built CSS and in Chromium:
+  - Theme variables: Tailwind 4 emits them on `:root, :host`, so they apply in the shadow tree without changes; WXT also rewrites `:root` to `:host` in the injected CSS.
+  - `@property`: rules inside a shadow stylesheet are ignored, which leaves `--tw-shadow`, `--tw-ring-*`, `--tw-inset-*` and similar unregistered and makes `box-shadow` compute to `none`. WXT 0.21 already moves every `@property` and `@font-face` block out of the shadow CSS into a `<style wxt-shadow-root-document-styles>` element in the document head, removed again on unmount. Registered custom properties apply across shadow trees, so the initial values and `inherits: false` stay correct. Measured in Chromium: with that element the overlay has the full `shadow-lg`; with it removed `box-shadow` computes to `none`.
+  - `rem`: the host page controls the `html` font size, which WXT's `all: initial` reset does not touch. `postcss-rem-to-responsive-pixel` (`rootValue: 16`, `propList: ["*"]`, `transformUnit: "px"`) runs in Vite's PostCSS stage after Tailwind generates the CSS, so theme variables become pixels (`--spacing: 4px`, `--text-sm: 14px`, `--radius-lg: 8px`) and every utility derives from them. Measured on a page with `html { font-size: 10px }` and on a default page: identical 14px text, 16px offsets and `12px 16px` padding.
+- **Alternatives:** declaring the `--tw-*` initial values on `:host` (rejected: unregistered custom properties inherit, so a parent with `shadow-*` would leak `--tw-shadow` into a nested `ring-*` child; the only safe form is `*, ::before, ::after, ::backdrop`, which is Tailwind's own `@supports`-gated fallback and does not apply in Chromium); registering `@property` from our own code (duplicates WXT); leaving `rem` alone and trusting the host's font size; overriding the whole theme in `px` by hand; a hand-written PostCSS plugin instead of the package; `@import "tailwindcss" source(none)`.
+- **Why:** reusing WXT's document-level registration is the smallest correct fix and is covered by the runtime measurement. The cost is that while the overlay is mounted the host page also gets `@property` registrations for names starting with `--tw-`; a host page that uses Tailwind 4 declares identical ones, and nothing else uses these names. `px` makes the overlay's size independent of arbitrary host `html` font sizes, which matters on the customer sites this tool targets; the trade-off is that the overlay ignores the user's browser default font size. Automatic source detection stays on so future extension components are picked up; it also generates one stray utility (`inline`, from the string `"inline"` in `index.tsx`), which is harmless.
+
+## D-018 Phase 0 content script match patterns
+
+- **Chosen:** `matches: ["http://localhost/*", "http://127.0.0.1/*"]`, no `<all_urls>`, no `permissions`, no `host_permissions`. A match pattern host without a port matches every port (Chrome match patterns documentation: the port is optional and acts as a wildcard unless given explicitly). Verified in Chromium with a server on a random port, on both `127.0.0.1` and `localhost`, while `127.0.0.2` did not match.
+- **Alternatives:** `<all_urls>` or `https://*/*` now; `optional_host_permissions` with programmatic injection now.
+- **Why:** phase 0 only needs the fixture site and the demo on a local dev server. This is temporary: phase 3 moves to optional host permissions requested per site, so the extension does not ask for access to every site at install time.
