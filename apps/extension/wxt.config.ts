@@ -7,6 +7,12 @@ export default defineConfig({
   webExt: {
     disabled: true,
   },
+  dev: {
+    server: {
+      port: 3100,
+      strictPort: true,
+    },
+  },
   manifest: {
     name: "Sitenote",
     description: "Figma-style comments on any live website.",
