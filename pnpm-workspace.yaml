@@ -3,7 +3,4 @@ packages:
   - packages/*
   - e2e
 
-allowBuilds:
-  esbuild: true
-
 strictDepBuilds: true

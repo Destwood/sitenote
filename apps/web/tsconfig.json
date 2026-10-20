@@ -1,0 +1,18 @@
+{
+  "extends": "@sitenote/tsconfig/react.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "incremental": true,
+    "jsx": "react-jsx",
+    "plugins": [{ "name": "next" }]
+  },
+  "include": [
+    "next-env.d.ts",
+    "next.config.ts",
+    "postcss.config.mjs",
+    "src",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": ["node_modules"]
+}

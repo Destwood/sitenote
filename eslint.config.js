@@ -1,4 +1,5 @@
 import js from "@eslint/js";
+import nextPlugin from "@next/eslint-plugin-next";
 import prettier from "eslint-config-prettier";
 import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
@@ -59,6 +60,14 @@ export default tseslint.config(
   {
     files: ["**/*.{tsx,jsx}"],
     extends: [reactHooks.configs.flat["recommended-latest"]],
+  },
+  {
+    files: ["apps/web/**/*.{ts,tsx,js,mjs}"],
+    ...nextPlugin.configs["core-web-vitals"],
+    rules: {
+      ...nextPlugin.configs["core-web-vitals"].rules,
+      "@next/next/no-html-link-for-pages": "off",
+    },
   },
   {
     files: ["**/*.{js,mjs,cjs}"],

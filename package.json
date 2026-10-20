@@ -16,10 +16,15 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint:root": "eslint eslint.config.js vitest.config.ts",
-    "typecheck:root": "tsc --noEmit -p tsconfig.json"
+    "typecheck:root": "tsc --noEmit -p tsconfig.json",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:status": "supabase status"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@next/eslint-plugin-next": "16.4.2",
     "@sitenote/tsconfig": "workspace:*",
     "@types/node": "24.19.2",
     "eslint": "10.13.0",
@@ -27,6 +32,7 @@
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "17.13.0",
     "prettier": "3.9.10",
+    "supabase": "2.121.0",
     "turbo": "2.11.9",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.0",
