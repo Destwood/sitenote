@@ -1,4 +1,7 @@
 {
   "extends": "@sitenote/tsconfig/base.json",
+  "compilerOptions": {
+    "lib": ["es2022", "dom", "dom.iterable"]
+  },
   "include": ["src", "vitest.config.ts"]
 }
