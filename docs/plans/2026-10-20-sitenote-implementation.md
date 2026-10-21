@@ -57,13 +57,13 @@ Done when: a user signs in on web and in the extension against local Supabase an
 
 - [x] Popup: enable on this site (optional host permission), workspace picker, site registration
 - [x] Comment mode toggle (popup button and keyboard shortcut)
-- [ ] Element picking: hover highlight, click to anchor, Escape to exit
-- [ ] Text selection: floating "Comment" button on selection
-- [ ] `packages/ui`: Pin, PinLayer, ThreadPanel, Composer, Sidebar list with orphaned section
-- [ ] Create thread and first comment, reply, edit and delete own comment
-- [ ] Re-resolve pins on DOM mutations and SPA navigation
-- [ ] Realtime: pins and comments appear for other users on the same page
-- [ ] E2E: two browser contexts see each other's pins and replies live
+- [x] Element picking: hover highlight, click to anchor, Escape to exit
+- [x] Text selection: floating "Comment" button on selection
+- [x] `packages/ui`: Pin, PinLayer, ThreadPanel, Composer, Sidebar list with orphaned section
+- [x] Create thread and first comment, reply, edit and delete own comment
+- [x] Re-resolve pins on DOM mutations and SPA navigation
+- [x] Realtime: pins and comments appear for other users on the same page
+- [x] E2E: two browser contexts see each other's pins and replies live
 
 Done when: the full comment loop works on the fixture site and a real public site in e2e.
 

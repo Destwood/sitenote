@@ -126,6 +126,13 @@ test("comment on selected text: the Comment button creates a highlighted thread"
 
   await expect(pinOf(page, 1)).toBeVisible();
   await expect.poll(() => page.evaluate(() => CSS.highlights.has("sitenote"))).toBe(true);
+  expect(
+    await page.evaluate(() =>
+      document.adoptedStyleSheets.some((sheet) =>
+        [...sheet.cssRules].some((rule) => rule.cssText.includes("::highlight(sitenote)")),
+      ),
+    ),
+  ).toBe(true);
   const threads = await threadsOnPage(owner, `${FIXTURE_ORIGIN}${path}`);
   expect(threads).toHaveLength(1);
   expect(threads[0]?.anchor).toMatchObject({ kind: "text" });
@@ -302,7 +309,10 @@ test("Escape cancels a pending thread first and then leaves comment mode", async
   const owner = await ownerCleanup(`${FIXTURE_ORIGIN}${path}`);
   const session = await openReviewPage(context, extensionId, OWNER, path);
   const { page } = session;
+  const cursorOf = () => page.evaluate(() => getComputedStyle(document.documentElement).cursor);
+  expect(await cursorOf()).toBe("auto");
   await enterCommentMode(session);
+  expect(await cursorOf()).toBe("crosshair");
 
   await page.locator("#cta").click({ position: { x: 20, y: 10 } });
   await expect(page.getByRole("dialog", { name: "New thread" })).toBeVisible();
@@ -315,6 +325,7 @@ test("Escape cancels a pending thread first and then leaves comment mode", async
   await page.locator("body").press("Escape");
 
   await expect(hostOf(page)).toHaveAttribute("data-comment-mode", "off");
+  expect(await cursorOf()).toBe("auto");
   expect(await threadsOnPage(owner, `${FIXTURE_ORIGIN}${path}`)).toHaveLength(0);
 });
 

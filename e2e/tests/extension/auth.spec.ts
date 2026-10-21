@@ -51,7 +51,7 @@ test("the extension id is the stable id from the manifest key", ({ extensionId }
   expect(extensionId).toBe(STABLE_EXTENSION_ID);
 });
 
-test("the e2e build asks for the documented permissions and only the fixture host access", async ({
+test("the e2e build asks for the documented permissions and only the fixture and example.com host access", async ({
   context,
   extensionId,
 }) => {
@@ -65,7 +65,11 @@ test("the e2e build asks for the documented permissions and only the fixture hos
   }
   expect(manifest.permissions).toEqual(["storage", "identity", "alarms", "scripting", "activeTab"]);
   expect(manifest.optional_host_permissions).toEqual(["http://*/*", "https://*/*"]);
-  expect(manifest.host_permissions).toEqual(["http://127.0.0.1/*", "http://localhost/*"]);
+  expect(manifest.host_permissions).toEqual([
+    "http://127.0.0.1/*",
+    "http://localhost/*",
+    "https://example.com/*",
+  ]);
   expect(manifest.content_scripts).toBeUndefined();
   expect(manifest.commands).toMatchObject({
     "toggle-comment-mode": { suggested_key: { default: "Alt+Shift+C" } },
