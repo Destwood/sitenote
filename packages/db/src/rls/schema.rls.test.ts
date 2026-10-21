@@ -283,15 +283,35 @@ describe("table security posture", () => {
 });
 
 describe("functions and schemas", () => {
-  it("defines no function in the public schema", async () => {
+  it("defines only create_thread in the public schema, as a security invoker with a pinned search path", async () => {
     const rows = await withDb((db) =>
-      db.query(
-        `select p.proname from pg_proc p
+      db.query<{
+        proname: string;
+        prosecdef: boolean;
+        proconfig: string[] | null;
+        anon: boolean;
+        authenticated: boolean;
+        public_exec: boolean;
+      }>(
+        `select p.proname, p.prosecdef, p.proconfig,
+                has_function_privilege('anon', p.oid, 'EXECUTE') as anon,
+                has_function_privilege('authenticated', p.oid, 'EXECUTE') as authenticated,
+                exists (select 1 from aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a where a.grantee = 0) as public_exec
+         from pg_proc p
          where p.pronamespace = 'public'::regnamespace
            and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')`,
       ),
     );
-    expect(rows.rows).toEqual([]);
+    expect(rows.rows).toEqual([
+      {
+        proname: "create_thread",
+        prosecdef: false,
+        proconfig: ['search_path=""'],
+        anon: false,
+        authenticated: true,
+        public_exec: false,
+      },
+    ]);
   });
 
   it("keeps helper functions out of reach of anon and out of the authenticated schema search", async () => {
