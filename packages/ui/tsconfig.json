@@ -1,0 +1,4 @@
+{
+  "extends": "@sitenote/tsconfig/react.json",
+  "include": ["src", "vitest.config.ts", "vitest.setup.ts"]
+}

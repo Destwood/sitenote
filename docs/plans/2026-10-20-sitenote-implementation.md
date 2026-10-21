@@ -21,13 +21,13 @@ The agent builds everything. The owner only makes decisions and does the one-tim
 
 ### Phase 0 — Foundation
 
-- [ ] pnpm workspace + Turborepo with `apps/extension`, `apps/web`, `packages/core`, `packages/ui`
-- [ ] Shared TS config, ESLint, Prettier, Vitest workspace config
-- [ ] WXT app with React 19 + Tailwind 4 rendering a hello overlay inside a Shadow DOM on a test page
-- [ ] Next.js App Router app with Tailwind 4 and a placeholder landing
-- [ ] Supabase CLI project in `supabase/`, local stack runs, first empty migration
-- [ ] Playwright config that builds the extension, loads it into Chromium and opens a local fixture site
-- [ ] GitHub Actions: install, lint, typecheck, unit, build on PR
+- [x] pnpm workspace + Turborepo with `apps/extension`, `apps/web`, `packages/core`, `packages/ui`
+- [x] Shared TS config, ESLint, Prettier, Vitest workspace config
+- [x] WXT app with React 19 + Tailwind 4 rendering a hello overlay inside a Shadow DOM on a test page
+- [x] Next.js App Router app with Tailwind 4 and a placeholder landing
+- [x] Supabase CLI project in `supabase/`, local stack runs, first empty migration
+- [x] Playwright config that builds the extension, loads it into Chromium and opens a local fixture site
+- [x] GitHub Actions: install, lint, typecheck, unit, build on PR
 
 Done when: `pnpm dev` runs both apps, the extension overlay shows on the fixture site in a Playwright test, CI is green.
 
