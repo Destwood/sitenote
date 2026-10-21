@@ -17,6 +17,7 @@
     "format:check": "prettier --check .",
     "lint:root": "eslint eslint.config.js vitest.config.ts scripts",
     "typecheck:root": "tsc --noEmit -p tsconfig.json",
+    "check:manifest": "node scripts/assert-production-manifest.ts",
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",

@@ -165,6 +165,25 @@ test("enabling survives a reload because the content script is registered", asyn
   await expect(popup.getByTestId("site-state")).toHaveText(`Enabled in ${WORKSPACE_NAME}`);
 });
 
+test("injecting the content script a second time leaves a single overlay", async ({
+  context,
+  extensionId,
+}) => {
+  const { page, popup } = await openFixtureAndPopup(context, extensionId, OWNER);
+  await enableFixture(popup);
+  await expect(hostOf(page)).toHaveAttribute("data-live", "true");
+  const tabId = await tabIdOf(popup, FIXTURE_ORIGIN);
+
+  await evaluateIn(
+    popup,
+    `chrome.scripting.executeScript({ target: { tabId: ${String(tabId)} }, files: ["/content-scripts/content.js"] })`,
+  );
+
+  await expect(hostOf(page)).toHaveCount(1);
+  await expect(hostOf(page)).toHaveAttribute("data-thread-count", String(SEEDED_THREAD_COUNT));
+  await expect(hostOf(page)).toHaveAttribute("data-live", "true");
+});
+
 test("an origin that was never enabled gets no injection", async ({ context }) => {
   const page = await context.newPage();
 

@@ -55,8 +55,8 @@ Done when: a user signs in on web and in the extension against local Supabase an
 
 ### Phase 3 — Comment mode and threads in the extension
 
-- [ ] Popup: enable on this site (optional host permission), workspace picker, site registration
-- [ ] Comment mode toggle (popup button and keyboard shortcut)
+- [x] Popup: enable on this site (optional host permission), workspace picker, site registration
+- [x] Comment mode toggle (popup button and keyboard shortcut)
 - [ ] Element picking: hover highlight, click to anchor, Escape to exit
 - [ ] Text selection: floating "Comment" button on selection
 - [ ] `packages/ui`: Pin, PinLayer, ThreadPanel, Composer, Sidebar list with orphaned section

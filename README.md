@@ -73,6 +73,12 @@ pnpm db:start && pnpm db:env
 pnpm --filter @sitenote/extension build
 ```
 
+## Enabling Sitenote on a site
+
+After signing in, open the popup on the page you want to review, pick a workspace and press "Enable on this site". Chrome asks for access to that origin only (the extension has no host access at install time), the origin is registered in the workspace (owners and members can register new origins, guests can enable origins that are already registered) and the content script is injected and registered for later visits. "Comment mode" in the popup, or `Alt+Shift+C`, toggles comment mode on the page; "Disable on this site" removes the registration and the permission.
+
+The end-to-end suite loads a second build that also holds host permissions for `127.0.0.1` and `localhost`, because Playwright cannot answer Chrome's permission prompt (see D-068). It is built by `pnpm e2e`; to build it alone run `pnpm --filter @sitenote/extension build:e2e` (output `.output/chrome-mv3-e2e`). `pnpm check:manifest` verifies that the production manifest has no host permissions.
+
 ## Docs
 
 - [Design](docs/plans/2026-10-20-sitenote-design.md)
