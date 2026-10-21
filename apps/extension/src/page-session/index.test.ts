@@ -286,7 +286,7 @@ describe("navigate", () => {
 
   it("drops a list that was requested for the page the user has already left", async () => {
     const slow = deferred<MessageResult<ThreadRecord[]>>();
-    const { session, last, setPage, requests } = setup({
+    const { session, last, setPage, requests, states } = setup({
       lists: [() => slow.promise, () => Promise.resolve(success([THREAD_B]))],
     });
     const started = session.start();
@@ -302,6 +302,7 @@ describe("navigate", () => {
       expect(last()?.threads).toEqual([THREAD_B]);
     });
 
+    expect(states.some((state) => state.threads.includes(THREAD_A))).toBe(false);
     expect(requests.at(-1)).toEqual({
       type: "threads.list",
       siteId: SITE.siteId,
