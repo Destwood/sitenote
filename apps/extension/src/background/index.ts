@@ -3,11 +3,19 @@ import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { browser } from "wxt/browser";
 
 import { createAuthService } from "../auth-service";
+import { createCommandListener } from "../command-listener";
+import { createDataService } from "../data-service";
+import { createEnablementStore } from "../enablement-store";
 import { getExtensionEnv } from "../env";
+import { createHubPort } from "../hub-port";
 import { createMessageRouter } from "../message-router";
-import type { AuthStateChangedMessage } from "../messages";
+import { toggleCommentMode } from "../message-client";
+import { PAGE_PORT_NAME, type AuthStateChangedMessage } from "../messages";
+import { createChannelFactory } from "../realtime-channels";
+import { createRealtimeHub } from "../realtime-hub";
 import { planRefresh, REFRESH_ALARM_NAME, type RefreshOutcome } from "../refresh-schedule";
 import { createSessionStorage } from "../session-storage";
+import { createSiteEnablement } from "../site-enablement";
 
 const BROADCAST_EVENTS: ReadonlySet<AuthChangeEvent> = new Set([
   "SIGNED_IN",
@@ -35,6 +43,22 @@ export function startBackground(): void {
     launchWebAuthFlow: (url) => browser.identity.launchWebAuthFlow({ url, interactive: true }),
   });
 
+  const store = createEnablementStore(browser.storage.local);
+  const data = createDataService({ client, getEnabledSite: store.get });
+  const hub = createRealtimeHub({
+    factory: createChannelFactory(client),
+    getEnabledSite: store.get,
+    findThreadPage: data.findThreadPage,
+    hasSession: data.hasSession,
+  });
+  const enablement = createSiteEnablement({
+    store,
+    data,
+    scripting: browser.scripting,
+    permissions: browser.permissions,
+    onDisabled: hub.notifyDisabled,
+  });
+
   async function scheduleRefresh(outcome: RefreshOutcome): Promise<void> {
     const when = planRefresh(outcome, Date.now());
     if (when === null) {
@@ -54,6 +78,7 @@ export function startBackground(): void {
   }
 
   async function handleAuthChange(event: AuthChangeEvent, session: Session | null): Promise<void> {
+    hub.onSession(session === null ? null : { accessToken: session.access_token });
     await scheduleRefresh(
       session === null
         ? { status: "signedOut" }
@@ -77,6 +102,9 @@ export function startBackground(): void {
   const route = createMessageRouter({
     extensionId: browser.runtime.id,
     service,
+    data,
+    enablement,
+    getEnabledSite: store.get,
     onWake: keepSessionFresh,
   });
 
@@ -84,8 +112,18 @@ export function startBackground(): void {
     ignoreFailure(route(message, sender).then(sendResponse));
     return true;
   });
+  browser.runtime.onConnect.addListener((port) => {
+    if (port.name === PAGE_PORT_NAME) {
+      hub.attach(createHubPort(port, browser.runtime.id));
+    }
+  });
+  browser.commands.onCommand.addListener(createCommandListener(toggleCommentMode));
+  browser.permissions.onRemoved.addListener(() => {
+    ignoreFailure(enablement.reconcile());
+  });
   browser.runtime.onStartup.addListener(() => {
     ignoreFailure(keepSessionFresh());
+    ignoreFailure(enablement.reconcile());
   });
   browser.runtime.onInstalled.addListener(() => {
     ignoreFailure(keepSessionFresh());

@@ -448,7 +448,39 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      create_thread: {
+        Args: {
+          p_anchor: Json;
+          p_body: string;
+          p_context: Json;
+          p_mentions: string[];
+          p_page_url: string;
+          p_site_id: string;
+        };
+        Returns: {
+          anchor: NonNullable<Json>;
+          clickup_task_id: string | null;
+          clickup_task_url: string | null;
+          context: NonNullable<Json>;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          page_url: string;
+          resolved_at: string | null;
+          resolved_by: string | null;
+          screenshot_path: string | null;
+          site_id: string;
+          status: Database["public"]["Enums"]["thread_status"];
+          updated_at: string;
+          workspace_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "threads";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
     };
     Enums: {
       integration_provider: "clickup";

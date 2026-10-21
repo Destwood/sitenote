@@ -17,7 +17,16 @@ export default defineConfig({
     {
       name: "chromium-extension",
       testDir: "tests/extension",
+      testIgnore: "comments.spec.ts",
       dependencies: ["web"],
+      use: { baseURL: FIXTURE_ORIGIN },
+    },
+    {
+      name: "chromium-extension-comments",
+      testDir: "tests/extension",
+      testMatch: "comments.spec.ts",
+      dependencies: ["chromium-extension"],
+      timeout: 90000,
       use: { baseURL: FIXTURE_ORIGIN },
     },
     {

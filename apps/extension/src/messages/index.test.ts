@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  AUTH_ERROR_CODES,
-  AUTH_ERROR_MESSAGES,
-  AUTH_RESPONSE_SCHEMAS,
+  ERROR_CODES,
+  ERROR_MESSAGES,
+  RESPONSE_SCHEMAS,
   authRequestSchema,
   authStateChangedSchema,
   authStateSchema,
+  commentModeResponseSchema,
+  commentModeToggleSchema,
+  dataRequestSchema,
   failure,
+  pageClientMessageSchema,
+  pageEventSchema,
+  requestSchema,
   success,
 } from ".";
 
@@ -104,32 +110,30 @@ describe("authStateChangedSchema", () => {
 
 describe("responses", () => {
   it("builds a fixed message for every error code", () => {
-    for (const code of AUTH_ERROR_CODES) {
+    for (const code of ERROR_CODES) {
       expect(failure(code)).toEqual({
         ok: false,
-        error: { code, message: AUTH_ERROR_MESSAGES[code] },
+        error: { code, message: ERROR_MESSAGES[code] },
       });
-      expect(AUTH_ERROR_MESSAGES[code]).not.toBe("");
+      expect(ERROR_MESSAGES[code]).not.toBe("");
     }
   });
 
   it("validates a success response against the schema of its request", () => {
-    expect(AUTH_RESPONSE_SCHEMAS["auth.getState"].safeParse(success(SIGNED_IN)).success).toBe(true);
-    expect(AUTH_RESPONSE_SCHEMAS["auth.sendCode"].safeParse(success(null)).success).toBe(true);
-    expect(AUTH_RESPONSE_SCHEMAS["auth.sendCode"].safeParse(success(SIGNED_IN)).success).toBe(
-      false,
-    );
+    expect(RESPONSE_SCHEMAS["auth.getState"].safeParse(success(SIGNED_IN)).success).toBe(true);
+    expect(RESPONSE_SCHEMAS["auth.sendCode"].safeParse(success(null)).success).toBe(true);
+    expect(RESPONSE_SCHEMAS["auth.sendCode"].safeParse(success(SIGNED_IN)).success).toBe(false);
   });
 
   it("accepts an error response for every request type", () => {
-    for (const schema of Object.values(AUTH_RESPONSE_SCHEMAS)) {
+    for (const schema of Object.values(RESPONSE_SCHEMAS)) {
       expect(schema.safeParse(failure("rate_limited")).success).toBe(true);
     }
   });
 
   it("rejects an error response with a code outside the whitelist", () => {
     expect(
-      AUTH_RESPONSE_SCHEMAS["auth.signOut"].safeParse({
+      RESPONSE_SCHEMAS["auth.signOut"].safeParse({
         ok: false,
         error: { code: "database_exploded", message: "x" },
       }).success,
@@ -137,7 +141,221 @@ describe("responses", () => {
   });
 
   it("rejects values that are not responses", () => {
-    expect(AUTH_RESPONSE_SCHEMAS["auth.getState"].safeParse(undefined).success).toBe(false);
-    expect(AUTH_RESPONSE_SCHEMAS["auth.getState"].safeParse({ ok: true }).success).toBe(false);
+    expect(RESPONSE_SCHEMAS["auth.getState"].safeParse(undefined).success).toBe(false);
+    expect(RESPONSE_SCHEMAS["auth.getState"].safeParse({ ok: true }).success).toBe(false);
+  });
+});
+
+const SITE_ID = "20000000-0000-4000-8000-000000000001";
+const WORKSPACE_ID = "10000000-0000-4000-8000-000000000001";
+const THREAD_ID = "30000000-0000-4000-8000-000000000001";
+const PAGE_URL = "https://example.test/pricing";
+const ORIGIN = "https://example.test";
+const TEXT_ANCHOR = {
+  kind: "text",
+  quote: { exact: "Price", prefix: "", suffix: "" },
+  position: { start: 0, end: 5 },
+  container: "body",
+};
+const PERSON = { id: "u1", displayName: "Ann", avatarUrl: null };
+const COMMENT = {
+  id: "40000000-0000-4000-8000-000000000001",
+  threadId: THREAD_ID,
+  author: PERSON,
+  body: "Looks wrong",
+  createdAt: "2026-10-21T10:00:00.000Z",
+  editedAt: null,
+  deleted: false,
+};
+const THREAD = {
+  id: THREAD_ID,
+  siteId: SITE_ID,
+  pageUrl: PAGE_URL,
+  status: "open",
+  anchor: TEXT_ANCHOR,
+  author: PERSON,
+  createdAt: "2026-10-21T10:00:00.000Z",
+  comments: [COMMENT],
+};
+const CREATE = {
+  type: "threads.create",
+  siteId: SITE_ID,
+  pageUrl: PAGE_URL,
+  anchor: TEXT_ANCHOR,
+  context: { viewport: { width: 1280, height: 720 }, errors: [] },
+  body: "  Looks wrong  ",
+  mentions: [],
+};
+const ENABLE = { type: "sites.enable", tabId: 0, origin: ORIGIN, workspaceId: WORKSPACE_ID };
+
+describe("dataRequestSchema", () => {
+  it("accepts every data request and trims comment bodies", () => {
+    const accepted = [
+      { type: "sites.forOrigin", origin: ORIGIN },
+      { type: "sites.forOrigin", origin: "http://127.0.0.1:4173" },
+      { type: "threads.list", siteId: SITE_ID, pageUrl: PAGE_URL },
+      CREATE,
+      { type: "threads.setStatus", threadId: THREAD_ID, status: "resolved" },
+      { type: "comments.create", threadId: THREAD_ID, body: "Reply", mentions: [WORKSPACE_ID] },
+      { type: "comments.update", commentId: THREAD_ID, body: "Edited" },
+      { type: "comments.delete", commentId: THREAD_ID },
+      { type: "workspaces.list" },
+      ENABLE,
+      { type: "sites.disable", origin: ORIGIN },
+    ];
+    for (const request of accepted) {
+      expect(dataRequestSchema.safeParse(request).success, request.type).toBe(true);
+    }
+    expect(dataRequestSchema.safeParse(CREATE).data).toMatchObject({ body: "Looks wrong" });
+  });
+
+  it.each([
+    ["an origin with a path", { type: "sites.forOrigin", origin: `${ORIGIN}/a` }],
+    ["an origin with a trailing slash", { type: "sites.forOrigin", origin: `${ORIGIN}/` }],
+    ["a non-http origin", { type: "sites.forOrigin", origin: "chrome://extensions" }],
+    [
+      "an unnormalised page url",
+      { type: "threads.list", siteId: SITE_ID, pageUrl: `${PAGE_URL}/` },
+    ],
+    [
+      "a page url with a query",
+      { type: "threads.list", siteId: SITE_ID, pageUrl: `${PAGE_URL}?a=1` },
+    ],
+    [
+      "a javascript page url",
+      { type: "threads.list", siteId: SITE_ID, pageUrl: "javascript:alert(1)" },
+    ],
+    ["a site id that is not a uuid", { type: "threads.list", siteId: "x", pageUrl: PAGE_URL }],
+    ["a whitespace body", { ...CREATE, body: " \n " }],
+    ["a body over 10000 characters", { ...CREATE, body: "a".repeat(10001) }],
+    ["an invalid anchor", { ...CREATE, anchor: { kind: "element" } }],
+    ["a context that is not json", { ...CREATE, context: { value: undefined } }],
+    ["too many mentions", { ...CREATE, mentions: Array.from({ length: 51 }, () => SITE_ID) }],
+    ["a mention that is not a uuid", { ...CREATE, mentions: ["everyone"] }],
+    ["an unknown status", { type: "threads.setStatus", threadId: THREAD_ID, status: "done" }],
+    ["a negative tab id", { ...ENABLE, tabId: -1 }],
+    ["a fractional tab id", { ...ENABLE, tabId: 1.5 }],
+    ["an unknown type", { type: "threads.deleteEverything" }],
+  ])("rejects %s", (_name, message) => {
+    expect(dataRequestSchema.safeParse(message).success).toBe(false);
+  });
+
+  it("accepts a body of exactly 10000 characters", () => {
+    expect(dataRequestSchema.safeParse({ ...CREATE, body: "a".repeat(10000) }).success).toBe(true);
+  });
+
+  it("is part of the combined request schema next to the auth requests", () => {
+    expect(requestSchema.safeParse({ type: "auth.getState" }).success).toBe(true);
+    expect(requestSchema.safeParse({ type: "workspaces.list" }).success).toBe(true);
+    expect(requestSchema.safeParse({ type: "nope" }).success).toBe(false);
+  });
+});
+
+describe("data responses", () => {
+  it("validates the data of each request type", () => {
+    expect(RESPONSE_SCHEMAS["threads.list"].safeParse(success([THREAD])).success).toBe(true);
+    expect(RESPONSE_SCHEMAS["threads.create"].safeParse(success(THREAD)).success).toBe(true);
+    expect(RESPONSE_SCHEMAS["comments.update"].safeParse(success(COMMENT)).success).toBe(true);
+    expect(RESPONSE_SCHEMAS["sites.enable"].safeParse(success(null)).success).toBe(true);
+    expect(RESPONSE_SCHEMAS["sites.forOrigin"].safeParse(success(null)).success).toBe(true);
+    expect(
+      RESPONSE_SCHEMAS["sites.forOrigin"].safeParse(
+        success({
+          siteId: SITE_ID,
+          workspaceId: WORKSPACE_ID,
+          workspaceName: "Northwind",
+          role: "guest",
+          userId: THREAD_ID,
+        }),
+      ).success,
+    ).toBe(true);
+    expect(
+      RESPONSE_SCHEMAS["workspaces.list"].safeParse(
+        success([{ id: WORKSPACE_ID, name: "Northwind", role: "owner" }]),
+      ).success,
+    ).toBe(true);
+  });
+
+  it("accepts a thread whose anchor could not be read", () => {
+    expect(
+      RESPONSE_SCHEMAS["threads.list"].safeParse(success([{ ...THREAD, anchor: null }])).success,
+    ).toBe(true);
+  });
+
+  it("rejects data of the wrong shape", () => {
+    expect(
+      RESPONSE_SCHEMAS["threads.list"].safeParse(success([{ ...THREAD, status: "x" }])).success,
+    ).toBe(false);
+    expect(RESPONSE_SCHEMAS["threads.list"].safeParse(success(THREAD)).success).toBe(false);
+    expect(
+      RESPONSE_SCHEMAS["comments.create"].safeParse(success({ ...COMMENT, createdAt: "yesterday" }))
+        .success,
+    ).toBe(false);
+  });
+
+  it("carries the whitelisted data error codes", () => {
+    for (const code of [
+      "unauthorized",
+      "forbidden",
+      "not_found",
+      "validation",
+      "network",
+      "unknown",
+    ] as const) {
+      expect(ERROR_CODES).toContain(code);
+      expect(RESPONSE_SCHEMAS["threads.list"].safeParse(failure(code)).success).toBe(true);
+    }
+  });
+});
+
+describe("page messages", () => {
+  it("accepts a subscription and an update with normalised page urls", () => {
+    expect(
+      pageClientMessageSchema.safeParse({
+        type: "page.subscribe",
+        siteId: SITE_ID,
+        workspaceId: WORKSPACE_ID,
+        pageUrl: PAGE_URL,
+      }).success,
+    ).toBe(true);
+    expect(
+      pageClientMessageSchema.safeParse({ type: "page.update", pageUrl: PAGE_URL }).success,
+    ).toBe(true);
+  });
+
+  it.each([
+    ["an unnormalised page url", { type: "page.update", pageUrl: `${PAGE_URL}#top` }],
+    [
+      "a subscription without a site",
+      { type: "page.subscribe", workspaceId: WORKSPACE_ID, pageUrl: PAGE_URL },
+    ],
+    ["an unknown type", { type: "page.hack" }],
+  ])("rejects %s", (_name, message) => {
+    expect(pageClientMessageSchema.safeParse(message).success).toBe(false);
+  });
+
+  it("accepts the events the background sends and nothing else", () => {
+    for (const event of [
+      { type: "page.subscribed" },
+      { type: "threads.changed", threadId: THREAD_ID },
+      { type: "comments.changed", threadId: THREAD_ID },
+      { type: "site.disabled" },
+    ]) {
+      expect(pageEventSchema.safeParse(event).success, event.type).toBe(true);
+    }
+    expect(pageEventSchema.safeParse({ type: "threads.changed" }).success).toBe(false);
+    expect(pageEventSchema.safeParse({ type: "comments.changed", threadId: "x" }).success).toBe(
+      false,
+    );
+    expect(pageEventSchema.safeParse({ type: "other" }).success).toBe(false);
+  });
+});
+
+describe("comment mode messages", () => {
+  it("accepts the toggle and its response", () => {
+    expect(commentModeToggleSchema.safeParse({ type: "commentMode.toggle" }).success).toBe(true);
+    expect(commentModeResponseSchema.safeParse(success({ active: true })).success).toBe(true);
+    expect(commentModeResponseSchema.safeParse(failure("page_unavailable")).success).toBe(true);
+    expect(commentModeResponseSchema.safeParse(success({ active: "yes" })).success).toBe(false);
   });
 });

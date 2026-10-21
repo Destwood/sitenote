@@ -40,6 +40,13 @@ function sendText(res: ServerResponse, status: number, message: string) {
   send(res, status, { "Content-Type": "text/plain; charset=utf-8" }, Buffer.from(message));
 }
 
+function rewrite(pathname: string): string {
+  if (pathname.startsWith("/p/")) {
+    return "/index.html";
+  }
+  return pathname.startsWith("/spa/") ? "/spa.html" : pathname;
+}
+
 function resolveInsideRoot(urlPath: string): string | null {
   let decoded: string;
   try {
@@ -81,7 +88,7 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     return;
   }
 
-  const target = resolveInsideRoot(new URL(req.url ?? "/", `http://${HOST}`).pathname);
+  const target = resolveInsideRoot(rewrite(new URL(req.url ?? "/", `http://${HOST}`).pathname));
   const file = target === null ? null : await findFile(target);
   if (file === null) {
     sendText(res, 404, "Not Found");

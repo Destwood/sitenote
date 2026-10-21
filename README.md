@@ -73,6 +73,18 @@ pnpm db:start && pnpm db:env
 pnpm --filter @sitenote/extension build
 ```
 
+## Enabling Sitenote on a site
+
+After signing in, open the popup on the page you want to review, pick a workspace and press "Enable on this site". Chrome asks for access to that origin only (the extension has no host access at install time), the origin is registered in the workspace (owners and members can register new origins, guests can enable origins that are already registered) and the content script is injected and registered for later visits. "Comment mode" in the popup, or `Alt+Shift+C`, toggles comment mode on the page; "Disable on this site" removes the registration and the permission.
+
+The end-to-end suite loads a second build that also holds host permissions for `127.0.0.1` and `localhost`, because Playwright cannot answer Chrome's permission prompt (see D-068). It is built by `pnpm e2e`; to build it alone run `pnpm --filter @sitenote/extension build:e2e` (output `.output/chrome-mv3-e2e`). `pnpm check:manifest` verifies that the production manifest has no host permissions.
+
+## Commenting on a page
+
+On an enabled site, open comment mode from the popup or with `Alt+Shift+C`: the cursor becomes a crosshair, hovering outlines the element under the pointer, and a click on it drops a pin and opens the new thread form (the page does not see that click). Select any text, in or out of comment mode, and press the "Comment" button that appears above the selection to comment on the text, which is highlighted with the CSS Custom Highlight API. `Esc` cancels the pending thread, then leaves comment mode. The "Comments" button in the corner opens the list of threads of the page; threads whose element or text can no longer be found are listed under "Orphaned" instead of being lost. Replies, edits and deletions of your own comments, and Resolve and Reopen (owners and members for any thread, guests for their own), update for everyone on the page in real time. Pins follow scrolling and resizing, are placed again when the page changes, and the threads switch when a single page app changes its URL.
+
+The end-to-end suite covers this on the fixture site and on `https://example.com` (it needs network access): `pnpm e2e` after `pnpm db:start && pnpm db:env`.
+
 ## Docs
 
 - [Design](docs/plans/2026-10-20-sitenote-design.md)

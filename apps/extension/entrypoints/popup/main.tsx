@@ -10,8 +10,10 @@ if (container === null) {
   throw new Error("The popup root element is missing");
 }
 
+const env = getExtensionEnv();
+
 createRoot(container).render(
   <StrictMode>
-    <PopupApp googleEnabled={getExtensionEnv().googleAuthEnabled} />
+    <PopupApp googleEnabled={env.googleAuthEnabled} webUrl={env.webUrl} />
   </StrictMode>,
 );

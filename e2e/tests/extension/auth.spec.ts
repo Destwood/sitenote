@@ -1,74 +1,20 @@
-import type { BrowserContext, Page } from "@playwright/test";
-import { randomUUID } from "node:crypto";
+import type { Page } from "@playwright/test";
 
 import { expect, STABLE_EXTENSION_ID, test } from "../../fixtures/extension";
-import { clearMailbox, waitForOtpCode } from "../../support/mailpit";
+import {
+  evaluateIn,
+  isRecord,
+  newEmail,
+  openPopup,
+  requestCode,
+  signIn,
+  stopServiceWorker,
+} from "../../support/extension";
 
 const SEEDED_MEMBER = "member@sitenote.test";
 const ALARM_NAME = "sitenote-auth-refresh";
 const ALARM_MARGIN_MS = 60_000;
 const STORAGE_PREFIX = "sitenote.auth.";
-
-function newEmail(): string {
-  return `e2e-${randomUUID()}@sitenote.test`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-interface Evaluator {
-  evaluate: (expression: string) => Promise<unknown>;
-}
-
-function evaluateIn(target: Evaluator, expression: string): Promise<unknown> {
-  return target.evaluate(expression);
-}
-
-async function openPopup(context: BrowserContext, extensionId: string): Promise<Page> {
-  const popup = await context.newPage();
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-  return popup;
-}
-
-async function requestCode(popup: Page, email: string): Promise<string> {
-  await clearMailbox(email);
-  await popup.getByLabel("Email").fill(email);
-  await popup.getByRole("button", { name: "Email me a code" }).click();
-  await expect(popup.getByLabel("6-digit code")).toBeVisible();
-  return waitForOtpCode(email);
-}
-
-async function signIn(popup: Page, email: string): Promise<void> {
-  const code = await requestCode(popup, email);
-  await popup.getByLabel("6-digit code").fill(code);
-  await popup.getByRole("button", { name: "Verify code" }).click();
-  await expect(popup.getByTestId("display-name")).toBeVisible();
-}
-
-async function stopServiceWorker(context: BrowserContext, page: Page): Promise<void> {
-  const cdp = await context.newCDPSession(page);
-  const running = new Promise<string[]>((resolve) => {
-    cdp.once("ServiceWorker.workerVersionUpdated", ({ versions }) => {
-      resolve(versions.filter((v) => v.runningStatus === "running").map((v) => v.versionId));
-    });
-  });
-  await cdp.send("ServiceWorker.enable");
-  const versionIds = await running;
-  expect(versionIds.length).toBeGreaterThan(0);
-
-  const stopped = new Promise<void>((resolve) => {
-    cdp.on("ServiceWorker.workerVersionUpdated", ({ versions }) => {
-      if (versions.some((v) => v.runningStatus === "stopped")) {
-        resolve();
-      }
-    });
-  });
-  for (const versionId of versionIds) {
-    await cdp.send("ServiceWorker.stopWorker", { versionId });
-  }
-  await stopped;
-}
 
 async function readStoredSession(page: Page): Promise<Record<string, unknown>> {
   const raw = await evaluateIn(
@@ -105,7 +51,7 @@ test("the extension id is the stable id from the manifest key", ({ extensionId }
   expect(extensionId).toBe(STABLE_EXTENSION_ID);
 });
 
-test("the manifest asks for storage, identity and alarms and for no host access", async ({
+test("the e2e build asks for the documented permissions and only the fixture and example.com host access", async ({
   context,
   extensionId,
 }) => {
@@ -117,9 +63,17 @@ test("the manifest asks for storage, identity and alarms and for no host access"
   if (!isRecord(manifest)) {
     return;
   }
-  expect(manifest.permissions).toEqual(["storage", "identity", "alarms"]);
-  expect(manifest.host_permissions).toBeUndefined();
-  expect(manifest.optional_host_permissions).toBeUndefined();
+  expect(manifest.permissions).toEqual(["storage", "identity", "alarms", "scripting", "activeTab"]);
+  expect(manifest.optional_host_permissions).toEqual(["http://*/*", "https://*/*"]);
+  expect(manifest.host_permissions).toEqual([
+    "http://127.0.0.1/*",
+    "http://localhost/*",
+    "https://example.com/*",
+  ]);
+  expect(manifest.content_scripts).toBeUndefined();
+  expect(manifest.commands).toMatchObject({
+    "toggle-comment-mode": { suggested_key: { default: "Alt+Shift+C" } },
+  });
 });
 
 test("a signed-out popup offers the email form and no Google button", async ({

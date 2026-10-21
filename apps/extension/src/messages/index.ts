@@ -1,6 +1,19 @@
+import { anchorSchema, parsePageUrl } from "@sitenote/core";
 import * as z from "zod/mini";
 
-export const AUTH_ERROR_CODES = [
+import {
+  THREAD_STATUSES,
+  commentRecordSchema,
+  threadRecordSchema,
+  workspaceInfoSchema,
+  siteInfoSchema,
+  type CommentRecord,
+  type SiteInfo,
+  type ThreadRecord,
+  type WorkspaceInfo,
+} from "../transport";
+
+export const ERROR_CODES = [
   "invalid_request",
   "forbidden_sender",
   "unavailable",
@@ -14,11 +27,18 @@ export const AUTH_ERROR_CODES = [
   "google_cancelled",
   "google_failed",
   "sign_out_failed",
+  "unauthorized",
+  "forbidden",
+  "not_found",
+  "validation",
+  "network",
+  "unknown",
+  "page_unavailable",
 ] as const;
 
-export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[number];
+export type ErrorCode = (typeof ERROR_CODES)[number];
 
-export const AUTH_ERROR_MESSAGES: Readonly<Record<AuthErrorCode, string>> = {
+export const ERROR_MESSAGES: Readonly<Record<ErrorCode, string>> = {
   invalid_request: "The request was not understood.",
   forbidden_sender: "This request is not allowed.",
   unavailable: "Sitenote could not be reached. Reload the extension and try again.",
@@ -32,9 +52,19 @@ export const AUTH_ERROR_MESSAGES: Readonly<Record<AuthErrorCode, string>> = {
   google_cancelled: "Sign-in was cancelled. You can try again.",
   google_failed: "We could not complete Google sign-in. Try again or use an email code.",
   sign_out_failed: "We could not sign you out. Try again.",
+  unauthorized: "Sign in to Sitenote to continue.",
+  forbidden: "You do not have permission to do this.",
+  not_found: "That item no longer exists.",
+  validation: "That input was not accepted. Check it and try again.",
+  network: "Sitenote could not reach the server. Check your connection and try again.",
+  unknown: "Something went wrong. Try again.",
+  page_unavailable: "Sitenote is not available on this page.",
 };
 
 export const OTP_LENGTH = 6;
+export const COMMENT_MAX_LENGTH = 10000;
+export const MENTIONS_MAX = 50;
+export const PAGE_PORT_NAME = "sitenote:page";
 const MAX_EMAIL_LENGTH = 254;
 
 const emailSchema = z.string().check(z.trim(), z.maxLength(MAX_EMAIL_LENGTH), z.email());
@@ -50,6 +80,63 @@ export const authRequestSchema = z.discriminatedUnion("type", [
 
 export type AuthRequest = z.infer<typeof authRequestSchema>;
 export type AuthRequestType = AuthRequest["type"];
+
+function isBareOrigin(value: string): boolean {
+  const url = URL.parse(value);
+  return (
+    url !== null && (url.protocol === "http:" || url.protocol === "https:") && url.origin === value
+  );
+}
+
+const idSchema = z.guid();
+const originSchema = z.string().check(z.refine(isBareOrigin));
+const pageUrlSchema = z.string().check(z.refine((value) => parsePageUrl(value)?.page === value));
+const bodySchema = z.string().check(z.trim(), z.minLength(1), z.maxLength(COMMENT_MAX_LENGTH));
+const mentionsSchema = z.array(idSchema).check(z.maxLength(MENTIONS_MAX));
+const tabIdSchema = z.int().check(z.nonnegative());
+
+export const dataRequestSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("sites.forOrigin"), origin: originSchema }),
+  z.object({ type: z.literal("threads.list"), siteId: idSchema, pageUrl: pageUrlSchema }),
+  z.object({
+    type: z.literal("threads.create"),
+    siteId: idSchema,
+    pageUrl: pageUrlSchema,
+    anchor: anchorSchema,
+    context: z.record(z.string(), z.json()),
+    body: bodySchema,
+    mentions: mentionsSchema,
+  }),
+  z.object({
+    type: z.literal("threads.setStatus"),
+    threadId: idSchema,
+    status: z.enum(THREAD_STATUSES),
+  }),
+  z.object({
+    type: z.literal("comments.create"),
+    threadId: idSchema,
+    body: bodySchema,
+    mentions: mentionsSchema,
+  }),
+  z.object({ type: z.literal("comments.update"), commentId: idSchema, body: bodySchema }),
+  z.object({ type: z.literal("comments.delete"), commentId: idSchema }),
+  z.object({ type: z.literal("workspaces.list") }),
+  z.object({
+    type: z.literal("sites.enable"),
+    tabId: tabIdSchema,
+    origin: originSchema,
+    workspaceId: idSchema,
+  }),
+  z.object({ type: z.literal("sites.disable"), origin: originSchema }),
+]);
+
+export type DataRequest = z.infer<typeof dataRequestSchema>;
+export type DataRequestType = DataRequest["type"];
+
+export const requestSchema = z.union([authRequestSchema, dataRequestSchema]);
+
+export type ExtensionRequest = AuthRequest | DataRequest;
+export type ExtensionRequestType = ExtensionRequest["type"];
 
 export const authStateSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("signedOut") }),
@@ -73,19 +160,19 @@ export const authStateChangedSchema = z.object({
 
 export type AuthStateChangedMessage = z.infer<typeof authStateChangedSchema>;
 
-const authErrorSchema = z.object({
+const errorResponseSchema = z.object({
   ok: z.literal(false),
-  error: z.object({ code: z.enum(AUTH_ERROR_CODES), message: z.string() }),
+  error: z.object({ code: z.enum(ERROR_CODES), message: z.string() }),
 });
 
-export type AuthErrorResponse = z.infer<typeof authErrorSchema>;
+export type ErrorResponse = z.infer<typeof errorResponseSchema>;
 
-export interface AuthSuccessResponse<Data> {
+export interface SuccessResponse<Data> {
   ok: true;
   data: Data;
 }
 
-export type AuthResult<Data> = AuthSuccessResponse<Data> | AuthErrorResponse;
+export type MessageResult<Data> = SuccessResponse<Data> | ErrorResponse;
 
 export interface AuthDataByType {
   "auth.getState": AuthState;
@@ -95,24 +182,86 @@ export interface AuthDataByType {
   "auth.signOut": AuthState;
 }
 
-function resultSchema<Data>(data: z.ZodMiniType<Data>): z.ZodMiniType<AuthResult<Data>> {
-  return z.union([z.object({ ok: z.literal(true), data }), authErrorSchema]);
+export interface DataByType {
+  "sites.forOrigin": SiteInfo | null;
+  "threads.list": ThreadRecord[];
+  "threads.create": ThreadRecord;
+  "threads.setStatus": ThreadRecord;
+  "comments.create": CommentRecord;
+  "comments.update": CommentRecord;
+  "comments.delete": CommentRecord;
+  "workspaces.list": WorkspaceInfo[];
+  "sites.enable": null;
+  "sites.disable": null;
 }
 
-export const AUTH_RESPONSE_SCHEMAS: {
-  [Type in AuthRequestType]: z.ZodMiniType<AuthResult<AuthDataByType[Type]>>;
+export type DataByRequestType = AuthDataByType & DataByType;
+
+export function resultSchema<Data>(data: z.ZodMiniType<Data>): z.ZodMiniType<MessageResult<Data>> {
+  return z.union([z.object({ ok: z.literal(true), data }), errorResponseSchema]);
+}
+
+export const RESPONSE_SCHEMAS: {
+  [Type in ExtensionRequestType]: z.ZodMiniType<MessageResult<DataByRequestType[Type]>>;
 } = {
   "auth.getState": resultSchema(authStateSchema),
   "auth.sendCode": resultSchema(z.null()),
   "auth.verifyCode": resultSchema(authStateSchema),
   "auth.signInWithGoogle": resultSchema(authStateSchema),
   "auth.signOut": resultSchema(authStateSchema),
+  "sites.forOrigin": resultSchema(z.nullable(siteInfoSchema)),
+  "threads.list": resultSchema(z.array(threadRecordSchema)),
+  "threads.create": resultSchema(threadRecordSchema),
+  "threads.setStatus": resultSchema(threadRecordSchema),
+  "comments.create": resultSchema(commentRecordSchema),
+  "comments.update": resultSchema(commentRecordSchema),
+  "comments.delete": resultSchema(commentRecordSchema),
+  "workspaces.list": resultSchema(z.array(workspaceInfoSchema)),
+  "sites.enable": resultSchema(z.null()),
+  "sites.disable": resultSchema(z.null()),
 };
 
-export function success<Data>(data: Data): AuthSuccessResponse<Data> {
+export const pageSubscribeSchema = z.object({
+  type: z.literal("page.subscribe"),
+  siteId: idSchema,
+  workspaceId: idSchema,
+  pageUrl: pageUrlSchema,
+});
+
+export const pageUpdateSchema = z.object({
+  type: z.literal("page.update"),
+  pageUrl: pageUrlSchema,
+});
+
+export const pageClientMessageSchema = z.discriminatedUnion("type", [
+  pageSubscribeSchema,
+  pageUpdateSchema,
+]);
+
+export type PageSubscribeMessage = z.infer<typeof pageSubscribeSchema>;
+export type PageClientMessage = z.infer<typeof pageClientMessageSchema>;
+
+export const pageEventSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("page.subscribed") }),
+  z.object({ type: z.literal("threads.changed"), threadId: idSchema }),
+  z.object({ type: z.literal("comments.changed"), threadId: idSchema }),
+  z.object({ type: z.literal("site.disabled") }),
+]);
+
+export type PageEvent = z.infer<typeof pageEventSchema>;
+
+export const commentModeToggleSchema = z.object({ type: z.literal("commentMode.toggle") });
+
+export const commentModeStateSchema = z.object({ active: z.boolean() });
+
+export type CommentModeState = z.infer<typeof commentModeStateSchema>;
+
+export const commentModeResponseSchema = resultSchema(commentModeStateSchema);
+
+export function success<Data>(data: Data): SuccessResponse<Data> {
   return { ok: true, data };
 }
 
-export function failure(code: AuthErrorCode): AuthErrorResponse {
-  return { ok: false, error: { code, message: AUTH_ERROR_MESSAGES[code] } };
+export function failure(code: ErrorCode): ErrorResponse {
+  return { ok: false, error: { code, message: ERROR_MESSAGES[code] } };
 }

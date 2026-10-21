@@ -15,6 +15,12 @@ vi.mock("../message-client", () => ({
   onAuthStateChanged: mocks.onAuthStateChanged,
 }));
 
+vi.mock("../site-panel", () => ({
+  SitePanel: ({ webUrl }: { webUrl: string }) => <div data-testid="site-panel">{webUrl}</div>,
+}));
+
+const WEB_URL = "https://web.test";
+
 const SIGNED_IN: AuthState = {
   status: "signedIn",
   user: { id: "u", email: "max@sitenote.test", displayName: "Max Member", isAnonymous: false },
@@ -44,7 +50,7 @@ describe("PopupApp", () => {
       }),
     );
 
-    render(<PopupApp googleEnabled={false} />);
+    render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
     expect(screen.getByRole("status").textContent).toContain("Loading");
 
     await act(async () => {
@@ -57,7 +63,7 @@ describe("PopupApp", () => {
   it("asks the background for the state with a typed message", async () => {
     mocks.sendMessage.mockResolvedValue(success(SIGNED_OUT));
 
-    render(<PopupApp googleEnabled={false} />);
+    render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
 
     await screen.findByLabelText("Email");
     expect(mocks.sendMessage).toHaveBeenCalledWith({ type: "auth.getState" });
@@ -66,16 +72,29 @@ describe("PopupApp", () => {
   it("shows the signed-in user", async () => {
     mocks.sendMessage.mockResolvedValue(success(SIGNED_IN));
 
-    render(<PopupApp googleEnabled={false} />);
+    render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
 
     expect((await screen.findByTestId("display-name")).textContent).toContain("Max Member");
     expect(screen.getByTestId("account-email").textContent).toContain("max@sitenote.test");
     expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
   });
 
+  it("shows the site panel only to a signed-in user and hands it the web url", async () => {
+    mocks.sendMessage.mockResolvedValue(success(SIGNED_OUT));
+    const { unmount } = render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
+    await screen.findByLabelText("Email");
+    expect(screen.queryByTestId("site-panel")).toBeNull();
+    unmount();
+
+    mocks.sendMessage.mockResolvedValue(success(SIGNED_IN));
+    render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
+
+    expect((await screen.findByTestId("site-panel")).textContent).toBe(WEB_URL);
+  });
+
   it("follows a state broadcast from the background", async () => {
     mocks.sendMessage.mockResolvedValue(success(SIGNED_OUT));
-    render(<PopupApp googleEnabled={false} />);
+    render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
     await screen.findByLabelText("Email");
 
     act(() => {
@@ -92,7 +111,7 @@ describe("PopupApp", () => {
   it("shows a fixed message and retries when the background is unavailable", async () => {
     const user = userEvent.setup();
     mocks.sendMessage.mockResolvedValueOnce(failure("unavailable"));
-    render(<PopupApp googleEnabled={false} />);
+    render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
 
     expect((await screen.findByRole("alert")).textContent).toContain("could not be reached");
 
@@ -106,19 +125,19 @@ describe("PopupApp", () => {
   it("shows the Google button only when the flag is on", async () => {
     mocks.sendMessage.mockResolvedValue(success(SIGNED_OUT));
 
-    const { unmount } = render(<PopupApp googleEnabled={false} />);
+    const { unmount } = render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
     await screen.findByLabelText("Email");
     expect(screen.queryByRole("button", { name: "Continue with Google" })).toBeNull();
     unmount();
 
-    render(<PopupApp googleEnabled />);
+    render(<PopupApp googleEnabled webUrl={WEB_URL} />);
     expect(await screen.findByRole("button", { name: "Continue with Google" })).toBeTruthy();
   });
 
   it("returns to the sign-in form after signing out", async () => {
     const user = userEvent.setup();
     mocks.sendMessage.mockResolvedValueOnce(success(SIGNED_IN));
-    render(<PopupApp googleEnabled={false} />);
+    render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
     await screen.findByTestId("display-name");
 
     mocks.sendMessage.mockResolvedValueOnce(success(SIGNED_OUT));
@@ -129,7 +148,7 @@ describe("PopupApp", () => {
 
   it("stops listening when it unmounts", async () => {
     mocks.sendMessage.mockResolvedValue(success(SIGNED_OUT));
-    const { unmount } = render(<PopupApp googleEnabled={false} />);
+    const { unmount } = render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
     await screen.findByLabelText("Email");
 
     unmount();

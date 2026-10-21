@@ -5,6 +5,12 @@
     "build": {
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "env": ["WXT_*"]
+    },
+    "build:e2e": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "env": ["WXT_*"],
+      "outputs": [".output/**"]
     }
   }
 }

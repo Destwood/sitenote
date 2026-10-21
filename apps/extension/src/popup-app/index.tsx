@@ -3,16 +3,16 @@ import { useCallback, useEffect, useState } from "react";
 import { AccountPanel } from "../account-panel";
 import { ERROR_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
 import { onAuthStateChanged, sendMessage } from "../message-client";
-import { AUTH_ERROR_MESSAGES, type AuthErrorCode, type AuthState } from "../messages";
+import { ERROR_MESSAGES, type ErrorCode, type AuthState } from "../messages";
 import { SignInPanel } from "../sign-in-panel";
+import { SitePanel } from "../site-panel";
 
 type View =
-  | { kind: "loading" }
-  | { kind: "error"; code: AuthErrorCode }
-  | { kind: "ready"; state: AuthState };
+  { kind: "loading" } | { kind: "error"; code: ErrorCode } | { kind: "ready"; state: AuthState };
 
 interface PopupAppProps {
   googleEnabled: boolean;
+  webUrl: string;
 }
 
 async function fetchView(): Promise<View> {
@@ -22,7 +22,7 @@ async function fetchView(): Promise<View> {
     : { kind: "error", code: result.error.code };
 }
 
-export function PopupApp({ googleEnabled }: PopupAppProps) {
+export function PopupApp({ googleEnabled, webUrl }: PopupAppProps) {
   const [view, setView] = useState<View>({ kind: "loading" });
 
   const showState = useCallback((state: AuthState) => {
@@ -59,7 +59,7 @@ export function PopupApp({ googleEnabled }: PopupAppProps) {
       {view.kind === "error" ? (
         <div className="flex flex-col gap-3">
           <p role="alert" className={ERROR_CLASS}>
-            {AUTH_ERROR_MESSAGES[view.code]}
+            {ERROR_MESSAGES[view.code]}
           </p>
           <button type="button" onClick={retry} className={SECONDARY_BUTTON_CLASS}>
             Try again
@@ -70,7 +70,10 @@ export function PopupApp({ googleEnabled }: PopupAppProps) {
         <SignInPanel googleEnabled={googleEnabled} onSignedIn={showState} />
       ) : null}
       {view.kind === "ready" && view.state.status === "signedIn" ? (
-        <AccountPanel user={view.state.user} onSignedOut={showState} />
+        <>
+          <AccountPanel user={view.state.user} onSignedOut={showState} />
+          <SitePanel webUrl={webUrl} />
+        </>
       ) : null}
     </main>
   );

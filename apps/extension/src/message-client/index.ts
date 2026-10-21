@@ -2,31 +2,43 @@ import { browser } from "wxt/browser";
 import type { ZodMiniType } from "zod/mini";
 
 import {
-  AUTH_RESPONSE_SCHEMAS,
+  RESPONSE_SCHEMAS,
   authStateChangedSchema,
+  commentModeResponseSchema,
   failure,
-  type AuthDataByType,
-  type AuthRequest,
-  type AuthRequestType,
-  type AuthResult,
   type AuthState,
+  type CommentModeState,
+  type DataByRequestType,
+  type ExtensionRequest,
+  type ExtensionRequestType,
+  type MessageResult,
 } from "../messages";
 
-function schemaFor<Type extends AuthRequestType>(
+function schemaFor<Type extends ExtensionRequestType>(
   type: Type,
-): ZodMiniType<AuthResult<AuthDataByType[Type]>> {
-  return AUTH_RESPONSE_SCHEMAS[type];
+): ZodMiniType<MessageResult<DataByRequestType[Type]>> {
+  return RESPONSE_SCHEMAS[type];
 }
 
-export async function sendMessage<Request extends AuthRequest>(
+export async function sendMessage<Request extends ExtensionRequest>(
   request: Request,
-): Promise<AuthResult<AuthDataByType[Request["type"]]>> {
+): Promise<MessageResult<DataByRequestType[Request["type"]]>> {
   try {
     const raw: unknown = await browser.runtime.sendMessage(request);
     const parsed = schemaFor<Request["type"]>(request.type).safeParse(raw);
     return parsed.success ? parsed.data : failure("unavailable");
   } catch {
     return failure("unavailable");
+  }
+}
+
+export async function toggleCommentMode(tabId: number): Promise<MessageResult<CommentModeState>> {
+  try {
+    const raw: unknown = await browser.tabs.sendMessage(tabId, { type: "commentMode.toggle" });
+    const parsed = commentModeResponseSchema.safeParse(raw);
+    return parsed.success ? parsed.data : failure("page_unavailable");
+  } catch {
+    return failure("page_unavailable");
   }
 }
 
