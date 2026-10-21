@@ -1,0 +1,83 @@
+import type { Anchor } from "@sitenote/core";
+import type { CommentView, ThreadView } from "@sitenote/ui";
+
+import type { Resolution } from "../anchor-target";
+import type { CommentRecord, SiteInfo, ThreadRecord } from "../transport";
+
+export const ANCHOR_LABEL_LIMIT = 80;
+export const UNKNOWN_ANCHOR_LABEL = "Unknown location";
+
+export function anchorLabel(anchor: Anchor | null): string {
+  if (anchor === null) {
+    return UNKNOWN_ANCHOR_LABEL;
+  }
+  if (anchor.kind === "element") {
+    return anchor.selectors.css.slice(0, ANCHOR_LABEL_LIMIT);
+  }
+  const quote = anchor.quote.exact.replace(/\s+/g, " ");
+  const shown =
+    quote.length > ANCHOR_LABEL_LIMIT ? `${quote.slice(0, ANCHOR_LABEL_LIMIT)}…` : quote;
+  return `“${shown}”`;
+}
+
+export function canChangeStatus(site: SiteInfo, thread: ThreadRecord): boolean {
+  return site.role !== "guest" || thread.author.id === site.userId;
+}
+
+function toCommentView(comment: CommentRecord, userId: string): CommentView {
+  return {
+    id: comment.id,
+    author: comment.author,
+    body: comment.body,
+    createdAt: comment.createdAt,
+    editedAt: comment.editedAt,
+    deleted: comment.deleted,
+    canEdit: !comment.deleted && comment.author.id === userId,
+  };
+}
+
+export function buildThreadViews(
+  threads: readonly ThreadRecord[],
+  resolutions: ReadonlyMap<string, Resolution>,
+  userId: string,
+): ThreadView[] {
+  return [...threads]
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+    .map((thread, index) => ({
+      id: thread.id,
+      status: thread.status,
+      number: index + 1,
+      author: thread.author,
+      createdAt: thread.createdAt,
+      comments: thread.comments.map((comment) => toCommentView(comment, userId)),
+      orphaned: resolutions.get(thread.id)?.status !== "resolved",
+      anchorLabel: anchorLabel(thread.anchor),
+    }));
+}
+
+export function upsertThread(
+  threads: readonly ThreadRecord[],
+  record: ThreadRecord,
+): ThreadRecord[] {
+  return threads.some((thread) => thread.id === record.id)
+    ? threads.map((thread) => (thread.id === record.id ? record : thread))
+    : [...threads, record];
+}
+
+export function upsertComment(
+  threads: readonly ThreadRecord[],
+  comment: CommentRecord,
+): ThreadRecord[] {
+  return threads.map((thread) => {
+    if (thread.id !== comment.threadId) {
+      return thread;
+    }
+    const exists = thread.comments.some((existing) => existing.id === comment.id);
+    return {
+      ...thread,
+      comments: exists
+        ? thread.comments.map((existing) => (existing.id === comment.id ? comment : existing))
+        : [...thread.comments, comment],
+    };
+  });
+}
