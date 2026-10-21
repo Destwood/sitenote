@@ -38,11 +38,7 @@ afterAll(async () => {
   await destroyScenario(scenario);
 });
 
-function hours(count: number): string {
-  return `${count} hours`;
-}
-
-async function invite(role: Enums<"member_role"> = "guest", expiresIn = hours(24)) {
+async function invite(role: Enums<"member_role"> = "guest", expiresIn = "24 hours") {
   return unwrap(
     await scenario.owner.client.rpc("create_invite", {
       p_workspace_id: scenario.workspaceId,
