@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { failure, success } from "../messages";
-import { onAuthStateChanged, sendMessage } from ".";
+import { onAuthStateChanged, sendMessage, toggleCommentMode } from ".";
 
 type Listener = (message: unknown, sender: { id?: string | undefined }) => undefined;
 
 const mocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
+  tabsSendMessage: vi.fn(),
   listeners: new Set<unknown>(),
 }));
 
@@ -20,6 +21,7 @@ vi.mock("wxt/browser", () => ({
         removeListener: (listener: unknown) => mocks.listeners.delete(listener),
       },
     },
+    tabs: { sendMessage: mocks.tabsSendMessage },
   },
 }));
 
@@ -36,6 +38,7 @@ function emit(message: unknown, sender: { id?: string | undefined }) {
 
 beforeEach(() => {
   mocks.sendMessage.mockReset();
+  mocks.tabsSendMessage.mockReset();
   mocks.listeners.clear();
 });
 
@@ -116,5 +119,58 @@ describe("onAuthStateChanged", () => {
 
     expect(listener).not.toHaveBeenCalled();
     expect(mocks.listeners.size).toBe(0);
+  });
+});
+
+describe("sendMessage with data requests", () => {
+  const WORKSPACES = [
+    { id: "10000000-0000-4000-8000-000000000001", name: "Northwind", role: "owner" },
+  ];
+
+  it("validates a data response against the schema of its request", async () => {
+    mocks.sendMessage.mockResolvedValue(success(WORKSPACES));
+
+    expect(await sendMessage({ type: "workspaces.list" })).toEqual(success(WORKSPACES));
+  });
+
+  it("reports the background as unavailable for data of the wrong shape", async () => {
+    mocks.sendMessage.mockResolvedValue(success([{ id: "x" }]));
+
+    expect(await sendMessage({ type: "workspaces.list" })).toEqual(failure("unavailable"));
+  });
+
+  it("passes a data error through", async () => {
+    mocks.sendMessage.mockResolvedValue(failure("forbidden"));
+
+    expect(await sendMessage({ type: "sites.disable", origin: "https://example.test" })).toEqual(
+      failure("forbidden"),
+    );
+  });
+});
+
+describe("toggleCommentMode", () => {
+  it("sends the toggle to the tab and returns the new state", async () => {
+    mocks.tabsSendMessage.mockResolvedValue(success({ active: true }));
+
+    expect(await toggleCommentMode(7)).toEqual(success({ active: true }));
+    expect(mocks.tabsSendMessage).toHaveBeenCalledWith(7, { type: "commentMode.toggle" });
+  });
+
+  it("passes the content script's own failure through", async () => {
+    mocks.tabsSendMessage.mockResolvedValue(failure("unauthorized"));
+
+    expect(await toggleCommentMode(7)).toEqual(failure("unauthorized"));
+  });
+
+  it("says the page is unavailable when there is no content script", async () => {
+    mocks.tabsSendMessage.mockRejectedValue(new Error("Could not establish connection."));
+
+    expect(await toggleCommentMode(7)).toEqual(failure("page_unavailable"));
+  });
+
+  it("says the page is unavailable for an answer of the wrong shape", async () => {
+    mocks.tabsSendMessage.mockResolvedValue({ active: true });
+
+    expect(await toggleCommentMode(7)).toEqual(failure("page_unavailable"));
   });
 });

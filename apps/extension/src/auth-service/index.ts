@@ -5,8 +5,8 @@ import {
   failure,
   success,
   type AuthDataByType,
-  type AuthErrorResponse,
-  type AuthResult,
+  type ErrorResponse,
+  type MessageResult,
   type AuthState,
 } from "../messages";
 import { parseOAuthRedirect } from "../oauth-redirect";
@@ -35,17 +35,17 @@ export interface FreshSession {
 export interface AuthService {
   keepFresh: () => Promise<FreshSession>;
   describeSession: (session: Session | null) => Promise<AuthState>;
-  getState: () => Promise<AuthResult<AuthDataByType["auth.getState"]>>;
-  sendCode: (email: string) => Promise<AuthResult<AuthDataByType["auth.sendCode"]>>;
+  getState: () => Promise<MessageResult<AuthDataByType["auth.getState"]>>;
+  sendCode: (email: string) => Promise<MessageResult<AuthDataByType["auth.sendCode"]>>;
   verifyCode: (
     email: string,
     code: string,
-  ) => Promise<AuthResult<AuthDataByType["auth.verifyCode"]>>;
-  signInWithGoogle: () => Promise<AuthResult<AuthDataByType["auth.signInWithGoogle"]>>;
-  signOut: () => Promise<AuthResult<AuthDataByType["auth.signOut"]>>;
+  ) => Promise<MessageResult<AuthDataByType["auth.verifyCode"]>>;
+  signInWithGoogle: () => Promise<MessageResult<AuthDataByType["auth.signInWithGoogle"]>>;
+  signOut: () => Promise<MessageResult<AuthDataByType["auth.signOut"]>>;
 }
 
-type GoogleCodeResult = { code: string } | { response: AuthErrorResponse };
+type GoogleCodeResult = { code: string } | { response: ErrorResponse };
 
 interface ErrorLike {
   code?: string | undefined;
@@ -115,7 +115,7 @@ export function createAuthService(deps: AuthServiceDeps): AuthService {
     };
   }
 
-  async function getState(): Promise<AuthResult<AuthState>> {
+  async function getState(): Promise<MessageResult<AuthState>> {
     const { outcome, session } = await keepFresh();
     if (outcome.status === "retry") {
       return failure("state_failed");
@@ -123,7 +123,7 @@ export function createAuthService(deps: AuthServiceDeps): AuthService {
     return success(await describeSession(session));
   }
 
-  async function sendCode(email: string): Promise<AuthResult<null>> {
+  async function sendCode(email: string): Promise<MessageResult<null>> {
     try {
       const { error } = await client.auth.signInWithOtp({
         email,
@@ -141,7 +141,7 @@ export function createAuthService(deps: AuthServiceDeps): AuthService {
     }
   }
 
-  async function verifyCode(email: string, code: string): Promise<AuthResult<AuthState>> {
+  async function verifyCode(email: string, code: string): Promise<MessageResult<AuthState>> {
     try {
       const { data, error } = await client.auth.verifyOtp({ email, token: code, type: "email" });
       if (error !== null) {
@@ -188,7 +188,7 @@ export function createAuthService(deps: AuthServiceDeps): AuthService {
     }
   }
 
-  async function signInWithGoogle(): Promise<AuthResult<AuthState>> {
+  async function signInWithGoogle(): Promise<MessageResult<AuthState>> {
     if (!deps.googleEnabled) {
       return failure("google_disabled");
     }
@@ -207,7 +207,7 @@ export function createAuthService(deps: AuthServiceDeps): AuthService {
     }
   }
 
-  async function signOut(): Promise<AuthResult<AuthState>> {
+  async function signOut(): Promise<MessageResult<AuthState>> {
     try {
       const { error } = await client.auth.signOut({ scope: "local" });
       if (error !== null) {

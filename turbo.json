@@ -32,7 +32,7 @@
       "passThroughEnv": ["CI", "PLAYWRIGHT_*"]
     },
     "e2e": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["@sitenote/web#build", "@sitenote/extension#build:e2e"],
       "passThroughEnv": ["CI", "PLAYWRIGHT_*"],
       "cache": false
     },

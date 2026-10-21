@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { ERROR_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
 import { sendMessage } from "../message-client";
-import { AUTH_ERROR_MESSAGES, type AuthErrorCode, type AuthState } from "../messages";
+import { ERROR_MESSAGES, type ErrorCode, type AuthState } from "../messages";
 
 type SignedInState = Extract<AuthState, { status: "signedIn" }>;
 
@@ -17,7 +17,7 @@ function initialOf(name: string): string {
 
 export function AccountPanel({ user, onSignedOut }: AccountPanelProps) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<AuthErrorCode | null>(null);
+  const [error, setError] = useState<ErrorCode | null>(null);
 
   async function handleSignOut() {
     if (busy) {
@@ -54,7 +54,7 @@ export function AccountPanel({ user, onSignedOut }: AccountPanelProps) {
       </div>
       {error === null ? null : (
         <p role="alert" className={ERROR_CLASS}>
-          {AUTH_ERROR_MESSAGES[error]}
+          {ERROR_MESSAGES[error]}
         </p>
       )}
       <button

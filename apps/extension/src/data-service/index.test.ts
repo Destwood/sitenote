@@ -1,0 +1,637 @@
+import type { SitenoteClient } from "@sitenote/db";
+import { describe, expect, it, vi } from "vitest";
+
+import { failure, success, type DataRequest } from "../messages";
+import { createDataService, type DataService } from ".";
+
+const USER_ID = "00000000-0000-4000-8000-000000000002";
+const OTHER_ID = "00000000-0000-4000-8000-000000000003";
+const SITE_ID = "20000000-0000-4000-8000-000000000001";
+const WORKSPACE_ID = "10000000-0000-4000-8000-000000000001";
+const THREAD_ID = "30000000-0000-4000-8000-000000000001";
+const COMMENT_ID = "40000000-0000-4000-8000-000000000001";
+const ORIGIN = "https://example.test";
+const PAGE_URL = "https://example.test/pricing";
+
+const TEXT_ANCHOR = {
+  kind: "text",
+  quote: { exact: "Price", prefix: "", suffix: "" },
+  position: { start: 0, end: 5 },
+  container: "body",
+} as const;
+
+interface Response {
+  data: unknown;
+  error: unknown;
+}
+
+interface Call {
+  method: string;
+  args: unknown[];
+}
+
+interface Query {
+  target: string;
+  calls: Call[];
+}
+
+function ok(data: unknown): Response {
+  return { data, error: null };
+}
+
+function broken(error: unknown): Response {
+  return { data: null, error };
+}
+
+function createFake(options: {
+  session?: boolean | "throws";
+  responses: Record<string, Response[]>;
+}) {
+  const queries: Query[] = [];
+
+  function chain(target: string, calls: Call[]): unknown {
+    const query: Query = { target, calls };
+    queries.push(query);
+    const proxy: unknown = new Proxy(
+      {},
+      {
+        get(_object, property) {
+          if (property === "then") {
+            const queue = options.responses[target] ?? [];
+            const next = queue.shift();
+            return (resolve: (value: unknown) => void, reject: (reason: unknown) => void) => {
+              if (next === undefined) {
+                reject(new Error(`No response queued for ${target}`));
+              } else {
+                resolve(next);
+              }
+            };
+          }
+          return (...args: unknown[]) => {
+            query.calls.push({ method: String(property), args });
+            return proxy;
+          };
+        },
+      },
+    );
+    return proxy;
+  }
+
+  const client = {
+    from: (table: string) => chain(table, []),
+    rpc: (name: string, args: unknown) => chain(`rpc:${name}`, [{ method: "rpc", args: [args] }]),
+    auth: {
+      getSession: () => {
+        if (options.session === "throws") {
+          return Promise.reject(new Error("storage unavailable"));
+        }
+        return Promise.resolve({
+          data: { session: options.session === false ? null : { user: { id: USER_ID } } },
+        });
+      },
+    },
+  } as unknown as SitenoteClient;
+
+  return { client, queries };
+}
+
+function setup(
+  responses: Record<string, Response[]>,
+  extra: { session?: boolean | "throws"; enabled?: boolean } = {},
+) {
+  const fake = createFake({
+    responses,
+    ...(extra.session === undefined ? {} : { session: extra.session }),
+  });
+  const getEnabledSite = vi.fn(() =>
+    Promise.resolve(
+      extra.enabled === false ? null : { siteId: SITE_ID, workspaceId: WORKSPACE_ID },
+    ),
+  );
+  const service = createDataService({ client: fake.client, getEnabledSite });
+  return { service, getEnabledSite, ...fake };
+}
+
+function profile(id: string, name: string) {
+  return { user_id: id, display_name: name, avatar_url: null };
+}
+
+function commentRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: COMMENT_ID,
+    thread_id: THREAD_ID,
+    author_id: USER_ID,
+    body: "Looks wrong",
+    edited_at: null,
+    deleted_at: null,
+    created_at: "2026-10-21T10:00:00+00:00",
+    author: profile(USER_ID, "Max Member"),
+    ...overrides,
+  };
+}
+
+function threadRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: THREAD_ID,
+    site_id: SITE_ID,
+    page_url: PAGE_URL,
+    anchor: TEXT_ANCHOR,
+    status: "open",
+    created_at: "2026-10-21T09:00:00+00:00",
+    created_by: USER_ID,
+    author: profile(USER_ID, "Max Member"),
+    comments: [commentRow()],
+    ...overrides,
+  };
+}
+
+function callsOf(queries: Query[], target: string): Call[][] {
+  return queries.filter((query) => query.target === target).map((query) => query.calls);
+}
+
+const LIST = { type: "threads.list", siteId: SITE_ID, pageUrl: PAGE_URL } as const;
+
+describe("without a session", () => {
+  it.each([
+    [
+      "forOrigin",
+      (service: DataService) => service.forOrigin({ type: "sites.forOrigin", origin: ORIGIN }),
+    ],
+    ["listThreads", (service: DataService) => service.listThreads(LIST)],
+    ["listWorkspaces", (service: DataService) => service.listWorkspaces()],
+    ["ensureSite", (service: DataService) => service.ensureSite(WORKSPACE_ID, ORIGIN)],
+    [
+      "createComment",
+      (service: DataService) =>
+        service.createComment({
+          type: "comments.create",
+          threadId: THREAD_ID,
+          body: "x",
+          mentions: [],
+        }),
+    ],
+  ])("%s answers unauthorized and never queries", async (_name, run) => {
+    const { service, queries } = setup({}, { session: false });
+
+    expect(await run(service)).toEqual(failure("unauthorized"));
+    expect(queries).toEqual([]);
+  });
+
+  it("treats a storage failure as no session", async () => {
+    const { service } = setup({}, { session: "throws" });
+
+    expect(await service.listThreads(LIST)).toEqual(failure("unauthorized"));
+    expect(await service.hasSession()).toBe(false);
+  });
+
+  it("reports a session when there is one", async () => {
+    expect(await setup({}).service.hasSession()).toBe(true);
+  });
+});
+
+describe("listThreads", () => {
+  it("maps a page's threads with comments and authors to the transport shape", async () => {
+    const { service, queries } = setup({
+      threads: [
+        ok([
+          threadRow({
+            comments: [
+              commentRow({
+                id: "40000000-0000-4000-8000-000000000002",
+                created_at: "2026-10-21T11:00:00+00:00",
+                edited_at: "2026-10-21T12:00:00+00:00",
+                body: "Second",
+              }),
+              commentRow(),
+            ],
+          }),
+        ]),
+      ],
+    });
+
+    const result = await service.listThreads(LIST);
+
+    expect(result).toEqual(
+      success([
+        {
+          id: THREAD_ID,
+          siteId: SITE_ID,
+          pageUrl: PAGE_URL,
+          status: "open",
+          anchor: TEXT_ANCHOR,
+          author: { id: USER_ID, displayName: "Max Member", avatarUrl: null },
+          createdAt: "2026-10-21T09:00:00.000Z",
+          comments: [
+            {
+              id: COMMENT_ID,
+              threadId: THREAD_ID,
+              author: { id: USER_ID, displayName: "Max Member", avatarUrl: null },
+              body: "Looks wrong",
+              createdAt: "2026-10-21T10:00:00.000Z",
+              editedAt: null,
+              deleted: false,
+            },
+            {
+              id: "40000000-0000-4000-8000-000000000002",
+              threadId: THREAD_ID,
+              author: { id: USER_ID, displayName: "Max Member", avatarUrl: null },
+              body: "Second",
+              createdAt: "2026-10-21T11:00:00.000Z",
+              editedAt: "2026-10-21T12:00:00.000Z",
+              deleted: false,
+            },
+          ],
+        },
+      ]),
+    );
+    const [calls] = callsOf(queries, "threads");
+    expect(calls?.map((call) => call.method)).toEqual(["select", "eq", "eq", "order"]);
+    expect(calls?.[1]?.args).toEqual(["site_id", SITE_ID]);
+    expect(calls?.[2]?.args).toEqual(["page_url", PAGE_URL]);
+  });
+
+  it("selects the embedded comments and both author profiles in one query", async () => {
+    const { service, queries } = setup({ threads: [ok([])] });
+
+    await service.listThreads(LIST);
+
+    expect(queries).toHaveLength(1);
+    const select = String(callsOf(queries, "threads")[0]?.[0]?.args[0]);
+    expect(select).toContain("comments(");
+    expect(select).toContain("profiles!threads_created_by_fkey");
+    expect(select).toContain("profiles!comments_author_id_fkey");
+  });
+
+  it("marks an unreadable anchor as null instead of failing the list", async () => {
+    const { service } = setup({
+      threads: [ok([threadRow({ anchor: { kind: "element" } }), threadRow({ anchor: "junk" })])],
+    });
+
+    const result = await service.listThreads(LIST);
+
+    expect(result.ok && result.data.map((thread) => thread.anchor)).toEqual([null, null]);
+  });
+
+  it("names users whose profile is not visible or who were deleted", async () => {
+    const { service } = setup({
+      threads: [
+        ok([
+          threadRow({
+            created_by: null,
+            author: null,
+            comments: [
+              commentRow({ author: null, author_id: OTHER_ID }),
+              commentRow({
+                author: null,
+                author_id: null,
+                id: "40000000-0000-4000-8000-000000000009",
+              }),
+            ],
+          }),
+        ]),
+      ],
+    });
+
+    const result = await service.listThreads(LIST);
+
+    expect(result.ok && result.data[0]?.author).toEqual({
+      id: "",
+      displayName: "Deleted user",
+      avatarUrl: null,
+    });
+    expect(result.ok && result.data[0]?.comments.map((comment) => comment.author)).toEqual([
+      { id: OTHER_ID, displayName: "Former member", avatarUrl: null },
+      { id: "", displayName: "Deleted user", avatarUrl: null },
+    ]);
+  });
+
+  it("marks deleted comments", async () => {
+    const { service } = setup({
+      threads: [
+        ok([
+          threadRow({
+            comments: [commentRow({ deleted_at: "2026-10-21T13:00:00+00:00", body: "" })],
+          }),
+        ]),
+      ],
+    });
+
+    const result = await service.listThreads(LIST);
+
+    expect(result.ok && result.data[0]?.comments[0]).toMatchObject({ deleted: true, body: "" });
+  });
+
+  it("maps database errors to a whitelisted code", async () => {
+    const { service } = setup({
+      threads: [broken({ code: "42501", message: "secret details" })],
+    });
+
+    expect(await service.listThreads(LIST)).toEqual(failure("forbidden"));
+  });
+
+  it("maps a thrown failure to a whitelisted code", async () => {
+    const { service } = setup({});
+
+    expect(await service.listThreads(LIST)).toEqual(failure("unknown"));
+  });
+});
+
+describe("createThread", () => {
+  const REQUEST: Extract<DataRequest, { type: "threads.create" }> = {
+    type: "threads.create",
+    siteId: SITE_ID,
+    pageUrl: PAGE_URL,
+    anchor: TEXT_ANCHOR,
+    context: { viewport: { width: 1, height: 2 } },
+    body: "Looks wrong",
+    mentions: [OTHER_ID],
+  };
+
+  it("calls the create_thread function and returns the stored thread", async () => {
+    const { service, queries } = setup({
+      "rpc:create_thread": [ok({ id: THREAD_ID })],
+      threads: [ok(threadRow())],
+    });
+
+    const result = await service.createThread(REQUEST);
+
+    expect(result.ok && result.data.id).toBe(THREAD_ID);
+    expect(callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0]).toEqual({
+      p_site_id: SITE_ID,
+      p_page_url: PAGE_URL,
+      p_anchor: TEXT_ANCHOR,
+      p_context: { viewport: { width: 1, height: 2 } },
+      p_body: "Looks wrong",
+      p_mentions: [OTHER_ID],
+    });
+  });
+
+  it("returns the mapped error and reads nothing when the function fails", async () => {
+    const { service, queries } = setup({
+      "rpc:create_thread": [
+        broken({ code: "23514", message: "the comment body must not be empty" }),
+      ],
+    });
+
+    expect(await service.createThread(REQUEST)).toEqual(failure("validation"));
+    expect(queries.map((query) => query.target)).toEqual(["rpc:create_thread"]);
+  });
+});
+
+describe("setThreadStatus", () => {
+  it("updates the status and returns the thread", async () => {
+    const { service, queries } = setup({ threads: [ok(threadRow({ status: "resolved" }))] });
+
+    const result = await service.setThreadStatus({
+      type: "threads.setStatus",
+      threadId: THREAD_ID,
+      status: "resolved",
+    });
+
+    expect(result.ok && result.data.status).toBe("resolved");
+    const [calls] = callsOf(queries, "threads");
+    expect(calls?.[0]).toEqual({ method: "update", args: [{ status: "resolved" }] });
+    expect(calls?.[1]).toEqual({ method: "eq", args: ["id", THREAD_ID] });
+  });
+
+  it("reports a thread that the policy hides as not found", async () => {
+    const { service } = setup({ threads: [broken({ code: "PGRST116", message: "0 rows" })] });
+
+    expect(
+      await service.setThreadStatus({
+        type: "threads.setStatus",
+        threadId: THREAD_ID,
+        status: "open",
+      }),
+    ).toEqual(failure("not_found"));
+  });
+});
+
+describe("comments", () => {
+  it("creates a comment in the workspace of its thread as the signed-in user", async () => {
+    const { service, queries } = setup({
+      threads: [ok({ workspace_id: WORKSPACE_ID })],
+      comments: [ok(commentRow())],
+    });
+
+    const result = await service.createComment({
+      type: "comments.create",
+      threadId: THREAD_ID,
+      body: "Reply",
+      mentions: [OTHER_ID],
+    });
+
+    expect(result.ok && result.data.id).toBe(COMMENT_ID);
+    expect(callsOf(queries, "comments")[0]?.[0]).toEqual({
+      method: "insert",
+      args: [
+        {
+          thread_id: THREAD_ID,
+          workspace_id: WORKSPACE_ID,
+          author_id: USER_ID,
+          body: "Reply",
+          mentions: [OTHER_ID],
+        },
+      ],
+    });
+  });
+
+  it("does not insert when the thread cannot be read", async () => {
+    const { service, queries } = setup({
+      threads: [broken({ code: "PGRST116", message: "0 rows" })],
+    });
+
+    expect(
+      await service.createComment({
+        type: "comments.create",
+        threadId: THREAD_ID,
+        body: "x",
+        mentions: [],
+      }),
+    ).toEqual(failure("not_found"));
+    expect(queries.map((query) => query.target)).toEqual(["threads"]);
+  });
+
+  it("updates only the body of a comment", async () => {
+    const { service, queries } = setup({
+      comments: [ok(commentRow({ body: "Edited", edited_at: "2026-10-21T12:00:00+00:00" }))],
+    });
+
+    const result = await service.updateComment({
+      type: "comments.update",
+      commentId: COMMENT_ID,
+      body: "Edited",
+    });
+
+    expect(result.ok && result.data).toMatchObject({
+      body: "Edited",
+      editedAt: "2026-10-21T12:00:00.000Z",
+    });
+    expect(callsOf(queries, "comments")[0]?.[0]).toEqual({
+      method: "update",
+      args: [{ body: "Edited" }],
+    });
+  });
+
+  it("deletes a comment by setting deleted_at", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-21T13:00:00.000Z") });
+    const { service, queries } = setup({
+      comments: [ok(commentRow({ deleted_at: "2026-10-21T13:00:00+00:00", body: "" }))],
+    });
+
+    const result = await service.deleteComment({ type: "comments.delete", commentId: COMMENT_ID });
+    vi.useRealTimers();
+
+    expect(result.ok && result.data.deleted).toBe(true);
+    expect(callsOf(queries, "comments")[0]?.[0]).toEqual({
+      method: "update",
+      args: [{ deleted_at: "2026-10-21T13:00:00.000Z" }],
+    });
+  });
+
+  it("maps a read-only deleted comment to a validation error", async () => {
+    const { service } = setup({
+      comments: [broken({ code: "23514", message: "deleted comments are read-only" })],
+    });
+
+    expect(
+      await service.updateComment({ type: "comments.update", commentId: COMMENT_ID, body: "x" }),
+    ).toEqual(failure("validation"));
+  });
+});
+
+describe("forOrigin", () => {
+  const REQUEST = { type: "sites.forOrigin", origin: ORIGIN } as const;
+
+  it("answers null without any query when the origin is not enabled locally", async () => {
+    const { service, queries } = setup({}, { enabled: false });
+
+    expect(await service.forOrigin(REQUEST)).toEqual(success(null));
+    expect(queries).toEqual([]);
+  });
+
+  it("returns the site with workspace name, role and user id", async () => {
+    const { service, queries } = setup({
+      members: [ok({ role: "guest", workspaces: { name: "Northwind" } })],
+      sites: [ok({ id: SITE_ID })],
+    });
+
+    expect(await service.forOrigin(REQUEST)).toEqual(
+      success({
+        siteId: SITE_ID,
+        workspaceId: WORKSPACE_ID,
+        workspaceName: "Northwind",
+        role: "guest",
+        userId: USER_ID,
+      }),
+    );
+    expect(callsOf(queries, "sites")[0]?.map((call) => call.args)).toEqual([
+      ["id"],
+      ["id", SITE_ID],
+      ["workspace_id", WORKSPACE_ID],
+      ["origin", ORIGIN],
+      [],
+    ]);
+  });
+
+  it.each([
+    ["the user left the workspace", { members: [ok(null)], sites: [ok({ id: SITE_ID })] }],
+    [
+      "the workspace is not readable",
+      { members: [ok({ role: "member", workspaces: null })], sites: [ok({ id: SITE_ID })] },
+    ],
+    [
+      "the site was removed",
+      { members: [ok({ role: "member", workspaces: { name: "N" } })], sites: [ok(null)] },
+    ],
+  ])("answers null when %s", async (_name, responses) => {
+    const { service } = setup(responses);
+
+    expect(await service.forOrigin(REQUEST)).toEqual(success(null));
+  });
+
+  it("maps a failing query to a whitelisted code", async () => {
+    const { service } = setup({
+      members: [broken({ code: "", message: "TypeError: Failed to fetch" })],
+      sites: [ok({ id: SITE_ID })],
+    });
+
+    expect(await service.forOrigin(REQUEST)).toEqual(failure("network"));
+  });
+});
+
+describe("listWorkspaces", () => {
+  it("lists the workspaces of the user with their role and skips unreadable ones", async () => {
+    const { service, queries } = setup({
+      members: [
+        ok([
+          { role: "owner", workspaces: { id: WORKSPACE_ID, name: "Northwind" } },
+          { role: "member", workspaces: null },
+          { role: "guest", workspaces: { id: SITE_ID, name: "Agency" } },
+        ]),
+      ],
+    });
+
+    expect(await service.listWorkspaces()).toEqual(
+      success([
+        { id: WORKSPACE_ID, name: "Northwind", role: "owner" },
+        { id: SITE_ID, name: "Agency", role: "guest" },
+      ]),
+    );
+    expect(callsOf(queries, "members")[0]?.[1]).toEqual({
+      method: "eq",
+      args: ["user_id", USER_ID],
+    });
+  });
+});
+
+describe("ensureSite", () => {
+  it("returns the id of a site that already exists without inserting", async () => {
+    const { service, queries } = setup({ sites: [ok({ id: SITE_ID })] });
+
+    expect(await service.ensureSite(WORKSPACE_ID, ORIGIN)).toEqual(success(SITE_ID));
+    expect(queries).toHaveLength(1);
+  });
+
+  it("inserts the origin when it is new", async () => {
+    const { service, queries } = setup({ sites: [ok(null), ok({ id: SITE_ID })] });
+
+    expect(await service.ensureSite(WORKSPACE_ID, ORIGIN)).toEqual(success(SITE_ID));
+    expect(callsOf(queries, "sites")[1]?.[0]).toEqual({
+      method: "insert",
+      args: [{ workspace_id: WORKSPACE_ID, origin: ORIGIN }],
+    });
+  });
+
+  it("reads the row again when another client inserted it first", async () => {
+    const { service } = setup({
+      sites: [ok(null), broken({ code: "23505", message: "dup" }), ok({ id: SITE_ID })],
+    });
+
+    expect(await service.ensureSite(WORKSPACE_ID, ORIGIN)).toEqual(success(SITE_ID));
+  });
+
+  it("is forbidden for a user who may not insert sites", async () => {
+    const { service } = setup({
+      sites: [ok(null), broken({ code: "42501", message: "row-level security" })],
+    });
+
+    expect(await service.ensureSite(WORKSPACE_ID, ORIGIN)).toEqual(failure("forbidden"));
+  });
+});
+
+describe("findThreadPage", () => {
+  it("returns the page of a thread", async () => {
+    const { service } = setup({ threads: [ok({ page_url: PAGE_URL })] });
+
+    expect(await service.findThreadPage(THREAD_ID)).toBe(PAGE_URL);
+  });
+
+  it.each([
+    ["the thread is not visible", { threads: [ok(null)] }],
+    ["the query fails", { threads: [broken({ code: "42501", message: "x" })] }],
+    ["the request throws", {}],
+  ])("returns null when %s", async (_name, responses) => {
+    expect(await setup(responses).service.findThreadPage(THREAD_ID)).toBeNull();
+  });
+});

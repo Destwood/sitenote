@@ -2,7 +2,7 @@ import tailwindcss from "@tailwindcss/vite";
 import remToPx from "postcss-rem-to-responsive-pixel";
 import { defineConfig } from "wxt";
 
-import { EXTENSION_PUBLIC_KEY } from "./src/extension-key";
+import { createManifest } from "./src/manifest-config";
 
 export default defineConfig({
   imports: false,
@@ -15,12 +15,7 @@ export default defineConfig({
       strictPort: true,
     },
   },
-  manifest: {
-    name: "Sitenote",
-    description: "Figma-style comments on any live website.",
-    key: EXTENSION_PUBLIC_KEY,
-    permissions: ["storage", "identity", "alarms"],
-  },
+  manifest: createManifest({ e2e: false }),
   vite: () => ({
     plugins: [tailwindcss()],
     css: {

@@ -3,12 +3,12 @@ import { useCallback, useEffect, useState } from "react";
 import { AccountPanel } from "../account-panel";
 import { ERROR_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
 import { onAuthStateChanged, sendMessage } from "../message-client";
-import { AUTH_ERROR_MESSAGES, type AuthErrorCode, type AuthState } from "../messages";
+import { ERROR_MESSAGES, type ErrorCode, type AuthState } from "../messages";
 import { SignInPanel } from "../sign-in-panel";
 
 type View =
   | { kind: "loading" }
-  | { kind: "error"; code: AuthErrorCode }
+  | { kind: "error"; code: ErrorCode }
   | { kind: "ready"; state: AuthState };
 
 interface PopupAppProps {
@@ -59,7 +59,7 @@ export function PopupApp({ googleEnabled }: PopupAppProps) {
       {view.kind === "error" ? (
         <div className="flex flex-col gap-3">
           <p role="alert" className={ERROR_CLASS}>
-            {AUTH_ERROR_MESSAGES[view.code]}
+            {ERROR_MESSAGES[view.code]}
           </p>
           <button type="button" onClick={retry} className={SECONDARY_BUTTON_CLASS}>
             Try again

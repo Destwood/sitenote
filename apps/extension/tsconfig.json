@@ -7,6 +7,7 @@
     "src",
     "vitest.config.ts",
     "vitest.setup.ts",
-    "wxt.config.ts"
+    "wxt.config.ts",
+    "wxt.e2e.config.ts"
   ]
 }

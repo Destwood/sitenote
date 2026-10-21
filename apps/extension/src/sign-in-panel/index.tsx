@@ -8,7 +8,7 @@ import {
   SECONDARY_BUTTON_CLASS,
 } from "../form-controls";
 import { sendMessage } from "../message-client";
-import { AUTH_ERROR_MESSAGES, OTP_LENGTH, type AuthErrorCode, type AuthState } from "../messages";
+import { ERROR_MESSAGES, OTP_LENGTH, type ErrorCode, type AuthState } from "../messages";
 import {
   clearPendingSignIn,
   readPendingSignIn,
@@ -38,7 +38,7 @@ export function SignInPanel({ googleEnabled, onSignedIn }: SignInPanelProps) {
   const [step, setStep] = useState<Step>(pending === null ? "email" : "code");
   const [email, setEmail] = useState(pending?.email ?? "");
   const [code, setCode] = useState("");
-  const [error, setError] = useState<AuthErrorCode | null>(null);
+  const [error, setError] = useState<ErrorCode | null>(null);
   const [busy, setBusy] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(() => remainingSeconds(pending));
   const [resent, setResent] = useState(false);
@@ -142,7 +142,7 @@ export function SignInPanel({ googleEnabled, onSignedIn }: SignInPanelProps) {
   const errorMessage =
     error === null ? null : (
       <p id="sign-in-error" role="alert" className={ERROR_CLASS}>
-        {AUTH_ERROR_MESSAGES[error]}
+        {ERROR_MESSAGES[error]}
       </p>
     );
   const describedBy = error === null ? undefined : "sign-in-error";
