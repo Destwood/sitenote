@@ -32,6 +32,14 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
+      - name: Read Playwright version
+        id: playwright
+        run: echo "version=$(pnpm --silent --filter @sitenote/core exec playwright --version | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - run: pnpm --filter @sitenote/core exec playwright install --with-deps chromium
       - run: pnpm test
       - run: pnpm build
 
