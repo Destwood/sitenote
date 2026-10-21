@@ -33,12 +33,12 @@ Done when: `pnpm dev` runs both apps, the extension overlay shows on the fixture
 
 ### Phase 1 — Anchoring engine (`packages/core`)
 
-- [ ] URL normalization (`site`, `page`)
-- [ ] Element anchor creation: stable selector builder skipping hashed classes, nth-path fallback, fingerprint, relative offset
-- [ ] Element anchor resolution with fingerprint scoring and orphan result
-- [ ] Text anchor creation: exact, prefix, suffix, position, container
-- [ ] Text anchor resolution chain: container, document, position, orphan
-- [ ] Fixture suite: unchanged page, reordered siblings, changed classes, edited text, removed element, duplicated text, SPA re-render
+- [x] URL normalization (`site`, `page`)
+- [x] Element anchor creation: stable selector builder skipping hashed classes, nth-path fallback, fingerprint, relative offset
+- [x] Element anchor resolution with fingerprint scoring and orphan result
+- [x] Text anchor creation: exact, prefix, suffix, position, container
+- [x] Text anchor resolution chain: container, document, position, orphan
+- [x] Fixture suite: unchanged page, reordered siblings, changed classes, edited text, removed element, duplicated text, SPA re-render
 
 Done when: every fixture case resolves or orphans as expected in unit and browser-mode tests.
 
