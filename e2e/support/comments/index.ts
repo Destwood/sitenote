@@ -2,12 +2,14 @@ import { SITENOTE_ROOT_TAG } from "@sitenote/core";
 import { expect, type BrowserContext, type Locator, type Page } from "@playwright/test";
 import type { SitenoteClient } from "@sitenote/db";
 
+import { launchExtensionContext } from "../../fixtures/extension";
 import { enableSite, openPopup, pointPopupAt, signIn } from "../extension";
 
 export const FIXTURE_ORIGIN = "http://127.0.0.1:4173";
 export const WORKSPACE_NAME = "Northwind Studio";
 export const OWNER = "owner@sitenote.test";
 export const MEMBER = "member@sitenote.test";
+export const GUEST = "guest@sitenote.test";
 
 export interface ReviewSession {
   page: Page;
@@ -37,6 +39,23 @@ export async function openReviewPage(
   await enableSite(popup, WORKSPACE_NAME);
   await expect(hostOf(page)).toHaveAttribute("data-live", "true");
   return { page, popup };
+}
+
+export async function openInSecondContext(
+  headless: boolean,
+  baseURL: string | undefined,
+  email: string,
+  path: string,
+): Promise<{ context: BrowserContext; session: ReviewSession }> {
+  const context = await launchExtensionContext(headless, baseURL);
+  try {
+    const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
+    const session = await openReviewPage(context, new URL(worker.url()).host, email, path);
+    return { context, session };
+  } catch (error) {
+    await context.close();
+    throw error;
+  }
 }
 
 export async function enterCommentMode({ page, popup }: ReviewSession): Promise<void> {

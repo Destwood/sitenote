@@ -1,9 +1,10 @@
 import type { Page } from "@playwright/test";
 import type { SitenoteClient } from "@sitenote/db";
 
-import { expect, launchExtensionContext, test } from "../../fixtures/extension";
+import { expect, test } from "../../fixtures/extension";
 import {
   FIXTURE_ORIGIN,
+  GUEST,
   MEMBER,
   OWNER,
   WORKSPACE_NAME,
@@ -13,6 +14,7 @@ import {
   enterCommentMode,
   exitCommentMode,
   hostOf,
+  openInSecondContext,
   openReviewPage,
   pinOf,
   submitNewThread,
@@ -235,19 +237,16 @@ test("two users on the same page see each other's pins and replies live", async 
   const path = "/p/realtime";
   await ownerCleanup(`${FIXTURE_ORIGIN}${path}`);
   const ownerSession = await openReviewPage(context, extensionId, OWNER, path);
-  const memberContext = await launchExtensionContext(headless, baseURL);
+  const second = await openInSecondContext(headless, baseURL, MEMBER, path);
   try {
-    const memberWorker =
-      memberContext.serviceWorkers()[0] ?? (await memberContext.waitForEvent("serviceworker"));
-    const memberExtensionId = new URL(memberWorker.url()).host;
-    const memberSession = await openReviewPage(memberContext, memberExtensionId, MEMBER, path);
-    await expect(pinOf(memberSession.page, 1)).toHaveCount(0);
+    const memberPage = second.session.page;
+    await expect(pinOf(memberPage, 1)).toHaveCount(0);
 
     await commentOnElement(ownerSession, "#cta", { x: 25, y: 15 }, "Owner starts a thread");
 
-    await expect(pinOf(memberSession.page, 1)).toBeVisible();
-    await pinOf(memberSession.page, 1).click();
-    const memberDialog = memberSession.page.getByRole("dialog", { name: "Thread 1" });
+    await expect(pinOf(memberPage, 1)).toBeVisible();
+    await pinOf(memberPage, 1).click();
+    const memberDialog = memberPage.getByRole("dialog", { name: "Thread 1" });
     await expect(memberDialog).toContainText("Owner starts a thread");
     await memberDialog.getByRole("textbox", { name: "Reply" }).fill("Member replies live");
     await memberDialog.getByRole("button", { name: "Reply", exact: true }).click();
@@ -255,8 +254,68 @@ test("two users on the same page see each other's pins and replies live", async 
     const ownerDialog = ownerSession.page.getByRole("dialog", { name: "Thread 1" });
     await expect(ownerDialog).toContainText("Member replies live");
   } finally {
-    await memberContext.close();
+    await second.context.close();
   }
+});
+
+test("only people who may change the status see Resolve, and the pin follows it live", async ({
+  context,
+  extensionId,
+  headless,
+  baseURL,
+}) => {
+  const path = "/p/status";
+  await ownerCleanup(`${FIXTURE_ORIGIN}${path}`);
+  const ownerSession = await openReviewPage(context, extensionId, OWNER, path);
+  const second = await openInSecondContext(headless, baseURL, GUEST, path);
+  try {
+    const guestPage = second.session.page;
+    await commentOnElement(ownerSession, "#cta", { x: 25, y: 15 }, "Is this final?");
+
+    await expect(pinOf(guestPage, 1)).toBeVisible();
+    await pinOf(guestPage, 1).click();
+    const guestDialog = guestPage.getByRole("dialog", { name: "Thread 1" });
+    await expect(guestDialog).toContainText("Is this final?");
+    await expect(guestDialog.getByRole("button", { name: "Resolve" })).toHaveCount(0);
+    await guestPage.getByRole("button", { name: "Close thread" }).click();
+
+    const ownerDialog = ownerSession.page.getByRole("dialog", { name: "Thread 1" });
+    await ownerDialog.getByRole("button", { name: "Resolve" }).click();
+    await expect(ownerDialog.getByRole("button", { name: "Reopen" })).toBeVisible();
+
+    await expect(pinOf(guestPage, 1)).toHaveCount(0);
+    await expect(guestPage.getByRole("button", { name: "Comments, 0 open" })).toBeVisible();
+
+    await ownerDialog.getByRole("button", { name: "Reopen" }).click();
+
+    await expect(pinOf(guestPage, 1)).toBeVisible();
+  } finally {
+    await second.context.close();
+  }
+});
+
+test("Escape cancels a pending thread first and then leaves comment mode", async ({
+  context,
+  extensionId,
+}) => {
+  const path = "/p/escape";
+  const owner = await ownerCleanup(`${FIXTURE_ORIGIN}${path}`);
+  const session = await openReviewPage(context, extensionId, OWNER, path);
+  const { page } = session;
+  await enterCommentMode(session);
+
+  await page.locator("#cta").click({ position: { x: 20, y: 10 } });
+  await expect(page.getByRole("dialog", { name: "New thread" })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await expect(page.getByRole("dialog", { name: "New thread" })).toHaveCount(0);
+  await expect(pinOf(page, 1, "pending")).toHaveCount(0);
+  await expect(hostOf(page)).toHaveAttribute("data-comment-mode", "on");
+
+  await page.locator("body").press("Escape");
+
+  await expect(hostOf(page)).toHaveAttribute("data-comment-mode", "off");
+  expect(await threadsOnPage(owner, `${FIXTURE_ORIGIN}${path}`)).toHaveLength(0);
 });
 
 test("a thread on the real public site example.com is created and restored", async ({
