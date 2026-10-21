@@ -7,6 +7,7 @@ import { createCommandListener } from "../command-listener";
 import { createDataService } from "../data-service";
 import { createEnablementStore } from "../enablement-store";
 import { getExtensionEnv } from "../env";
+import { createExternalRouter } from "../external-router";
 import { createHubPort } from "../hub-port";
 import { createMessageRouter } from "../message-router";
 import { toggleCommentMode } from "../message-client";
@@ -14,6 +15,7 @@ import { PAGE_PORT_NAME, type AuthStateChangedMessage } from "../messages";
 import { createChannelFactory } from "../realtime-channels";
 import { createRealtimeHub } from "../realtime-hub";
 import { planRefresh, REFRESH_ALARM_NAME, type RefreshOutcome } from "../refresh-schedule";
+import { createSessionHandoff } from "../session-handoff";
 import { createSessionStorage } from "../session-storage";
 import { createSiteEnablement } from "../site-enablement";
 
@@ -108,8 +110,24 @@ export function startBackground(): void {
     onWake: keepSessionFresh,
   });
 
+  const routeExternal = createExternalRouter({
+    webOrigin: new URL(env.webUrl).origin,
+    handoff: createSessionHandoff({
+      client,
+      createProbe: (accessToken) =>
+        createSitenoteClient(env.supabaseUrl, env.supabasePublishableKey, {
+          auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+          global: { headers: { Authorization: `Bearer ${accessToken}` } },
+        }),
+    }),
+  });
+
   browser.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
     ignoreFailure(route(message, sender).then(sendResponse));
+    return true;
+  });
+  browser.runtime.onMessageExternal.addListener((message: unknown, sender, sendResponse) => {
+    ignoreFailure(routeExternal(message, sender).then(sendResponse));
     return true;
   });
   browser.runtime.onConnect.addListener((port) => {

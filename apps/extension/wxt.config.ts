@@ -15,7 +15,7 @@ export default defineConfig({
       strictPort: true,
     },
   },
-  manifest: createManifest({ e2e: false }),
+  manifest: () => createManifest({ e2e: false, webUrl: process.env.WXT_WEB_URL }),
   vite: () => ({
     plugins: [tailwindcss()],
     css: {
