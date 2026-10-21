@@ -12,7 +12,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "e2e": "turbo run e2e",
+    "e2e": "node scripts/require-supabase.ts && turbo run e2e",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint:root": "eslint eslint.config.js vitest.config.ts scripts",
