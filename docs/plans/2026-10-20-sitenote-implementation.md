@@ -48,7 +48,7 @@ Done when: every fixture case resolves or orphans as expected in unit and browse
 - [x] RLS policies per role and storage policies for `screenshots`
 - [x] RLS test suite for owner, member, guest and outsider
 - [x] Seed: one workspace, two members, one guest, a site, sample threads
-- [ ] Web: Google sign-in, auth callback, create workspace, list workspaces
+- [x] Web: Google sign-in, auth callback, create workspace, list workspaces
 - [ ] Extension: background auth via `launchWebAuthFlow` + PKCE, session in `chrome.storage.local`, refresh, sign out; popup shows the signed-in user
 
 Done when: a user signs in on web and in the extension against local Supabase and RLS tests pass.

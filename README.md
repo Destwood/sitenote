@@ -55,6 +55,15 @@ pnpm db:stop
 
 Seeded local users (`owner@`, `member@`, `guest@`, `outsider@sitenote.test`) sign in with the password `sitenote-dev-password`.
 
+## Web sign-in
+
+The web app signs in with a 6-digit e-mail code. Locally the e-mail lands in Mailpit at http://127.0.0.1:54324. Any address works; the seeded users above have a workspace. The "Continue with Google" button appears only when `NEXT_PUBLIC_AUTH_GOOGLE_ENABLED=true` and the Google provider is configured in Supabase.
+
+```
+pnpm db:start && pnpm db:env   # once per boot of the stack
+pnpm e2e                       # builds the extension and the web app, then runs Playwright
+```
+
 ## Docs
 
 - [Design](docs/plans/2026-10-20-sitenote-design.md)

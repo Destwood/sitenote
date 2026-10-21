@@ -70,7 +70,7 @@ jobs:
   e2e:
     name: End-to-end
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -87,6 +87,8 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
       - run: pnpm --filter @sitenote/e2e exec playwright install --with-deps chromium
+      - run: pnpm exec supabase start -x studio,imgproxy,edge-runtime,logflare,vector,postgres-meta
+      - run: pnpm db:env
       - run: pnpm e2e
       - uses: actions/upload-artifact@v7
         if: failure()
