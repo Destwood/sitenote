@@ -41,6 +41,20 @@ supabase/      migrations, RLS policies, edge functions
 docs/plans/    design and implementation plan
 ```
 
+## Local database
+
+```
+pnpm db:start     # local Supabase (Docker); applies migrations and supabase/seed.sql
+pnpm db:env       # writes .env.local for web, extension and tests (gitignored)
+pnpm test:rls     # row level security tests against the running stack
+pnpm db:reset     # re-apply migrations and seed
+pnpm db:types     # regenerate packages/db/src/database-types after a migration
+pnpm db:lint      # supabase db lint
+pnpm db:stop
+```
+
+Seeded local users (`owner@`, `member@`, `guest@`, `outsider@sitenote.test`) sign in with the password `sitenote-dev-password`.
+
 ## Docs
 
 - [Design](docs/plans/2026-10-20-sitenote-design.md)

@@ -44,10 +44,10 @@ Done when: every fixture case resolves or orphans as expected in unit and browse
 
 ### Phase 2 — Database, auth, workspaces
 
-- [ ] Migrations for all tables from the design, indexes, `updated_at` triggers
-- [ ] RLS policies per role and storage policies for `screenshots`
-- [ ] RLS test suite for owner, member, guest and outsider
-- [ ] Seed: one workspace, two members, one guest, a site, sample threads
+- [x] Migrations for all tables from the design, indexes, `updated_at` triggers
+- [x] RLS policies per role and storage policies for `screenshots`
+- [x] RLS test suite for owner, member, guest and outsider
+- [x] Seed: one workspace, two members, one guest, a site, sample threads
 - [ ] Web: Google sign-in, auth callback, create workspace, list workspaces
 - [ ] Extension: background auth via `launchWebAuthFlow` + PKCE, session in `chrome.storage.local`, refresh, sign out; popup shows the signed-in user
 
