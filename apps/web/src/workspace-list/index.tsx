@@ -1,4 +1,8 @@
 import type { Enums } from "@sitenote/db";
+import Link from "next/link";
+
+import { LINK_BUTTON_CLASS } from "../form-controls";
+import { workspaceInvitesPath } from "../invite-link";
 
 export interface WorkspaceListItem {
   id: string;
@@ -30,8 +34,15 @@ export function WorkspaceList({ workspaces }: WorkspaceListProps) {
       {workspaces.map((workspace) => (
         <li key={workspace.id} className="flex items-center justify-between gap-4 px-4 py-3">
           <span className="font-medium">{workspace.name}</span>
-          <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs font-semibold text-neutral-700">
-            {ROLE_LABELS[workspace.role]}
+          <span className="flex items-center gap-3">
+            {workspace.role === "owner" ? (
+              <Link href={workspaceInvitesPath(workspace.id)} className={LINK_BUTTON_CLASS}>
+                Invites
+              </Link>
+            ) : null}
+            <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs font-semibold text-neutral-700">
+              {ROLE_LABELS[workspace.role]}
+            </span>
           </span>
         </li>
       ))}

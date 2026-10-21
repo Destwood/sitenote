@@ -5,6 +5,7 @@ import { parsePublicEnv } from ".";
 const VALID = {
   NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321",
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_key",
+  NEXT_PUBLIC_WEB_URL: "http://localhost:3000",
 };
 
 describe("parsePublicEnv", () => {
@@ -12,8 +13,26 @@ describe("parsePublicEnv", () => {
     expect(parsePublicEnv(VALID)).toEqual({
       supabaseUrl: "http://127.0.0.1:54321",
       supabasePublishableKey: "sb_publishable_key",
+      webUrl: "http://localhost:3000",
+      extensionId: "anefihllkbkenhjbjggfndgemgkfaeoa",
       googleAuthEnabled: false,
     });
+  });
+
+  it("reduces the web URL to its origin", () => {
+    expect(
+      parsePublicEnv({ ...VALID, NEXT_PUBLIC_WEB_URL: "https://app.sitenote.test/path/?x=1" })
+        .webUrl,
+    ).toBe("https://app.sitenote.test");
+  });
+
+  it("takes the extension id from the environment and rejects a malformed one", () => {
+    const id = "abcdefghijklmnopabcdefghijklmnop";
+
+    expect(parsePublicEnv({ ...VALID, NEXT_PUBLIC_EXTENSION_ID: id }).extensionId).toBe(id);
+    expect(() => parsePublicEnv({ ...VALID, NEXT_PUBLIC_EXTENSION_ID: "short" })).toThrow(
+      "NEXT_PUBLIC_EXTENSION_ID",
+    );
   });
 
   it("enables Google sign-in only for the exact value true", () => {
@@ -39,7 +58,7 @@ describe("parsePublicEnv", () => {
 
   it("names every missing variable", () => {
     expect(() => parsePublicEnv({})).toThrow(
-      /NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/,
+      /NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, NEXT_PUBLIC_WEB_URL/,
     );
   });
 
