@@ -10,10 +10,16 @@
       "persistent": true
     },
     "//#lint:root": {
-      "inputs": ["eslint.config.js", "vitest.config.ts", "tsconfig.json", "package.json"]
+      "inputs": [
+        "eslint.config.js",
+        "vitest.config.ts",
+        "scripts/**",
+        "tsconfig.json",
+        "package.json"
+      ]
     },
     "//#typecheck:root": {
-      "inputs": ["vitest.config.ts", "tsconfig.json", "package.json"]
+      "inputs": ["vitest.config.ts", "scripts/**", "tsconfig.json", "package.json"]
     },
     "lint": {
       "dependsOn": ["//#lint:root"],
@@ -29,6 +35,10 @@
       "dependsOn": ["^build"],
       "passThroughEnv": ["CI", "PLAYWRIGHT_*"],
       "cache": false
+    },
+    "test:rls": {
+      "cache": false,
+      "passThroughEnv": ["CI", "SUPABASE_*"]
     }
   }
 }

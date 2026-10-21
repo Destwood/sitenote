@@ -1,0 +1,24 @@
+{
+  "name": "@sitenote/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:rls": "vitest run --config vitest.rls.config.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.118.0"
+  },
+  "devDependencies": {
+    "@sitenote/core": "workspace:*",
+    "@sitenote/tsconfig": "workspace:*",
+    "@types/pg": "8.23.1",
+    "pg": "8.23.1",
+    "vitest": "5.0.5"
+  }
+}

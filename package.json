@@ -15,12 +15,16 @@
     "e2e": "turbo run e2e",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint:root": "eslint eslint.config.js vitest.config.ts",
+    "lint:root": "eslint eslint.config.js vitest.config.ts scripts",
     "typecheck:root": "tsc --noEmit -p tsconfig.json",
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
-    "db:status": "supabase status"
+    "db:status": "supabase status",
+    "db:env": "node scripts/supabase-env.ts",
+    "db:types": "node scripts/db-types.ts",
+    "db:lint": "supabase db lint --level warning --fail-on warning",
+    "test:rls": "turbo run test:rls"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
