@@ -25,6 +25,7 @@
     "test": {},
     "e2e": {
       "dependsOn": ["^build"],
+      "passThroughEnv": ["CI", "PLAYWRIGHT_*"],
       "cache": false
     }
   }

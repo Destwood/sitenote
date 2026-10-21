@@ -104,7 +104,7 @@ importers:
         version: link:../../packages/ui
       next:
         specifier: 16.4.2
-        version: 16.4.2(@babel/core@7.29.7)(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 16.4.2(@babel/core@7.29.7)(@playwright/test@1.64.1)(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       react:
         specifier: 19.3.1
         version: 19.3.1
@@ -130,6 +130,21 @@ importers:
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3
+
+  e2e:
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.1
+        version: 1.64.1
+      '@sitenote/core':
+        specifier: workspace:*
+        version: link:../packages/core
+      '@sitenote/extension':
+        specifier: workspace:*
+        version: link:../apps/extension
+      '@sitenote/tsconfig':
+        specifier: workspace:*
+        version: link:../packages/tsconfig
 
   packages/core:
     devDependencies:
@@ -620,6 +635,11 @@ packages:
 
   '@oxc-project/types@0.154.0':
     resolution: {integrity: sha512-KYOUGQFlLWR+s4QMV2Q9ko38TZm7EdO87Qm7rvZLqk/webse/cDjtyxKhg/47l0byCbs/k46LT8qc4PKjAikzA==}
+
+  '@playwright/test@1.64.1':
+    resolution: {integrity: sha512-IaYGml/nSOiZWROfPtuIL7neuu9qDOZ3TNvNljUIrhDMxiGTgPjzj/g9p9RxpS2tSepPDRY+UwAaEeiKtUvIAg==}
+    engines: {node: '>=20'}
+    hasBin: true
 
   '@rolldown/binding-android-arm-eabi@1.2.14':
     resolution: {integrity: sha512-aWR+XKH9+rW7m5fWq/5360J3mHycrx/o6xZM2DQFdJnTMdyP7/WzxPjhtLbVWdKo2y612/4U1bWqb3HQhiF7vg==}
@@ -1851,6 +1871,16 @@ packages:
   pkg-types@2.3.3:
     resolution: {integrity: sha512-j/lCFdcppV0JxWpCEITdbDltBxPP6cHT+yNJ6Go2OgoSA9518X847X9z0p6LtA4Nc16+eQzCZjRrWanTGvHJ5w==}
 
+  playwright-core@1.64.1:
+    resolution: {integrity: sha512-BC4s8y6SEVA6Q1rSxZTto8hI1KUI3xXlHGZgvGqP4IqPdI/a6FX9H29IDNz7vKo9l21b6LfYosScPL6M3xxyDQ==}
+    engines: {node: '>=20'}
+    hasBin: true
+
+  playwright@1.64.1:
+    resolution: {integrity: sha512-HCrVhHr5QQuwYoswEUGTb7gGp522yflbv/ST8nF4sFWGuLjQCt17Q/EubpGGSNKYn1tsTCPZxqHhHCfVURu7UA==}
+    engines: {node: '>=20'}
+    hasBin: true
+
   postcss-plugin-shared@1.2.0:
     resolution: {integrity: sha512-59tBkBp4NPvsEdj0KigDh6jrin7Zu5pUIkn+qrnuGRlFX1NINjSTeNgrpCTgvdUv6KuDvLFsrexXB7rNu9W09Q==}
     peerDependencies:
@@ -2698,6 +2728,10 @@ snapshots:
       fastq: 1.20.3
 
   '@oxc-project/types@0.154.0': {}
+
+  '@playwright/test@1.64.1':
+    dependencies:
+      playwright: 1.64.1
 
   '@rolldown/binding-android-arm-eabi@1.2.14':
     optional: true
@@ -3687,7 +3721,7 @@ snapshots:
 
   natural-compare@1.4.0: {}
 
-  next@16.4.2(@babel/core@7.29.7)(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
+  next@16.4.2(@babel/core@7.29.7)(@playwright/test@1.64.1)(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
     dependencies:
       '@next/env': 16.4.2
       '@swc/helpers': 0.5.23
@@ -3706,6 +3740,7 @@ snapshots:
       '@next/swc-linux-x64-musl': 16.4.2
       '@next/swc-win32-arm64-msvc': 16.4.2
       '@next/swc-win32-x64-msvc': 16.4.2
+      '@playwright/test': 1.64.1
       sharp: 0.35.5(@types/node@24.19.2)
     transitivePeerDependencies:
       - '@babel/core'
@@ -3776,6 +3811,12 @@ snapshots:
       confbox: 0.3.1
       exsolve: 1.1.3
       pathe: 2.0.3
+
+  playwright-core@1.64.1: {}
+
+  playwright@1.64.1:
+    dependencies:
+      playwright-core: 1.64.1
 
   postcss-plugin-shared@1.2.0(postcss@8.5.31):
     dependencies:
