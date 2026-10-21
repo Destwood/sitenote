@@ -190,6 +190,9 @@ importers:
       '@sitenote/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@sitenote/db':
+        specifier: workspace:*
+        version: link:../packages/db
       '@sitenote/extension':
         specifier: workspace:*
         version: link:../apps/extension

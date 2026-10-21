@@ -5,13 +5,13 @@ import { resolve } from "node:path";
 
 export const STABLE_EXTENSION_ID = "anefihllkbkenhjbjggfndgemgkfaeoa";
 
-const EXTENSION_PATH = resolve(import.meta.dirname, "../../apps/extension/.output/chrome-mv3");
+const EXTENSION_PATH = resolve(import.meta.dirname, "../../apps/extension/.output/chrome-mv3-e2e");
 
 function assertExtensionBuilt() {
   if (!existsSync(resolve(EXTENSION_PATH, "manifest.json"))) {
     throw new Error(
       `Built extension not found at ${EXTENSION_PATH}. ` +
-        "Run `pnpm --filter @sitenote/extension build` or run the tests through `pnpm e2e` from the repository root.",
+        "Run `pnpm --filter @sitenote/extension build:e2e` or run the tests through `pnpm e2e` from the repository root.",
     );
   }
 }
