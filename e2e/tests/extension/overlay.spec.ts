@@ -1,6 +1,6 @@
 import { SITENOTE_ROOT_TAG } from "@sitenote/core";
 
-import { expect, test } from "../fixtures/extension";
+import { expect, test } from "../../fixtures/extension";
 
 const INSIDE_ORIGIN = "http://localhost:9";
 const OUTSIDE_ORIGIN = "http://outside.test";

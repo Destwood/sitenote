@@ -1,7 +1,9 @@
 import { chromium, test as base } from "@playwright/test";
-import type { BrowserContext } from "@playwright/test";
+import type { BrowserContext, Worker } from "@playwright/test";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+
+export const STABLE_EXTENSION_ID = "anefihllkbkenhjbjggfndgemgkfaeoa";
 
 const EXTENSION_PATH = resolve(import.meta.dirname, "../../apps/extension/.output/chrome-mv3");
 
@@ -14,7 +16,11 @@ function assertExtensionBuilt() {
   }
 }
 
-export const test = base.extend<{ context: BrowserContext }>({
+async function findServiceWorker(context: BrowserContext): Promise<Worker> {
+  return context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
+}
+
+export const test = base.extend<{ context: BrowserContext; extensionId: string }>({
   context: async ({ baseURL, headless }, use) => {
     assertExtensionBuilt();
     const context = await chromium.launchPersistentContext("", {
@@ -25,6 +31,10 @@ export const test = base.extend<{ context: BrowserContext }>({
     });
     await use(context);
     await context.close();
+  },
+  extensionId: async ({ context }, use) => {
+    const worker = await findServiceWorker(context);
+    await use(new URL(worker.url()).host);
   },
 });
 

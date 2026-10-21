@@ -41,6 +41,38 @@ supabase/      migrations, RLS policies, edge functions
 docs/plans/    design and implementation plan
 ```
 
+## Local database
+
+```
+pnpm db:start     # local Supabase (Docker); applies migrations and supabase/seed.sql
+pnpm db:env       # writes .env.local for web, extension and tests (gitignored)
+pnpm test:rls     # row level security tests against the running stack
+pnpm db:reset     # re-apply migrations and seed
+pnpm db:types     # regenerate packages/db/src/database-types after a migration
+pnpm db:lint      # supabase db lint
+pnpm db:stop
+```
+
+Seeded local users (`owner@`, `member@`, `guest@`, `outsider@sitenote.test`) sign in with the password `sitenote-dev-password`.
+
+## Web sign-in
+
+The web app signs in with a 6-digit e-mail code. Locally the e-mail lands in Mailpit at http://127.0.0.1:54324. Any address works; the seeded users above have a workspace. The "Continue with Google" button appears only when `NEXT_PUBLIC_AUTH_GOOGLE_ENABLED=true` and the Google provider is configured in Supabase.
+
+```
+pnpm db:start && pnpm db:env   # once per boot of the stack
+pnpm e2e                       # builds the extension and the web app, then runs Playwright
+```
+
+## Extension sign-in
+
+The popup signs in with the same 6-digit e-mail code, independently of the web app (each surface owns its own session). Build it after `pnpm db:env`, because WXT inlines `apps/extension/.env.local` at build time, then load `apps/extension/.output/chrome-mv3` unpacked. The extension id is stable (`anefihllkbkenhjbjggfndgemgkfaeoa`, from the manifest `key`), so `https://anefihllkbkenhjbjggfndgemgkfaeoa.chromiumapp.org/**` is already in the Supabase redirect allow-list. The Google button appears only with `WXT_AUTH_GOOGLE_ENABLED=true` and a configured provider.
+
+```
+pnpm db:start && pnpm db:env
+pnpm --filter @sitenote/extension build
+```
+
 ## Docs
 
 - [Design](docs/plans/2026-10-20-sitenote-design.md)
