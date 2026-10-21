@@ -230,7 +230,7 @@ describe("comments insert", () => {
         workspace_id: scenario.workspaceId,
         author_id: scenario.member.id,
         body: "many",
-        mentions: Array.from({ length: 51 }, () => scenario.owner.id),
+        mentions: Array.from({ length: 21 }, () => scenario.owner.id),
       }),
       CHECK_VIOLATION,
     );
