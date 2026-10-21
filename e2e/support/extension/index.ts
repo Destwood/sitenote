@@ -67,3 +67,31 @@ export async function stopServiceWorker(context: BrowserContext, page: Page): Pr
   }
   await stopped;
 }
+
+export async function tabIdOf(popup: Page, urlPrefix: string): Promise<number> {
+  const id = await evaluateIn(
+    popup,
+    `chrome.tabs.query({}).then((tabs) => tabs.find((tab) => tab.url !== undefined && tab.url.startsWith(${JSON.stringify(urlPrefix)}))?.id ?? null)`,
+  );
+  if (typeof id !== "number") {
+    throw new Error(`No tab found for ${urlPrefix}`);
+  }
+  return id;
+}
+
+export async function pointPopupAt(
+  popup: Page,
+  extensionId: string,
+  page: Page,
+  urlPrefix: string,
+): Promise<void> {
+  const tabId = await tabIdOf(popup, urlPrefix);
+  await popup.goto(`chrome-extension://${extensionId}/popup.html?tabId=${String(tabId)}`);
+  await expect(page.locator("body")).toBeVisible();
+}
+
+export async function enableSite(popup: Page, workspaceName: string): Promise<void> {
+  await expect(popup.getByTestId("site-state")).toHaveText("Not enabled");
+  await popup.getByRole("button", { name: "Enable on this site" }).click();
+  await expect(popup.getByTestId("site-state")).toHaveText(`Enabled in ${workspaceName}`);
+}

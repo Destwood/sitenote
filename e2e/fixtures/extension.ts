@@ -20,15 +20,22 @@ async function findServiceWorker(context: BrowserContext): Promise<Worker> {
   return context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
 }
 
+export async function launchExtensionContext(
+  headless: boolean,
+  baseURL: string | undefined,
+): Promise<BrowserContext> {
+  assertExtensionBuilt();
+  return chromium.launchPersistentContext("", {
+    channel: "chromium",
+    headless,
+    ...(baseURL === undefined ? {} : { baseURL }),
+    args: [`--disable-extensions-except=${EXTENSION_PATH}`, `--load-extension=${EXTENSION_PATH}`],
+  });
+}
+
 export const test = base.extend<{ context: BrowserContext; extensionId: string }>({
   context: async ({ baseURL, headless }, use) => {
-    assertExtensionBuilt();
-    const context = await chromium.launchPersistentContext("", {
-      channel: "chromium",
-      headless,
-      ...(baseURL === undefined ? {} : { baseURL }),
-      args: [`--disable-extensions-except=${EXTENSION_PATH}`, `--load-extension=${EXTENSION_PATH}`],
-    });
+    const context = await launchExtensionContext(headless, baseURL);
     await use(context);
     await context.close();
   },

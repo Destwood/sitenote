@@ -78,6 +78,12 @@ export default tseslint.config(
     },
   },
   {
+    files: ["e2e/fixtures/site/**/*.js"],
+    languageOptions: {
+      globals: globals.browser,
+    },
+  },
+  {
     files: DEFAULT_EXPORT_ALLOWED,
     rules: {
       "no-restricted-exports": "off",

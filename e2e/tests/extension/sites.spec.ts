@@ -3,7 +3,15 @@ import type { BrowserContext, Page } from "@playwright/test";
 import type { SitenoteClient } from "@sitenote/db";
 
 import { expect, test } from "../../fixtures/extension";
-import { evaluateIn, openPopup, signIn, stopServiceWorker } from "../../support/extension";
+import {
+  enableSite,
+  evaluateIn,
+  openPopup,
+  pointPopupAt,
+  signIn,
+  stopServiceWorker,
+  tabIdOf,
+} from "../../support/extension";
 import { signInSeededUser } from "../../support/seeded-user";
 
 const FIXTURE_ORIGIN = "http://127.0.0.1:4173";
@@ -37,28 +45,6 @@ function hostOf(page: Page) {
   return page.locator(SITENOTE_ROOT_TAG);
 }
 
-async function tabIdOf(popup: Page, urlPrefix: string): Promise<number> {
-  const id = await evaluateIn(
-    popup,
-    `chrome.tabs.query({}).then((tabs) => tabs.find((tab) => tab.url !== undefined && tab.url.startsWith(${JSON.stringify(urlPrefix)}))?.id ?? null)`,
-  );
-  if (typeof id !== "number") {
-    throw new Error(`No tab found for ${urlPrefix}`);
-  }
-  return id;
-}
-
-async function pointPopupAt(
-  popup: Page,
-  extensionId: string,
-  page: Page,
-  urlPrefix: string,
-): Promise<void> {
-  const tabId = await tabIdOf(popup, urlPrefix);
-  await popup.goto(`chrome-extension://${extensionId}/popup.html?tabId=${String(tabId)}`);
-  await expect(page.locator("body")).toBeVisible();
-}
-
 async function openFixtureAndPopup(
   context: BrowserContext,
   extensionId: string,
@@ -70,12 +56,6 @@ async function openFixtureAndPopup(
   await page.goto("/");
   await pointPopupAt(popup, extensionId, page, FIXTURE_ORIGIN);
   return { page, popup };
-}
-
-async function enableFixture(popup: Page): Promise<void> {
-  await expect(popup.getByTestId("site-state")).toHaveText("Not enabled");
-  await popup.getByRole("button", { name: "Enable on this site" }).click();
-  await expect(popup.getByTestId("site-state")).toHaveText(`Enabled in ${WORKSPACE_NAME}`);
 }
 
 async function registeredScriptIds(popup: Page): Promise<string[]> {
@@ -137,11 +117,11 @@ test("a signed-in owner enables Sitenote on the fixture site from the popup", as
   await expect(popup.getByLabel("Workspace")).toHaveValue(/.+/);
   await expect(hostOf(page)).toHaveCount(0);
 
-  await enableFixture(popup);
+  await enableSite(popup, WORKSPACE_NAME);
 
   const host = hostOf(page);
   await expect(host).toHaveCount(1);
-  await expect(host.getByTestId("sitenote-hello")).toBeVisible();
+  await expect(host.getByRole("button", { name: "Comments, 3 open" })).toBeVisible();
   await expect(host).toHaveAttribute("data-thread-count", String(SEEDED_THREAD_COUNT));
   await expect(host).toHaveAttribute("data-comment-count", String(SEEDED_COMMENT_COUNT));
   await expect(host).toHaveAttribute("data-comment-mode", "off");
@@ -154,7 +134,7 @@ test("enabling survives a reload because the content script is registered", asyn
   extensionId,
 }) => {
   const { page, popup } = await openFixtureAndPopup(context, extensionId, OWNER);
-  await enableFixture(popup);
+  await enableSite(popup, WORKSPACE_NAME);
   await expect(hostOf(page)).toHaveAttribute("data-thread-count", String(SEEDED_THREAD_COUNT));
 
   await page.reload();
@@ -170,7 +150,7 @@ test("injecting the content script a second time leaves a single overlay", async
   extensionId,
 }) => {
   const { page, popup } = await openFixtureAndPopup(context, extensionId, OWNER);
-  await enableFixture(popup);
+  await enableSite(popup, WORKSPACE_NAME);
   await expect(hostOf(page)).toHaveAttribute("data-live", "true");
   const tabId = await tabIdOf(popup, FIXTURE_ORIGIN);
 
@@ -199,7 +179,7 @@ test("the comment mode button reaches the content script and toggles the attribu
   extensionId,
 }) => {
   const { page, popup } = await openFixtureAndPopup(context, extensionId, OWNER);
-  await enableFixture(popup);
+  await enableSite(popup, WORKSPACE_NAME);
   const host = hostOf(page);
   await expect(host).toHaveAttribute("data-comment-mode", "off");
 
@@ -217,7 +197,7 @@ test("disabling removes the overlay, unregisters the script and survives a reloa
   extensionId,
 }) => {
   const { page, popup } = await openFixtureAndPopup(context, extensionId, OWNER);
-  await enableFixture(popup);
+  await enableSite(popup, WORKSPACE_NAME);
   await expect(hostOf(page)).toHaveCount(1);
 
   await popup.getByRole("button", { name: "Disable on this site" }).click();
@@ -250,7 +230,7 @@ test("an owner enabling a new origin registers the site in the workspace", async
   await page.goto(`${ROUTED_ORIGIN}/`);
   await pointPopupAt(popup, extensionId, page, ROUTED_ORIGIN);
 
-  await enableFixture(popup);
+  await enableSite(popup, WORKSPACE_NAME);
 
   await expect(hostOf(page)).toHaveAttribute("data-thread-count", "0");
   expect(await siteRows(owner, ROUTED_ORIGIN)).toBe(1);
@@ -279,7 +259,7 @@ test("a guest can enable a registered origin but not register a new one", async 
   const registered = await context.newPage();
   await registered.goto("/");
   await pointPopupAt(popup, extensionId, registered, FIXTURE_ORIGIN);
-  await enableFixture(popup);
+  await enableSite(popup, WORKSPACE_NAME);
   await expect(hostOf(registered)).toHaveAttribute(
     "data-thread-count",
     String(SEEDED_THREAD_COUNT),
@@ -313,7 +293,7 @@ test("a remote thread and a remote comment reach the page live", async ({
   extensionId,
 }) => {
   const { page, popup } = await openFixtureAndPopup(context, extensionId, OWNER);
-  await enableFixture(popup);
+  await enableSite(popup, WORKSPACE_NAME);
   const host = hostOf(page);
   await expect(host).toHaveAttribute("data-live", "true");
   const owner = await signInSeededUser(OWNER);
@@ -339,7 +319,7 @@ test("realtime keeps working after the service worker is stopped", async ({
   extensionId,
 }) => {
   const { page, popup } = await openFixtureAndPopup(context, extensionId, OWNER);
-  await enableFixture(popup);
+  await enableSite(popup, WORKSPACE_NAME);
   const host = hostOf(page);
   await expect(host).toHaveAttribute("data-live", "true");
   const owner = await signInSeededUser(OWNER);
