@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const AUTH_HEALTH_URL = "http://127.0.0.1:54321/auth/v1/health";
 const MAILPIT_INFO_URL = "http://127.0.0.1:54324/api/v1/info";
-const WEB_ENV_FILE = "apps/web/.env.local";
+const ENV_FILES = ["apps/web/.env.local", "apps/extension/.env.local"];
 const TIMEOUT_MS = 3000;
 
 async function isReachable(url: string): Promise<boolean> {
@@ -27,8 +27,10 @@ async function main(): Promise<void> {
       `Mailpit does not answer at ${MAILPIT_INFO_URL}. Run "pnpm db:start" (do not exclude the mailpit service).`,
     );
   }
-  if (!existsSync(resolve(ROOT, WEB_ENV_FILE))) {
-    problems.push(`${WEB_ENV_FILE} is missing. Run "pnpm db:env".`);
+  for (const file of ENV_FILES) {
+    if (!existsSync(resolve(ROOT, file))) {
+      problems.push(`${file} is missing. Run "pnpm db:env".`);
+    }
   }
   if (problems.length > 0) {
     process.stderr.write(

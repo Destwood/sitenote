@@ -17,6 +17,7 @@ export default defineConfig({
     {
       name: "chromium-extension",
       testDir: "tests/extension",
+      dependencies: ["web"],
       use: { baseURL: FIXTURE_ORIGIN },
     },
     {
