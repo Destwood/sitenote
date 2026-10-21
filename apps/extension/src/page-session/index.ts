@@ -56,7 +56,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       return;
     }
     const result = await deps.send({ type: "threads.list", siteId: site.siteId, pageUrl });
-    if (stopped) {
+    if (stopped || deps.readPageUrl() !== pageUrl) {
       return;
     }
     publish(

@@ -3,7 +3,11 @@ import type { UserManifest } from "wxt";
 import { EXTENSION_PUBLIC_KEY } from "../extension-key";
 
 export const TOGGLE_COMMENT_MODE_COMMAND = "toggle-comment-mode";
-export const E2E_HOST_PERMISSIONS: readonly string[] = ["http://127.0.0.1/*", "http://localhost/*"];
+export const E2E_HOST_PERMISSIONS: readonly string[] = [
+  "http://127.0.0.1/*",
+  "http://localhost/*",
+  "https://example.com/*",
+];
 
 export interface ManifestOptions {
   e2e: boolean;

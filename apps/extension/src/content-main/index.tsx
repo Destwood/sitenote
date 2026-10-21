@@ -1,5 +1,4 @@
-import { SITENOTE_ROOT_TAG, parsePageUrl } from "@sitenote/core";
-import { HelloOverlay } from "@sitenote/ui";
+import { SITENOTE_ROOT_TAG } from "@sitenote/core";
 import { createRoot, type Root } from "react-dom/client";
 import { browser } from "wxt/browser";
 import type { ContentScriptContext } from "wxt/utils/content-script-context";
@@ -9,34 +8,49 @@ import {
 } from "wxt/utils/content-script-ui/shadow-root";
 
 import { createToggleListener } from "../comment-mode";
+import { ContentApp } from "../content-app";
+import { createContentController, type ContentState } from "../content-controller";
+import { isolateEvents } from "../event-isolation";
 import { sendMessage } from "../message-client";
 import { failure, success } from "../messages";
 import { openPageConnection } from "../page-connection";
-import { createPageSession, type PageSessionState } from "../page-session";
 
 export async function startContentScript(ctx: ContentScriptContext, css: string): Promise<void> {
-  let state: PageSessionState = {
-    status: "starting",
-    site: null,
-    threads: [],
-    live: false,
-    error: null,
-  };
-  let commentMode = false;
   let ui: ShadowRootContentScriptUi<Root> | null = null;
   let mounting = false;
 
-  function syncHost(): void {
+  function isOwn(node: Node | null): boolean {
+    const host = ui?.shadowHost;
+    return host !== undefined && node !== null && (node === host || host.contains(node));
+  }
+
+  const controller = createContentController({
+    win: window,
+    doc: document,
+    origin: location.origin,
+    isOwn,
+    send: sendMessage,
+    openConnection: (options) =>
+      openPageConnection({ ...options, connect: (name) => browser.runtime.connect({ name }) }),
+  });
+
+  function syncHost(state: ContentState): void {
     if (ui === null) {
       return;
     }
-    ui.shadowHost.setAttribute("data-thread-count", String(state.threads.length));
-    ui.shadowHost.setAttribute(
-      "data-comment-count",
-      String(state.threads.reduce((total, thread) => total + thread.comments.length, 0)),
-    );
-    ui.shadowHost.setAttribute("data-live", String(state.live));
-    ui.shadowHost.setAttribute("data-comment-mode", commentMode ? "on" : "off");
+    const attributes = {
+      "data-thread-count": String(state.threads.length),
+      "data-comment-count": String(
+        state.threads.reduce((total, thread) => total + thread.comments.length, 0),
+      ),
+      "data-live": String(state.live),
+      "data-comment-mode": state.commentMode ? "on" : "off",
+    };
+    for (const [name, value] of Object.entries(attributes)) {
+      if (ui.shadowHost.getAttribute(name) !== value) {
+        ui.shadowHost.setAttribute(name, value);
+      }
+    }
   }
 
   async function mountUi(): Promise<void> {
@@ -51,8 +65,9 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
         anchor: "body",
         css,
         onMount(container) {
+          isolateEvents(container);
           const root = createRoot(container);
-          root.render(<HelloOverlay />);
+          root.render(<ContentApp controller={controller} />);
           return root;
         },
         onRemove(root) {
@@ -61,7 +76,7 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
       });
       created.mount();
       ui = created;
-      syncHost();
+      syncHost(controller.store.getState());
     } finally {
       mounting = false;
     }
@@ -70,45 +85,34 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
   function unmountUi(): void {
     ui?.remove();
     ui = null;
-    commentMode = false;
   }
 
-  const session = createPageSession({
-    origin: location.origin,
-    readPageUrl: () => parsePageUrl(location.href)?.page ?? null,
-    send: sendMessage,
-    openConnection: (options) =>
-      openPageConnection({ ...options, connect: (name) => browser.runtime.connect({ name }) }),
-    onState: (next) => {
-      state = next;
-      if (next.status === "ready") {
-        void mountUi();
-      } else if (next.status === "disabled") {
-        unmountUi();
-      }
-      syncHost();
-    },
+  controller.store.subscribe(() => {
+    const state = controller.store.getState();
+    if (state.status === "ready") {
+      void mountUi();
+    } else if (state.status === "disabled") {
+      unmountUi();
+    }
+    syncHost(state);
   });
 
   const toggleListener = createToggleListener({
     extensionId: browser.runtime.id,
     toggle: () => {
-      if (state.status !== "ready") {
-        return failure(state.status === "signedOut" ? "unauthorized" : "page_unavailable");
+      const { status } = controller.store.getState();
+      if (status !== "ready") {
+        return failure(status === "signedOut" ? "unauthorized" : "page_unavailable");
       }
-      commentMode = !commentMode;
-      syncHost();
-      return success({ active: commentMode });
+      return success({ active: controller.toggleCommentMode() });
     },
   });
   browser.runtime.onMessage.addListener(toggleListener);
-  ctx.addEventListener(window, "wxt:locationchange", () => {
-    session.navigate();
-  });
   ctx.onInvalidated(() => {
     browser.runtime.onMessage.removeListener(toggleListener);
-    session.stop();
+    controller.stop();
+    unmountUi();
   });
 
-  await session.start();
+  await controller.start();
 }

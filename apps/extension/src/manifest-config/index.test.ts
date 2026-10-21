@@ -16,12 +16,17 @@ describe("createManifest", () => {
 
     expect(serialized).not.toContain("127.0.0.1");
     expect(serialized).not.toContain("localhost");
+    expect(serialized).not.toContain("example.com");
   });
 
-  it("adds only the fixture hosts as host permissions in the e2e build", () => {
+  it("adds only the fixture hosts and example.com as host permissions in the e2e build", () => {
     const manifest = createManifest({ e2e: true });
 
-    expect(manifest.host_permissions).toEqual(["http://127.0.0.1/*", "http://localhost/*"]);
+    expect(manifest.host_permissions).toEqual([
+      "http://127.0.0.1/*",
+      "http://localhost/*",
+      "https://example.com/*",
+    ]);
     expect(manifest.host_permissions).toEqual([...E2E_HOST_PERMISSIONS]);
     expect(manifest.optional_host_permissions).toEqual(["http://*/*", "https://*/*"]);
   });

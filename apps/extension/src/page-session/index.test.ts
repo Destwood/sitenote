@@ -284,6 +284,31 @@ describe("navigate", () => {
     });
   });
 
+  it("drops a list that was requested for the page the user has already left", async () => {
+    const slow = deferred<MessageResult<ThreadRecord[]>>();
+    const { session, last, setPage, requests } = setup({
+      lists: [() => slow.promise, () => Promise.resolve(success([THREAD_B]))],
+    });
+    const started = session.start();
+    await vi.waitFor(() => {
+      expect(requests).toHaveLength(2);
+    });
+
+    setPage(OTHER_PAGE);
+    session.navigate();
+    slow.resolve(success([THREAD_A]));
+    await started;
+    await vi.waitFor(() => {
+      expect(last()?.threads).toEqual([THREAD_B]);
+    });
+
+    expect(requests.at(-1)).toEqual({
+      type: "threads.list",
+      siteId: SITE.siteId,
+      pageUrl: OTHER_PAGE,
+    });
+  });
+
   it("does nothing useful before the site is known", async () => {
     const { session, requests } = setup({ site: success(null) });
     await session.start();

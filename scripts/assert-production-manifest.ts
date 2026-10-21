@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFEST = resolve(ROOT, "apps/extension/.output/chrome-mv3/manifest.json");
 const OPTIONAL_HOSTS = ["http://*/*", "https://*/*"];
-const FORBIDDEN_TEXT = ["127.0.0.1", "localhost", "<all_urls>"];
+const FORBIDDEN_TEXT = ["127.0.0.1", "localhost", "example.com", "<all_urls>"];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
