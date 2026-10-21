@@ -63,7 +63,7 @@ export const ERROR_MESSAGES: Readonly<Record<ErrorCode, string>> = {
 
 export const OTP_LENGTH = 6;
 export const COMMENT_MAX_LENGTH = 10000;
-export const MENTIONS_MAX = 50;
+export const MENTIONS_MAX = 20;
 export const PAGE_PORT_NAME = "sitenote:page";
 const MAX_EMAIL_LENGTH = 254;
 

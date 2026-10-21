@@ -230,7 +230,7 @@ describe("dataRequestSchema", () => {
     ["a body over 10000 characters", { ...CREATE, body: "a".repeat(10001) }],
     ["an invalid anchor", { ...CREATE, anchor: { kind: "element" } }],
     ["a context that is not json", { ...CREATE, context: { value: undefined } }],
-    ["too many mentions", { ...CREATE, mentions: Array.from({ length: 51 }, () => SITE_ID) }],
+    ["too many mentions", { ...CREATE, mentions: Array.from({ length: 21 }, () => SITE_ID) }],
     ["a mention that is not a uuid", { ...CREATE, mentions: ["everyone"] }],
     ["an unknown status", { type: "threads.setStatus", threadId: THREAD_ID, status: "done" }],
     ["a negative tab id", { ...ENABLE, tabId: -1 }],
