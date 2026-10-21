@@ -22,7 +22,9 @@
     "typecheck": {
       "dependsOn": ["//#typecheck:root"]
     },
-    "test": {},
+    "test": {
+      "passThroughEnv": ["CI", "PLAYWRIGHT_*"]
+    },
     "e2e": {
       "dependsOn": ["^build"],
       "passThroughEnv": ["CI", "PLAYWRIGHT_*"],
