@@ -64,6 +64,15 @@ pnpm db:start && pnpm db:env   # once per boot of the stack
 pnpm e2e                       # builds the extension and the web app, then runs Playwright
 ```
 
+## Extension sign-in
+
+The popup signs in with the same 6-digit e-mail code, independently of the web app (each surface owns its own session). Build it after `pnpm db:env`, because WXT inlines `apps/extension/.env.local` at build time, then load `apps/extension/.output/chrome-mv3` unpacked. The extension id is stable (`anefihllkbkenhjbjggfndgemgkfaeoa`, from the manifest `key`), so `https://anefihllkbkenhjbjggfndgemgkfaeoa.chromiumapp.org/**` is already in the Supabase redirect allow-list. The Google button appears only with `WXT_AUTH_GOOGLE_ENABLED=true` and a configured provider.
+
+```
+pnpm db:start && pnpm db:env
+pnpm --filter @sitenote/extension build
+```
+
 ## Docs
 
 - [Design](docs/plans/2026-10-20-sitenote-design.md)
