@@ -1,11 +1,11 @@
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { CommentItem } from "../comment-item";
-import { Composer } from "../composer";
+import { Composer, type ComposerSubmission } from "../composer";
 import { ICON_BUTTON, PANEL_SURFACE, SECONDARY_BUTTON } from "../control-classes";
 import { useNow } from "../now";
 import { VIEWPORT_MARGIN, placePanel, type AnchorRect } from "../placement";
-import type { ThreadView } from "../types";
+import type { PersonView, ThreadView } from "../types";
 import { useViewport } from "../viewport";
 import { Z_INDEX } from "../z-index";
 
@@ -16,7 +16,8 @@ export interface ThreadPanelProps {
   anchorRect: AnchorRect;
   canChangeStatus: boolean;
   error?: string | undefined;
-  onSubmit: (body: string) => Promise<void>;
+  mentionCandidates?: readonly PersonView[] | undefined;
+  onSubmit: (submission: ComposerSubmission) => Promise<void>;
   onEditComment: (commentId: string, body: string) => Promise<void>;
   onDeleteComment: (commentId: string) => Promise<void>;
   onToggleStatus: () => void;
@@ -36,6 +37,7 @@ export function ThreadPanel({
   anchorRect,
   canChangeStatus,
   error,
+  mentionCandidates,
   onSubmit,
   onEditComment,
   onDeleteComment,
@@ -139,6 +141,7 @@ export function ThreadPanel({
           placeholder={isNew ? "Add a comment" : "Reply to this thread"}
           autoFocus
           error={error}
+          mentionCandidates={mentionCandidates}
           onSubmit={onSubmit}
           onCancel={isNew ? onClose : undefined}
         />

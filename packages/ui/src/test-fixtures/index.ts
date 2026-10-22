@@ -12,6 +12,7 @@ export function makeComment(overrides: Partial<CommentView> = {}): CommentView {
     editedAt: null,
     deleted: false,
     canEdit: false,
+    mentions: [],
     ...overrides,
   };
 }

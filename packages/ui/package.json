@@ -11,6 +11,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@sitenote/core": "workspace:*"
+  },
   "peerDependencies": {
     "react": ">=19.0.0 <20",
     "react-dom": ">=19.0.0 <20"

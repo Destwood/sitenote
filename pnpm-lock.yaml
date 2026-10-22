@@ -253,6 +253,10 @@ importers:
   packages/tsconfig: {}
 
   packages/ui:
+    dependencies:
+      '@sitenote/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@sitenote/tsconfig':
         specifier: workspace:*

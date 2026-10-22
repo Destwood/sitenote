@@ -1,11 +1,12 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { BOB, makeComment, makeThread } from "../test-fixtures";
 import type { ThreadView } from "../types";
 import { Z_INDEX } from "../z-index";
-import { EMPTY_MESSAGE, ORPHAN_NOTE, Sidebar } from ".";
+import { EMPTY_MESSAGE, ORPHAN_NOTE, Sidebar, type SidebarProps } from ".";
 
 function threads(): ThreadView[] {
   return [
@@ -32,18 +33,44 @@ function threads(): ThreadView[] {
   ];
 }
 
-function renderSidebar(list: ThreadView[] = threads(), activeThreadId: string | null = null) {
+interface HarnessProps extends Omit<SidebarProps, "showResolved" | "onShowResolvedChange"> {
+  initialShowResolved: boolean;
+  onShowResolvedChange: (value: boolean) => void;
+}
+
+function Harness({ initialShowResolved, onShowResolvedChange, ...props }: HarnessProps) {
+  const [showResolved, setShowResolved] = useState(initialShowResolved);
+  return (
+    <Sidebar
+      {...props}
+      showResolved={showResolved}
+      onShowResolvedChange={(value) => {
+        setShowResolved(value);
+        onShowResolvedChange(value);
+      }}
+    />
+  );
+}
+
+function renderSidebar(
+  list: ThreadView[] = threads(),
+  activeThreadId: string | null = null,
+  initialShowResolved = false,
+) {
   const onSelectThread = vi.fn();
   const onClose = vi.fn();
+  const onShowResolvedChange = vi.fn();
   render(
-    <Sidebar
+    <Harness
       threads={list}
       activeThreadId={activeThreadId}
+      initialShowResolved={initialShowResolved}
+      onShowResolvedChange={onShowResolvedChange}
       onSelectThread={onSelectThread}
       onClose={onClose}
     />,
   );
-  return { onSelectThread, onClose };
+  return { onSelectThread, onClose, onShowResolvedChange };
 }
 
 describe("Sidebar", () => {
@@ -85,11 +112,22 @@ describe("Sidebar", () => {
     ).toBe("false");
   });
 
-  it("reveals and hides the resolved threads", async () => {
+  it("shows the resolved threads from the start when the toggle is on", () => {
+    renderSidebar(threads(), null, true);
+
+    expect(screen.getByText(/Typo fixed/)).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Hide resolved (1)" }).getAttribute("aria-expanded"),
+    ).toBe("true");
+  });
+
+  it("reveals and hides the resolved threads and reports the choice", async () => {
     const user = userEvent.setup();
-    renderSidebar();
+    const { onShowResolvedChange } = renderSidebar();
 
     await user.click(screen.getByRole("button", { name: "Show resolved (1)" }));
+
+    expect(onShowResolvedChange).toHaveBeenLastCalledWith(true);
 
     const toggle = screen.getByRole("button", { name: "Hide resolved (1)" });
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
@@ -97,6 +135,7 @@ describe("Sidebar", () => {
 
     await user.click(toggle);
 
+    expect(onShowResolvedChange).toHaveBeenLastCalledWith(false);
     expect(screen.queryByText("Typo fixed")).toBeNull();
   });
 

@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent } from "react";
+import { useId, type KeyboardEvent } from "react";
 
 import { FOCUS_RING, ICON_BUTTON, TEXT_BUTTON } from "../control-classes";
 import { useNow } from "../now";
@@ -14,6 +14,8 @@ export const EMPTY_MESSAGE = "No comments on this page yet.";
 export interface SidebarProps {
   threads: ThreadView[];
   activeThreadId?: string | null;
+  showResolved: boolean;
+  onShowResolvedChange: (value: boolean) => void;
   onSelectThread: (threadId: string) => void;
   onClose: () => void;
 }
@@ -70,8 +72,14 @@ function ThreadListItem({ thread, active, now, showAnchor, onSelect }: ThreadLis
   );
 }
 
-export function Sidebar({ threads, activeThreadId = null, onSelectThread, onClose }: SidebarProps) {
-  const [showResolved, setShowResolved] = useState(false);
+export function Sidebar({
+  threads,
+  activeThreadId = null,
+  showResolved,
+  onShowResolvedChange,
+  onSelectThread,
+  onClose,
+}: SidebarProps) {
   const now = useNow();
   const titleId = useId();
   const resolvedListId = useId();
@@ -148,7 +156,7 @@ export function Sidebar({ threads, activeThreadId = null, onSelectThread, onClos
                   aria-expanded={showResolved}
                   aria-controls={resolvedListId}
                   onClick={() => {
-                    setShowResolved((value) => !value);
+                    onShowResolvedChange(!showResolved);
                   }}
                   className={`px-1 ${TEXT_BUTTON}`}
                 >
