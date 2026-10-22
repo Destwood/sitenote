@@ -195,7 +195,7 @@ function SiteList({ origins, connected }: { origins: readonly string[]; connecte
       </h2>
       {connected ? (
         <p className="text-neutral-700">
-          Open a site below, click the Sitenote icon on that site and choose Enable.
+          Open a site below. Click the Sitenote icon on that site and choose Enable.
         </p>
       ) : null}
       <ul className="flex flex-col divide-y divide-neutral-200 rounded-md border border-neutral-200">
