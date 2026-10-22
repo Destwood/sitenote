@@ -4,7 +4,11 @@ import type { StorageAreaLike } from "../session-storage";
 
 const STORAGE_KEY = "sitenote.sites";
 
-const entrySchema = z.object({ siteId: z.guid(), workspaceId: z.guid() });
+const entrySchema = z.object({
+  siteId: z.guid(),
+  workspaceId: z.guid(),
+  captureErrors: z._default(z.boolean(), true),
+});
 const mapSchema = z.record(z.string(), entrySchema);
 
 export type EnabledEntry = z.infer<typeof entrySchema>;

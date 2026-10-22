@@ -73,6 +73,8 @@ export function buildThreadViews(
       comments: thread.comments.map((comment) => toCommentView(comment, userId, names)),
       orphaned: resolutions.get(thread.id)?.status !== "resolved",
       anchorLabel: anchorLabel(thread.anchor),
+      context: thread.context,
+      hasScreenshot: thread.hasScreenshot,
     }));
 }
 

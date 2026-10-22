@@ -44,6 +44,7 @@ const SITE: SiteInfo = {
   workspaceName: "Northwind",
   role: "owner",
   userId: "00000000-0000-4000-8000-000000000001",
+  captureErrors: true,
 };
 
 function route(handlers: Record<string, () => unknown>) {
@@ -267,6 +268,67 @@ describe("SitePanel when the site is enabled", () => {
     expect((await screen.findByRole("alert")).textContent).toBe(
       "Sitenote is not available on this page.",
     );
+  });
+
+  it("shows the console error switch as on by default and as off when the site opted out", async () => {
+    route({ "sites.forOrigin": () => success({ ...SITE, captureErrors: false }) });
+    const { unmount } = render(<SitePanel webUrl="https://web.test" />);
+    expect(
+      (await screen.findByRole<HTMLInputElement>("checkbox", { name: "Capture console errors" }))
+        .checked,
+    ).toBe(false);
+    unmount();
+
+    enabled();
+    render(<SitePanel webUrl="https://web.test" />);
+    expect(
+      (await screen.findByRole<HTMLInputElement>("checkbox", { name: "Capture console errors" }))
+        .checked,
+    ).toBe(true);
+  });
+
+  it("switches console error capture off for the tab and reloads the state", async () => {
+    const user = userEvent.setup();
+    let captureErrors = true;
+    route({
+      "sites.forOrigin": () => success({ ...SITE, captureErrors }),
+      "sites.setErrorCapture": () => {
+        captureErrors = false;
+        return success(null);
+      },
+    });
+    render(<SitePanel webUrl="https://web.test" />);
+
+    await user.click(await screen.findByRole("checkbox", { name: "Capture console errors" }));
+
+    await vi.waitFor(() => {
+      expect(
+        screen.getByRole<HTMLInputElement>("checkbox", { name: "Capture console errors" }).checked,
+      ).toBe(false);
+    });
+    expect(mocks.sendMessage).toHaveBeenCalledWith({
+      type: "sites.setErrorCapture",
+      tabId: 7,
+      origin: ORIGIN,
+      enabled: false,
+    });
+    expect(screen.getByRole("status").textContent).toBe("Console errors will not be captured.");
+  });
+
+  it("shows the error and keeps the switch when changing it fails", async () => {
+    const user = userEvent.setup();
+    route({
+      "sites.forOrigin": () => success(SITE),
+      "sites.setErrorCapture": () => failure("unknown"),
+    });
+    render(<SitePanel webUrl="https://web.test" />);
+
+    await user.click(await screen.findByRole("checkbox", { name: "Capture console errors" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Something went wrong. Try again.");
+    expect(
+      screen.getByRole<HTMLInputElement>("checkbox", { name: "Capture console errors" }).checked,
+    ).toBe(true);
   });
 
   it("disables the site and goes back to the picker", async () => {

@@ -11,6 +11,7 @@ const SITE: SiteInfo = {
   workspaceName: "Northwind",
   role: "member",
   userId: "00000000-0000-4000-8000-000000000002",
+  captureErrors: true,
 };
 const ORIGIN = "https://example.test";
 const PAGE = "https://example.test/pricing";
@@ -25,6 +26,8 @@ function thread(id: string): ThreadRecord {
     anchor: null,
     author: { id: "u", displayName: "Ann", avatarUrl: null },
     createdAt: "2026-10-21T10:00:00.000Z",
+    context: null,
+    hasScreenshot: false,
     comments: [],
   };
 }

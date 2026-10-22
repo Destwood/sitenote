@@ -1,8 +1,11 @@
+import type { ThreadContext } from "@sitenote/core";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AuthService } from "../auth-service";
 import type { DataService } from "../data-service";
 import type { NotificationCenter } from "../notification-center";
+import type { ResolvedPreference } from "../resolved-preference";
+import type { ScreenshotService } from "../screenshot-service";
 import { failure, success, type AuthState } from "../messages";
 import type { SiteEnablement } from "../site-enablement";
 import { createMessageRouter, senderOriginOf, type RouterSender } from ".";
@@ -28,7 +31,24 @@ const POPUP: RouterSender = {
   url: `chrome-extension://${EXTENSION_ID}/popup.html`,
 };
 const POPUP_TAB: RouterSender = { ...POPUP, tab: { id: 9 } };
-const CONTENT: RouterSender = { id: EXTENSION_ID, url: `${PAGE_URL}?x=1`, tab: { id: 4 } };
+const CONTENT: RouterSender = {
+  id: EXTENSION_ID,
+  url: `${PAGE_URL}?x=1`,
+  tab: { id: 4, windowId: 2 },
+};
+const CAPTURE_ID = "60000000-0000-4000-8000-000000000001";
+const CONTEXT: ThreadContext = {
+  viewport: { width: 1440, height: 900 },
+  devicePixelRatio: 2,
+  pageTitle: "Pricing",
+  url: PAGE_URL,
+  browser: { name: "Chrome", version: "130" },
+  os: { name: "Windows", version: "11" },
+  userAgent: "ua",
+  consoleErrors: [],
+  capturedAt: "2026-10-22T09:30:00.000Z",
+};
+const RECT = { x: 10, y: 20, width: 100, height: 50 };
 
 function createFakes() {
   const service: AuthService = {
@@ -44,6 +64,7 @@ function createFakes() {
     forOrigin: vi.fn(() => Promise.resolve(success(null))),
     listThreads: vi.fn(() => Promise.resolve(success([]))),
     createThread: vi.fn(),
+    screenshotUrl: vi.fn(() => Promise.resolve(success(null))),
     setThreadStatus: vi.fn(),
     createComment: vi.fn(),
     updateComment: vi.fn(),
@@ -61,14 +82,24 @@ function createFakes() {
   const enablement: SiteEnablement = {
     enable: vi.fn(() => Promise.resolve(success(null))),
     disable: vi.fn(() => Promise.resolve(success(null))),
+    setErrorCapture: vi.fn(() => Promise.resolve(success(null))),
     reconcile: vi.fn(),
+  };
+  const screenshots: ScreenshotService = {
+    capture: vi.fn(() =>
+      Promise.resolve(success({ captureId: CAPTURE_ID, width: 10, height: 20 })),
+    ),
+  };
+  const preferences = {
+    load: vi.fn<ResolvedPreference["load"]>(() => Promise.resolve(true)),
+    save: vi.fn<ResolvedPreference["save"]>(() => Promise.resolve()),
   };
   const notifications: Pick<NotificationCenter, "list" | "markRead" | "markAllRead"> = {
     list: vi.fn(() => Promise.resolve(success({ items: [], unread: 0 }))),
     markRead: vi.fn(() => Promise.resolve(success(null))),
     markAllRead: vi.fn(() => Promise.resolve(success(null))),
   };
-  return { service, data, enablement, notifications };
+  return { service, data, enablement, notifications, screenshots, preferences };
 }
 
 function setup(options: { enabled?: boolean; onWake?: () => Promise<void> } = {}) {
@@ -78,7 +109,7 @@ function setup(options: { enabled?: boolean; onWake?: () => Promise<void> } = {}
     Promise.resolve(
       options.enabled === false || origin !== ORIGIN
         ? null
-        : { siteId: SITE_ID, workspaceId: WORKSPACE_ID },
+        : { siteId: SITE_ID, workspaceId: WORKSPACE_ID, captureErrors: true },
     ),
   );
   const route = createMessageRouter({
@@ -213,6 +244,146 @@ describe("createMessageRouter extension page requests", () => {
   });
 });
 
+describe("createMessageRouter screenshots", () => {
+  const CAPTURE = { type: "screenshot.capture", rect: RECT, devicePixelRatio: 2 };
+
+  it("captures for a content script of an enabled origin with its tab, window and origin", async () => {
+    const { route, screenshots } = setup();
+
+    expect(await route(CAPTURE, CONTENT)).toEqual(
+      success({ captureId: CAPTURE_ID, width: 10, height: 20 }),
+    );
+
+    expect(screenshots.capture).toHaveBeenCalledExactlyOnceWith(
+      { tabId: 4, windowId: 2, origin: ORIGIN },
+      { rect: RECT, devicePixelRatio: 2 },
+    );
+  });
+
+  it("refuses a capture from an origin that is not enabled, from a popup and without a window", async () => {
+    const disabled = setup({ enabled: false });
+    expect(await disabled.route(CAPTURE, CONTENT)).toEqual(failure("forbidden"));
+
+    const { route, screenshots } = setup();
+    expect(await route(CAPTURE, POPUP)).toEqual(failure("forbidden_sender"));
+    expect(await route(CAPTURE, { id: EXTENSION_ID, url: PAGE_URL, tab: { id: 4 } })).toEqual(
+      failure("forbidden_sender"),
+    );
+    expect(screenshots.capture).not.toHaveBeenCalled();
+    expect(disabled.screenshots.capture).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a missing rect", { type: "screenshot.capture", devicePixelRatio: 2 }],
+    ["a negative size", { ...CAPTURE, rect: { ...RECT, width: -1 } }],
+    ["a non-finite position", { ...CAPTURE, rect: { ...RECT, x: Number.POSITIVE_INFINITY } }],
+    ["a zero ratio", { ...CAPTURE, devicePixelRatio: 0 }],
+    ["a huge ratio", { ...CAPTURE, devicePixelRatio: 100 }],
+  ])("rejects %s", async (_name, message) => {
+    const { route, screenshots } = setup();
+
+    expect(await route(message, CONTENT)).toEqual(failure("invalid_request"));
+    expect(screenshots.capture).not.toHaveBeenCalled();
+  });
+
+  it("serves the signed url of a thread to a content script only", async () => {
+    const { route, data } = setup();
+    const request = { type: "threads.screenshotUrl", threadId: THREAD_ID };
+
+    await route(request, CONTENT);
+    expect(await route(request, POPUP)).toEqual(failure("forbidden_sender"));
+
+    expect(data.screenshotUrl).toHaveBeenCalledExactlyOnceWith(request);
+  });
+});
+
+describe("createMessageRouter preferences", () => {
+  it("reads and writes the choice of the enabled site for a content script", async () => {
+    const { route, preferences } = setup();
+
+    expect(await route({ type: "preferences.get", siteId: SITE_ID }, CONTENT)).toEqual(
+      success({ showResolved: true }),
+    );
+    expect(
+      await route({ type: "preferences.set", siteId: SITE_ID, showResolved: false }, CONTENT),
+    ).toEqual(success(null));
+
+    expect(preferences.load).toHaveBeenCalledWith(SITE_ID);
+    expect(preferences.save).toHaveBeenCalledWith(SITE_ID, false);
+  });
+
+  it("refuses the choice of another site, of a disabled origin and from a popup", async () => {
+    const other = "20000000-0000-4000-8000-0000000000ff";
+    const { route, preferences } = setup();
+    expect(await route({ type: "preferences.get", siteId: other }, CONTENT)).toEqual(
+      failure("forbidden"),
+    );
+    expect(
+      await route({ type: "preferences.set", siteId: other, showResolved: true }, CONTENT),
+    ).toEqual(failure("forbidden"));
+    expect(await route({ type: "preferences.get", siteId: SITE_ID }, POPUP)).toEqual(
+      failure("forbidden_sender"),
+    );
+    const disabled = setup({ enabled: false });
+    expect(await disabled.route({ type: "preferences.get", siteId: SITE_ID }, CONTENT)).toEqual(
+      failure("forbidden"),
+    );
+    expect(preferences.load).not.toHaveBeenCalled();
+    expect(preferences.save).not.toHaveBeenCalled();
+  });
+
+  it("answers unknown when the choice cannot be stored", async () => {
+    const { route, preferences } = setup();
+    preferences.save.mockRejectedValueOnce(new Error("quota"));
+
+    expect(
+      await route({ type: "preferences.set", siteId: SITE_ID, showResolved: true }, CONTENT),
+    ).toEqual(failure("unknown"));
+  });
+});
+
+describe("createMessageRouter error capture and test messages", () => {
+  it("lets a popup switch error capture for an origin", async () => {
+    const { route, enablement } = setup();
+    const message = { type: "sites.setErrorCapture", tabId: 7, origin: ORIGIN, enabled: false };
+
+    expect(await route(message, POPUP)).toEqual(success(null));
+
+    expect(enablement.setErrorCapture).toHaveBeenCalledExactlyOnceWith(message);
+  });
+
+  it("hands test messages from an extension page to the test hook only", async () => {
+    const handleTestMessage = vi.fn((message: unknown) =>
+      typeof message === "object" && message !== null && "type" in message
+        ? message.type === "__test.failNextUpload"
+        : false,
+    );
+    const fakes = createFakes();
+    const route = createMessageRouter({
+      extensionId: EXTENSION_ID,
+      ...fakes,
+      getEnabledSite: () => Promise.resolve(null),
+      onWake: () => Promise.resolve(),
+      handleTestMessage,
+    });
+
+    expect(await route({ type: "__test.failNextUpload" }, POPUP)).toEqual(success(null));
+    expect(await route({ type: "__test.failNextUpload" }, CONTENT)).toEqual(
+      failure("invalid_request"),
+    );
+    expect(await route({ type: "__test.other" }, POPUP)).toEqual(failure("invalid_request"));
+    expect(handleTestMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores test messages when no hook is installed", async () => {
+    const { route } = setup();
+
+    expect(await route({ type: "__test.failNextUpload" }, POPUP)).toEqual(
+      failure("invalid_request"),
+    );
+  });
+});
+
 describe("createMessageRouter content script requests", () => {
   const LIST = { type: "threads.list", siteId: SITE_ID, pageUrl: PAGE_URL };
 
@@ -225,6 +396,10 @@ describe("createMessageRouter content script requests", () => {
     ["notifications.markAllRead", { type: "notifications.markAllRead" }],
     ["sites.enable", { type: "sites.enable", tabId: 4, origin: ORIGIN, workspaceId: WORKSPACE_ID }],
     ["sites.disable", { type: "sites.disable", origin: ORIGIN }],
+    [
+      "sites.setErrorCapture",
+      { type: "sites.setErrorCapture", tabId: 4, origin: ORIGIN, enabled: false },
+    ],
   ])("refuses %s from a content script", async (_name, message) => {
     const { route, service, data, enablement, notifications } = setup();
 
@@ -237,6 +412,7 @@ describe("createMessageRouter content script requests", () => {
     expect(notifications.markAllRead).not.toHaveBeenCalled();
     expect(enablement.enable).not.toHaveBeenCalled();
     expect(enablement.disable).not.toHaveBeenCalled();
+    expect(enablement.setErrorCapture).not.toHaveBeenCalled();
   });
 
   it("serves the members of the enabled workspace only", async () => {
@@ -293,7 +469,8 @@ describe("createMessageRouter content script requests", () => {
         siteId: SITE_ID,
         pageUrl: PAGE_URL,
         anchor: ANCHOR,
-        context: { width: 1 },
+        context: CONTEXT,
+        captureId: CAPTURE_ID,
         body: "  Looks wrong ",
         mentions: [],
       },
@@ -309,7 +486,7 @@ describe("createMessageRouter content script requests", () => {
 
     expect(data.listThreads).toHaveBeenCalledWith(LIST);
     expect(data.createThread).toHaveBeenCalledWith(
-      expect.objectContaining({ body: "Looks wrong", siteId: SITE_ID }),
+      expect.objectContaining({ body: "Looks wrong", siteId: SITE_ID, captureId: CAPTURE_ID }),
     );
     expect(data.setThreadStatus).toHaveBeenCalledWith(
       expect.objectContaining({ threadId: THREAD_ID, status: "resolved" }),

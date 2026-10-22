@@ -1,4 +1,4 @@
-import type { MentionCandidate } from "@sitenote/core";
+import type { MentionCandidate, ThreadContext } from "@sitenote/core";
 
 export interface PersonView {
   id: string;
@@ -28,4 +28,9 @@ export interface ThreadView {
   comments: CommentView[];
   orphaned: boolean;
   anchorLabel: string;
+  context: ThreadContext | null;
+  hasScreenshot: boolean;
 }
+
+export type ScreenshotState =
+  { status: "loading" } | { status: "ready"; url: string } | { status: "unavailable" };

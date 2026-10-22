@@ -1,17 +1,22 @@
-import { anchorSchema, parsePageUrl } from "@sitenote/core";
+import { anchorSchema, parsePageUrl, threadContextSchema } from "@sitenote/core";
 import * as z from "zod/mini";
 
 import {
   THREAD_STATUSES,
+  captureRectSchema,
+  capturedScreenshotSchema,
   commentRecordSchema,
   memberRecordSchema,
   notificationListSchema,
+  preferencesSchema,
   threadRecordSchema,
   workspaceInfoSchema,
   siteInfoSchema,
+  type CapturedScreenshot,
   type CommentRecord,
   type MemberRecord,
   type NotificationList,
+  type Preferences,
   type SiteInfo,
   type ThreadRecord,
   type WorkspaceInfo,
@@ -40,6 +45,7 @@ export const ERROR_CODES = [
   "network",
   "unknown",
   "page_unavailable",
+  "capture_failed",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -67,6 +73,7 @@ export const ERROR_MESSAGES: Readonly<Record<ErrorCode, string>> = {
   network: "Sitenote could not reach the server. Check your connection and try again.",
   unknown: "Something went wrong. Try again.",
   page_unavailable: "Sitenote is not available on this page.",
+  capture_failed: "The screenshot could not be taken.",
 };
 
 export const OTP_LENGTH = 6;
@@ -97,12 +104,19 @@ function isBareOrigin(value: string): boolean {
   );
 }
 
+function isHttpUrl(value: string): boolean {
+  const url = URL.parse(value);
+  return url !== null && (url.protocol === "http:" || url.protocol === "https:");
+}
+
 const idSchema = z.guid();
+const httpUrlSchema = z.string().check(z.refine(isHttpUrl));
 const originSchema = z.string().check(z.refine(isBareOrigin));
 const pageUrlSchema = z.string().check(z.refine((value) => parsePageUrl(value)?.page === value));
 const bodySchema = z.string().check(z.trim(), z.minLength(1), z.maxLength(COMMENT_MAX_LENGTH));
 const mentionsSchema = z.array(idSchema).check(z.maxLength(MENTIONS_MAX));
 const tabIdSchema = z.int().check(z.nonnegative());
+const devicePixelRatioSchema = z.number().check(z.gt(0), z.lte(16));
 const notificationLimitSchema = z.int().check(z.minimum(1), z.maximum(NOTIFICATIONS_PAGE_MAX));
 const notificationIdsSchema = z
   .array(idSchema)
@@ -116,9 +130,22 @@ export const dataRequestSchema = z.discriminatedUnion("type", [
     siteId: idSchema,
     pageUrl: pageUrlSchema,
     anchor: anchorSchema,
-    context: z.record(z.string(), z.json()),
+    context: threadContextSchema,
+    captureId: z.optional(idSchema),
     body: bodySchema,
     mentions: mentionsSchema,
+  }),
+  z.object({ type: z.literal("threads.screenshotUrl"), threadId: idSchema }),
+  z.object({
+    type: z.literal("screenshot.capture"),
+    rect: captureRectSchema,
+    devicePixelRatio: devicePixelRatioSchema,
+  }),
+  z.object({ type: z.literal("preferences.get"), siteId: idSchema }),
+  z.object({
+    type: z.literal("preferences.set"),
+    siteId: idSchema,
+    showResolved: z.boolean(),
   }),
   z.object({
     type: z.literal("threads.setStatus"),
@@ -145,6 +172,12 @@ export const dataRequestSchema = z.discriminatedUnion("type", [
     workspaceId: idSchema,
   }),
   z.object({ type: z.literal("sites.disable"), origin: originSchema }),
+  z.object({
+    type: z.literal("sites.setErrorCapture"),
+    tabId: tabIdSchema,
+    origin: originSchema,
+    enabled: z.boolean(),
+  }),
 ]);
 
 export type DataRequest = z.infer<typeof dataRequestSchema>;
@@ -210,6 +243,10 @@ export interface DataByType {
   "sites.forOrigin": SiteInfo | null;
   "threads.list": ThreadRecord[];
   "threads.create": ThreadRecord;
+  "threads.screenshotUrl": string | null;
+  "screenshot.capture": CapturedScreenshot;
+  "preferences.get": Preferences;
+  "preferences.set": null;
   "threads.setStatus": ThreadRecord;
   "comments.create": CommentRecord;
   "comments.update": CommentRecord;
@@ -221,6 +258,7 @@ export interface DataByType {
   "notifications.markAllRead": null;
   "sites.enable": null;
   "sites.disable": null;
+  "sites.setErrorCapture": null;
 }
 
 export type DataByRequestType = AuthDataByType & DataByType;
@@ -240,6 +278,10 @@ export const RESPONSE_SCHEMAS: {
   "sites.forOrigin": resultSchema(z.nullable(siteInfoSchema)),
   "threads.list": resultSchema(z.array(threadRecordSchema)),
   "threads.create": resultSchema(threadRecordSchema),
+  "threads.screenshotUrl": resultSchema(z.nullable(httpUrlSchema)),
+  "screenshot.capture": resultSchema(capturedScreenshotSchema),
+  "preferences.get": resultSchema(preferencesSchema),
+  "preferences.set": resultSchema(z.null()),
   "threads.setStatus": resultSchema(threadRecordSchema),
   "comments.create": resultSchema(commentRecordSchema),
   "comments.update": resultSchema(commentRecordSchema),
@@ -251,6 +293,7 @@ export const RESPONSE_SCHEMAS: {
   "notifications.markAllRead": resultSchema(z.null()),
   "sites.enable": resultSchema(z.null()),
   "sites.disable": resultSchema(z.null()),
+  "sites.setErrorCapture": resultSchema(z.null()),
 };
 
 export const pageSubscribeSchema = z.object({

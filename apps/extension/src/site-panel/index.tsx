@@ -161,6 +161,30 @@ export function SitePanel({ webUrl }: SitePanelProps) {
     setBusy(false);
   }
 
+  async function changeErrorCapture(tab: Target, enabled: boolean) {
+    if (busy) {
+      return;
+    }
+    setBusy(true);
+    setFailed(null);
+    const result = await sendMessage({
+      type: "sites.setErrorCapture",
+      tabId: tab.id,
+      origin: tab.origin,
+      enabled,
+    });
+    if (!result.ok) {
+      setFailed(ERROR_MESSAGES[result.error.code]);
+      setBusy(false);
+      return;
+    }
+    setNotice(
+      enabled ? "Console errors will be captured." : "Console errors will not be captured.",
+    );
+    await load();
+    setBusy(false);
+  }
+
   async function toggle(tab: Target) {
     if (busy) {
       return;
@@ -222,6 +246,16 @@ export function SitePanel({ webUrl }: SitePanelProps) {
           <p data-testid="site-state" className="text-sm font-semibold text-neutral-900">
             Enabled in {view.site.workspaceName}
           </p>
+          <label className="flex items-center gap-2 text-sm text-neutral-900">
+            <input
+              type="checkbox"
+              checked={view.site.captureErrors}
+              onChange={(event) => void changeErrorCapture(tab, event.target.checked)}
+              disabled={busy}
+              className="size-4 accent-neutral-900"
+            />
+            Capture console errors
+          </label>
           <button
             type="button"
             onClick={() => void toggle(tab)}

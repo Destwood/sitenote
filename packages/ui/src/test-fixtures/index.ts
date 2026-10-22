@@ -27,6 +27,8 @@ export function makeThread(overrides: Partial<ThreadView> = {}): ThreadView {
     comments: [makeComment()],
     orphaned: false,
     anchorLabel: "button.checkout",
+    context: null,
+    hasScreenshot: false,
     ...overrides,
   };
 }

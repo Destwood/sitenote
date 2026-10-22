@@ -180,6 +180,19 @@ const NOTIFICATION = {
   createdAt: "2026-10-21T10:00:00.000Z",
   read: false,
 };
+const CONTEXT = {
+  viewport: { width: 1280, height: 720 },
+  devicePixelRatio: 2,
+  pageTitle: "Pricing",
+  url: PAGE_URL,
+  browser: { name: "Chrome", version: "130" },
+  os: { name: "Windows", version: "11" },
+  userAgent: "ua",
+  consoleErrors: [{ kind: "error", message: "Boom", at: "2026-10-22T09:30:00.000Z" }],
+  capturedAt: "2026-10-22T09:30:00.000Z",
+};
+const CAPTURE_ID = "60000000-0000-4000-8000-000000000001";
+const RECT = { x: 1, y: 2, width: 30, height: 40 };
 const THREAD = {
   id: THREAD_ID,
   siteId: SITE_ID,
@@ -188,6 +201,8 @@ const THREAD = {
   anchor: TEXT_ANCHOR,
   author: PERSON,
   createdAt: "2026-10-21T10:00:00.000Z",
+  context: CONTEXT,
+  hasScreenshot: true,
   comments: [COMMENT],
 };
 const CREATE = {
@@ -195,7 +210,7 @@ const CREATE = {
   siteId: SITE_ID,
   pageUrl: PAGE_URL,
   anchor: TEXT_ANCHOR,
-  context: { viewport: { width: 1280, height: 720 }, errors: [] },
+  context: CONTEXT,
   body: "  Looks wrong  ",
   mentions: [],
 };
@@ -208,6 +223,12 @@ describe("dataRequestSchema", () => {
       { type: "sites.forOrigin", origin: "http://127.0.0.1:4173" },
       { type: "threads.list", siteId: SITE_ID, pageUrl: PAGE_URL },
       CREATE,
+      { ...CREATE, captureId: CAPTURE_ID },
+      { type: "threads.screenshotUrl", threadId: THREAD_ID },
+      { type: "screenshot.capture", rect: RECT, devicePixelRatio: 2 },
+      { type: "preferences.get", siteId: SITE_ID },
+      { type: "preferences.set", siteId: SITE_ID, showResolved: true },
+      { type: "sites.setErrorCapture", tabId: 3, origin: ORIGIN, enabled: false },
       { type: "threads.setStatus", threadId: THREAD_ID, status: "resolved" },
       { type: "comments.create", threadId: THREAD_ID, body: "Reply", mentions: [WORKSPACE_ID] },
       { type: "comments.update", commentId: THREAD_ID, body: "Edited" },
@@ -246,7 +267,41 @@ describe("dataRequestSchema", () => {
     ["a whitespace body", { ...CREATE, body: " \n " }],
     ["a body over 10000 characters", { ...CREATE, body: "a".repeat(10001) }],
     ["an invalid anchor", { ...CREATE, anchor: { kind: "element" } }],
-    ["a context that is not json", { ...CREATE, context: { value: undefined } }],
+    ["a context of the old free form", { ...CREATE, context: { viewport: { width: 1 } } }],
+    [
+      "a context with too many errors",
+      {
+        ...CREATE,
+        context: {
+          ...CONTEXT,
+          consoleErrors: Array.from({ length: 21 }, () => CONTEXT.consoleErrors[0]),
+        },
+      },
+    ],
+    ["a capture id that is not a uuid", { ...CREATE, captureId: "x" }],
+    [
+      "a thread id that is not a uuid for the screenshot url",
+      { type: "threads.screenshotUrl", threadId: "x" },
+    ],
+    [
+      "a capture rect with a negative size",
+      { type: "screenshot.capture", rect: { ...RECT, height: -1 }, devicePixelRatio: 1 },
+    ],
+    [
+      "a capture rect with NaN",
+      { type: "screenshot.capture", rect: { ...RECT, x: Number.NaN }, devicePixelRatio: 1 },
+    ],
+    ["a zero ratio", { type: "screenshot.capture", rect: RECT, devicePixelRatio: 0 }],
+    ["a ratio above sixteen", { type: "screenshot.capture", rect: RECT, devicePixelRatio: 17 }],
+    ["a preference for a site id that is not a uuid", { type: "preferences.get", siteId: "x" }],
+    [
+      "a preference value that is not a boolean",
+      { type: "preferences.set", siteId: SITE_ID, showResolved: "yes" },
+    ],
+    [
+      "an error capture switch without a boolean",
+      { type: "sites.setErrorCapture", tabId: 3, origin: ORIGIN, enabled: 1 },
+    ],
     ["too many mentions", { ...CREATE, mentions: Array.from({ length: 21 }, () => SITE_ID) }],
     ["a mention that is not a uuid", { ...CREATE, mentions: ["everyone"] }],
     ["an unknown status", { type: "threads.setStatus", threadId: THREAD_ID, status: "done" }],
@@ -293,6 +348,7 @@ describe("data responses", () => {
           workspaceName: "Northwind",
           role: "guest",
           userId: THREAD_ID,
+          captureErrors: false,
         }),
       ).success,
     ).toBe(true);
@@ -301,6 +357,47 @@ describe("data responses", () => {
         success([{ id: WORKSPACE_ID, name: "Northwind", role: "owner" }]),
       ).success,
     ).toBe(true);
+  });
+
+  it("validates the screenshot, capture and preference responses", () => {
+    expect(
+      RESPONSE_SCHEMAS["threads.screenshotUrl"].safeParse(success("https://storage.test/s.webp"))
+        .success,
+    ).toBe(true);
+    expect(RESPONSE_SCHEMAS["threads.screenshotUrl"].safeParse(success(null)).success).toBe(true);
+    expect(
+      RESPONSE_SCHEMAS["threads.screenshotUrl"].safeParse(success("javascript:alert(1)")).success,
+    ).toBe(false);
+    expect(
+      RESPONSE_SCHEMAS["threads.screenshotUrl"].safeParse(success("data:image/png;base64,AAAA"))
+        .success,
+    ).toBe(false);
+    expect(
+      RESPONSE_SCHEMAS["screenshot.capture"].safeParse(
+        success({ captureId: CAPTURE_ID, width: 10, height: 20 }),
+      ).success,
+    ).toBe(true);
+    expect(
+      RESPONSE_SCHEMAS["screenshot.capture"].safeParse(
+        success({ captureId: CAPTURE_ID, width: 0, height: 20 }),
+      ).success,
+    ).toBe(false);
+    expect(
+      RESPONSE_SCHEMAS["preferences.get"].safeParse(success({ showResolved: true })).success,
+    ).toBe(true);
+    expect(RESPONSE_SCHEMAS["preferences.get"].safeParse(success({})).success).toBe(false);
+    expect(RESPONSE_SCHEMAS["preferences.set"].safeParse(success(null)).success).toBe(true);
+    expect(RESPONSE_SCHEMAS["sites.setErrorCapture"].safeParse(success(null)).success).toBe(true);
+    expect(failure("capture_failed").error.message).toBe("The screenshot could not be taken.");
+  });
+
+  it("accepts a thread whose context was invalid and is null", () => {
+    expect(
+      RESPONSE_SCHEMAS["threads.list"].safeParse(success([{ ...THREAD, context: null }])).success,
+    ).toBe(true);
+    expect(
+      RESPONSE_SCHEMAS["threads.list"].safeParse(success([{ ...THREAD, context: {} }])).success,
+    ).toBe(false);
   });
 
   it("validates members and notifications", () => {

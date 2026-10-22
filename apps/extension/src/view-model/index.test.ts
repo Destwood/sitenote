@@ -55,6 +55,8 @@ function thread(overrides: Partial<ThreadRecord> = {}): ThreadRecord {
     anchor: ELEMENT_ANCHOR,
     author: { id: ME, displayName: "Me", avatarUrl: null },
     createdAt: "2026-10-21T10:00:00.000Z",
+    context: null,
+    hasScreenshot: false,
     comments: [comment()],
     ...overrides,
   };
@@ -97,6 +99,7 @@ describe("canChangeStatus", () => {
     workspaceName: "Northwind",
     role: "member",
     userId: ME,
+    captureErrors: true,
   };
   const foreign = thread({ author: { id: OTHER, displayName: "Other", avatarUrl: null } });
 

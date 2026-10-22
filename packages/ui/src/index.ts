@@ -21,5 +21,5 @@ export { PANEL_WIDTH, ThreadPanel } from "./thread-panel";
 export type { ThreadPanelProps } from "./thread-panel";
 export { Toast, ToastRegion } from "./toast";
 export type { ToastProps, ToastRegionProps, ToastVariant, ToastView } from "./toast";
-export type { CommentView, PersonView, ThreadStatus, ThreadView } from "./types";
+export type { CommentView, PersonView, ScreenshotState, ThreadStatus, ThreadView } from "./types";
 export { Z_INDEX } from "./z-index";
