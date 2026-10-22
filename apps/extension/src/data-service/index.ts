@@ -1,4 +1,4 @@
-import { anchorSchema, type Anchor } from "@sitenote/core";
+import { anchorSchema, parsePageUrl, type Anchor } from "@sitenote/core";
 import type { SitenoteClient } from "@sitenote/db";
 
 import { mapDataError } from "../data-errors";
@@ -11,6 +11,9 @@ import {
 } from "../messages";
 import type {
   CommentRecord,
+  MemberRecord,
+  NotificationList,
+  NotificationRecord,
   PersonRecord,
   SiteInfo,
   ThreadRecord,
@@ -19,10 +22,17 @@ import type {
 
 const PROFILE_COLUMNS = "user_id, display_name, avatar_url" as const;
 const COMMENT_COLUMNS =
-  `id, thread_id, author_id, body, edited_at, deleted_at, created_at, author:profiles!comments_author_id_fkey(${PROFILE_COLUMNS})` as const;
+  `id, thread_id, author_id, body, mentions, edited_at, deleted_at, created_at, author:profiles!comments_author_id_fkey(${PROFILE_COLUMNS})` as const;
 const THREAD_SELECT =
   `id, site_id, page_url, anchor, status, created_at, created_by, author:profiles!threads_created_by_fkey(${PROFILE_COLUMNS}), comments(${COMMENT_COLUMNS})` as const;
+const MEMBER_SELECT = `role, profile:profiles!members_user_id_fkey(${PROFILE_COLUMNS})` as const;
+const NOTIFICATION_SELECT =
+  "id, kind, read_at, created_at, thread_id, thread:threads(page_url, status), comment:comments(body, deleted_at, author:profiles!comments_author_id_fkey(display_name))" as const;
 const UNIQUE_VIOLATION = "23505";
+
+export const MEMBERS_CACHE_TTL_MS = 60_000;
+export const EXCERPT_LENGTH = 140;
+export const FORMER_MEMBER_NAME = "Former member";
 
 interface ProfileRow {
   user_id: string;
@@ -35,6 +45,7 @@ interface CommentRow {
   thread_id: string;
   author_id: string | null;
   body: string;
+  mentions: string[];
   edited_at: string | null;
   deleted_at: string | null;
   created_at: string;
@@ -58,6 +69,31 @@ interface ThreadRow {
   comments: CommentRow[];
 }
 
+interface MemberRow {
+  role: MemberRecord["role"];
+  profile: ProfileRow | null;
+}
+
+interface NotificationRow {
+  id: string;
+  kind: NotificationRecord["kind"];
+  thread_id: string;
+  read_at: string | null;
+  created_at: string;
+  thread: { page_url: string; status: NotificationRecord["threadStatus"] } | null;
+  comment: {
+    body: string;
+    deleted_at: string | null;
+    author: { display_name: string } | null;
+  } | null;
+}
+
+interface CachedMembers {
+  userId: string;
+  at: number;
+  members: MemberRecord[];
+}
+
 export interface EnabledSite {
   siteId: string;
   workspaceId: string;
@@ -66,6 +102,7 @@ export interface EnabledSite {
 export interface DataServiceDeps {
   client: SitenoteClient;
   getEnabledSite: (origin: string) => Promise<EnabledSite | null>;
+  now?: () => number;
 }
 
 type Handled<Type extends DataRequest["type"]> = Extract<DataRequest, { type: Type }>;
@@ -79,6 +116,15 @@ export interface DataService {
   updateComment: (request: Handled<"comments.update">) => Promise<MessageResult<CommentRecord>>;
   deleteComment: (request: Handled<"comments.delete">) => Promise<MessageResult<CommentRecord>>;
   listWorkspaces: () => Promise<MessageResult<WorkspaceInfo[]>>;
+  listMembers: (request: Handled<"members.list">) => Promise<MessageResult<MemberRecord[]>>;
+  listNotifications: (
+    request: Handled<"notifications.list">,
+  ) => Promise<MessageResult<NotificationList>>;
+  markNotificationsRead: (
+    request: Handled<"notifications.markRead">,
+  ) => Promise<MessageResult<null>>;
+  markAllNotificationsRead: () => Promise<MessageResult<null>>;
+  countUnreadNotifications: () => Promise<MessageResult<number>>;
   ensureSite: (workspaceId: string, origin: string) => Promise<MessageResult<string>>;
   findThreadPage: (threadId: string) => Promise<string | null>;
   hasSession: () => Promise<boolean>;
@@ -115,6 +161,33 @@ function toComment(row: CommentRow): CommentRecord {
     createdAt: toIso(row.created_at),
     editedAt: row.edited_at === null ? null : toIso(row.edited_at),
     deleted: row.deleted_at !== null,
+    mentions: row.mentions,
+  };
+}
+
+export function toExcerpt(body: string): string {
+  const text = body.replace(/\s+/g, " ").trim();
+  const characters = Array.from(text);
+  return characters.length > EXCERPT_LENGTH
+    ? `${characters.slice(0, EXCERPT_LENGTH).join("")}…`
+    : text;
+}
+
+function toNotification(row: NotificationRow): NotificationRecord | null {
+  const page = row.thread === null ? undefined : parsePageUrl(row.thread.page_url)?.page;
+  if (row.thread === null || page === undefined || row.comment === null) {
+    return null;
+  }
+  return {
+    id: row.id,
+    kind: row.kind,
+    threadId: row.thread_id,
+    pageUrl: page,
+    threadStatus: row.thread.status,
+    excerpt: row.comment.deleted_at === null ? toExcerpt(row.comment.body) : "",
+    actorName: row.comment.author?.display_name ?? FORMER_MEMBER_NAME,
+    createdAt: toIso(row.created_at),
+    read: row.read_at !== null,
   };
 }
 
@@ -133,6 +206,8 @@ function toThread(row: ThreadRow): ThreadRecord {
 
 export function createDataService(deps: DataServiceDeps): DataService {
   const { client } = deps;
+  const now = deps.now ?? Date.now;
+  const memberCache = new Map<string, CachedMembers>();
 
   async function currentUserId(): Promise<string | null> {
     try {
@@ -302,6 +377,101 @@ export function createDataService(deps: DataServiceDeps): DataService {
           }
         }
         return success(workspaces);
+      }),
+
+    listMembers: ({ workspaceId }) =>
+      guarded(async (userId) => {
+        const cached = memberCache.get(workspaceId);
+        if (cached?.userId === userId && now() - cached.at < MEMBERS_CACHE_TTL_MS) {
+          return success(cached.members);
+        }
+        const result = await client
+          .from("members")
+          .select(MEMBER_SELECT)
+          .eq("workspace_id", workspaceId);
+        if (result.error !== null) {
+          return fail(result.error);
+        }
+        const rows: MemberRow[] = result.data;
+        const members: MemberRecord[] = [];
+        for (const row of rows) {
+          if (row.profile !== null) {
+            members.push({
+              id: row.profile.user_id,
+              displayName: row.profile.display_name,
+              avatarUrl: row.profile.avatar_url,
+              role: row.role,
+            });
+          }
+        }
+        members.sort(
+          (a, b) => a.displayName.localeCompare(b.displayName) || a.id.localeCompare(b.id),
+        );
+        memberCache.set(workspaceId, { userId, at: now(), members });
+        return success(members);
+      }),
+
+    listNotifications: ({ limit }) =>
+      guarded(async (userId) => {
+        const [list, unread] = await Promise.all([
+          client
+            .from("notifications")
+            .select(NOTIFICATION_SELECT)
+            .eq("user_id", userId)
+            .order("created_at", { ascending: false })
+            .limit(limit),
+          client
+            .from("notifications")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", userId)
+            .is("read_at", null),
+        ]);
+        if (list.error !== null) {
+          return fail(list.error);
+        }
+        if (unread.error !== null) {
+          return fail(unread.error);
+        }
+        const rows: NotificationRow[] = list.data;
+        const items: NotificationRecord[] = [];
+        for (const row of rows) {
+          const item = toNotification(row);
+          if (item !== null) {
+            items.push(item);
+          }
+        }
+        return success({ items, unread: unread.count ?? 0 });
+      }),
+
+    markNotificationsRead: ({ ids }) =>
+      guarded(async (userId) => {
+        const result = await client
+          .from("notifications")
+          .update({ read_at: new Date(now()).toISOString() })
+          .eq("user_id", userId)
+          .in("id", ids)
+          .is("read_at", null);
+        return result.error === null ? success(null) : fail(result.error);
+      }),
+
+    markAllNotificationsRead: () =>
+      guarded(async (userId) => {
+        const result = await client
+          .from("notifications")
+          .update({ read_at: new Date(now()).toISOString() })
+          .eq("user_id", userId)
+          .is("read_at", null);
+        return result.error === null ? success(null) : fail(result.error);
+      }),
+
+    countUnreadNotifications: () =>
+      guarded(async (userId) => {
+        const result = await client
+          .from("notifications")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .is("read_at", null);
+        return result.error === null ? success(result.count ?? 0) : fail(result.error);
       }),
 
     ensureSite: (workspaceId, origin) =>

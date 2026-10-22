@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createChannelFactory,
+  createNotificationChannelFactory,
   type ChannelHandlers,
   type ChannelLike,
   type RealtimeClientLike,
@@ -10,6 +11,7 @@ import {
 const SITE_ID = "20000000-0000-4000-8000-000000000001";
 const WORKSPACE_ID = "10000000-0000-4000-8000-000000000001";
 const THREAD_ID = "30000000-0000-4000-8000-000000000001";
+const USER_ID = "00000000-0000-4000-8000-000000000001";
 
 function createFakeClient() {
   const registered: {
@@ -178,5 +180,47 @@ describe("createChannelFactory", () => {
     factory.setAuth(null);
 
     expect(fake.setAuth.mock.calls).toEqual([["token-1"], [null]]);
+  });
+});
+
+describe("createNotificationChannelFactory", () => {
+  it("opens one channel per user filtered to the notifications of that user", () => {
+    const fake = createFakeClient();
+
+    createNotificationChannelFactory(fake.client).open(USER_ID, {
+      onChange: vi.fn(),
+      onSubscribed: vi.fn(),
+    });
+
+    expect(fake.topics).toEqual([`sitenote:notifications:${USER_ID}`]);
+    expect(fake.registered.map((item) => item.filter)).toEqual([
+      { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${USER_ID}` },
+    ]);
+  });
+
+  it("reports every change and every successful subscription", () => {
+    const fake = createFakeClient();
+    const onChange = vi.fn();
+    const onSubscribed = vi.fn();
+    createNotificationChannelFactory(fake.client).open(USER_ID, { onChange, onSubscribed });
+
+    fake.registered[0]?.callback({ eventType: "INSERT" });
+    fake.registered[0]?.callback({ eventType: "UPDATE" });
+    fake.status("CHANNEL_ERROR");
+    fake.status("SUBSCRIBED");
+    fake.status("SUBSCRIBED");
+
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onSubscribed).toHaveBeenCalledTimes(2);
+  });
+
+  it("removes the channel when the handle is closed", () => {
+    const fake = createFakeClient();
+
+    createNotificationChannelFactory(fake.client)
+      .open(USER_ID, { onChange: vi.fn(), onSubscribed: vi.fn() })
+      .close();
+
+    expect(fake.removed).toEqual([fake.channel]);
   });
 });

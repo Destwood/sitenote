@@ -3,6 +3,7 @@ import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { browser } from "wxt/browser";
 
 import { createAuthService } from "../auth-service";
+import { createBadge } from "../badge";
 import { createCommandListener } from "../command-listener";
 import { createDataService } from "../data-service";
 import { createEnablementStore } from "../enablement-store";
@@ -11,8 +12,13 @@ import { createExternalRouter } from "../external-router";
 import { createHubPort } from "../hub-port";
 import { createMessageRouter } from "../message-router";
 import { toggleCommentMode } from "../message-client";
-import { PAGE_PORT_NAME, type AuthStateChangedMessage } from "../messages";
-import { createChannelFactory } from "../realtime-channels";
+import {
+  PAGE_PORT_NAME,
+  type AuthStateChangedMessage,
+  type NotificationsChangedMessage,
+} from "../messages";
+import { createNotificationCenter } from "../notification-center";
+import { createChannelFactory, createNotificationChannelFactory } from "../realtime-channels";
 import { createRealtimeHub } from "../realtime-hub";
 import { planRefresh, REFRESH_ALARM_NAME, type RefreshOutcome } from "../refresh-schedule";
 import { createSessionHandoff } from "../session-handoff";
@@ -53,6 +59,15 @@ export function startBackground(): void {
     findThreadPage: data.findThreadPage,
     hasSession: data.hasSession,
   });
+  const notifications = createNotificationCenter({
+    data,
+    channels: createNotificationChannelFactory(client),
+    badge: createBadge(browser.action),
+    announce: (unread) => {
+      const message: NotificationsChangedMessage = { type: "notifications.changed", unread };
+      return browser.runtime.sendMessage(message).catch(() => undefined);
+    },
+  });
   const enablement = createSiteEnablement({
     store,
     data,
@@ -81,6 +96,7 @@ export function startBackground(): void {
 
   async function handleAuthChange(event: AuthChangeEvent, session: Session | null): Promise<void> {
     hub.onSession(session === null ? null : { accessToken: session.access_token });
+    notifications.onSession(session === null ? null : { userId: session.user.id });
     await scheduleRefresh(
       session === null
         ? { status: "signedOut" }
@@ -106,6 +122,7 @@ export function startBackground(): void {
     service,
     data,
     enablement,
+    notifications,
     getEnabledSite: store.get,
     onWake: keepSessionFresh,
   });
@@ -142,13 +159,16 @@ export function startBackground(): void {
   browser.runtime.onStartup.addListener(() => {
     ignoreFailure(keepSessionFresh());
     ignoreFailure(enablement.reconcile());
+    ignoreFailure(notifications.refresh());
   });
   browser.runtime.onInstalled.addListener(() => {
     ignoreFailure(keepSessionFresh());
+    ignoreFailure(notifications.refresh());
   });
   browser.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === REFRESH_ALARM_NAME) {
       ignoreFailure(keepSessionFresh());
+      ignoreFailure(notifications.refresh());
     }
   });
 }

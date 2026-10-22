@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { AuthService } from "../auth-service";
 import type { DataService } from "../data-service";
+import type { NotificationCenter } from "../notification-center";
 import { failure, success, type AuthState } from "../messages";
 import type { SiteEnablement } from "../site-enablement";
 import { createMessageRouter, senderOriginOf, type RouterSender } from ".";
@@ -12,6 +13,7 @@ const SITE_ID = "20000000-0000-4000-8000-000000000001";
 const WORKSPACE_ID = "10000000-0000-4000-8000-000000000001";
 const THREAD_ID = "30000000-0000-4000-8000-000000000001";
 const COMMENT_ID = "40000000-0000-4000-8000-000000000001";
+const NOTIFICATION_ID = "50000000-0000-4000-8000-000000000001";
 const ORIGIN = "https://example.test";
 const PAGE_URL = "https://example.test/pricing";
 const ANCHOR = {
@@ -47,6 +49,11 @@ function createFakes() {
     updateComment: vi.fn(),
     deleteComment: vi.fn(),
     listWorkspaces: vi.fn(() => Promise.resolve(success([]))),
+    listMembers: vi.fn(() => Promise.resolve(success([]))),
+    listNotifications: vi.fn(),
+    markNotificationsRead: vi.fn(),
+    markAllNotificationsRead: vi.fn(),
+    countUnreadNotifications: vi.fn(),
     ensureSite: vi.fn(),
     findThreadPage: vi.fn(),
     hasSession: vi.fn(),
@@ -56,7 +63,12 @@ function createFakes() {
     disable: vi.fn(() => Promise.resolve(success(null))),
     reconcile: vi.fn(),
   };
-  return { service, data, enablement };
+  const notifications: Pick<NotificationCenter, "list" | "markRead" | "markAllRead"> = {
+    list: vi.fn(() => Promise.resolve(success({ items: [], unread: 0 }))),
+    markRead: vi.fn(() => Promise.resolve(success(null))),
+    markAllRead: vi.fn(() => Promise.resolve(success(null))),
+  };
+  return { service, data, enablement, notifications };
 }
 
 function setup(options: { enabled?: boolean; onWake?: () => Promise<void> } = {}) {
@@ -123,7 +135,7 @@ describe("createMessageRouter sender checks", () => {
 
 describe("createMessageRouter extension page requests", () => {
   it("routes auth and admin requests to their handlers from an extension page", async () => {
-    const { route, service, data, enablement } = setup();
+    const { route, service, data, enablement, notifications } = setup();
 
     await route({ type: "auth.getState" }, POPUP);
     await route({ type: "auth.sendCode", email: " a@b.test " }, POPUP);
@@ -131,6 +143,9 @@ describe("createMessageRouter extension page requests", () => {
     await route({ type: "auth.signInWithGoogle" }, POPUP);
     await route({ type: "auth.signOut" }, POPUP);
     await route({ type: "workspaces.list" }, POPUP);
+    await route({ type: "notifications.list", limit: 30 }, POPUP);
+    await route({ type: "notifications.markRead", ids: [NOTIFICATION_ID] }, POPUP);
+    await route({ type: "notifications.markAllRead" }, POPUP);
     await route(
       { type: "sites.enable", tabId: 3, origin: ORIGIN, workspaceId: WORKSPACE_ID },
       POPUP,
@@ -143,6 +158,9 @@ describe("createMessageRouter extension page requests", () => {
     expect(service.signInWithGoogle).toHaveBeenCalledTimes(1);
     expect(service.signOut).toHaveBeenCalledTimes(1);
     expect(data.listWorkspaces).toHaveBeenCalledTimes(1);
+    expect(notifications.list).toHaveBeenCalledExactlyOnceWith(30);
+    expect(notifications.markRead).toHaveBeenCalledExactlyOnceWith([NOTIFICATION_ID]);
+    expect(notifications.markAllRead).toHaveBeenCalledTimes(1);
     expect(enablement.enable).toHaveBeenCalledWith(
       expect.objectContaining({ tabId: 3, origin: ORIGIN, workspaceId: WORKSPACE_ID }),
     );
@@ -202,17 +220,55 @@ describe("createMessageRouter content script requests", () => {
     ["auth.getState", { type: "auth.getState" }],
     ["auth.signOut", { type: "auth.signOut" }],
     ["workspaces.list", { type: "workspaces.list" }],
+    ["notifications.list", { type: "notifications.list", limit: 10 }],
+    ["notifications.markRead", { type: "notifications.markRead", ids: [NOTIFICATION_ID] }],
+    ["notifications.markAllRead", { type: "notifications.markAllRead" }],
     ["sites.enable", { type: "sites.enable", tabId: 4, origin: ORIGIN, workspaceId: WORKSPACE_ID }],
     ["sites.disable", { type: "sites.disable", origin: ORIGIN }],
   ])("refuses %s from a content script", async (_name, message) => {
-    const { route, service, data, enablement } = setup();
+    const { route, service, data, enablement, notifications } = setup();
 
     expect(await route(message, CONTENT)).toEqual(failure("forbidden_sender"));
     expect(service.getState).not.toHaveBeenCalled();
     expect(service.signOut).not.toHaveBeenCalled();
     expect(data.listWorkspaces).not.toHaveBeenCalled();
+    expect(notifications.list).not.toHaveBeenCalled();
+    expect(notifications.markRead).not.toHaveBeenCalled();
+    expect(notifications.markAllRead).not.toHaveBeenCalled();
     expect(enablement.enable).not.toHaveBeenCalled();
     expect(enablement.disable).not.toHaveBeenCalled();
+  });
+
+  it("serves the members of the enabled workspace only", async () => {
+    const { route, data } = setup();
+
+    await route({ type: "members.list", workspaceId: WORKSPACE_ID }, CONTENT);
+    expect(data.listMembers).toHaveBeenCalledExactlyOnceWith({
+      type: "members.list",
+      workspaceId: WORKSPACE_ID,
+    });
+
+    expect(
+      await route(
+        { type: "members.list", workspaceId: "10000000-0000-4000-8000-000000000009" },
+        CONTENT,
+      ),
+    ).toEqual(failure("forbidden"));
+    expect(data.listMembers).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses the member list from a page whose origin is not enabled and from a popup", async () => {
+    const disabled = setup({ enabled: false });
+    expect(
+      await disabled.route({ type: "members.list", workspaceId: WORKSPACE_ID }, CONTENT),
+    ).toEqual(failure("forbidden"));
+
+    const { route, data } = setup();
+    expect(await route({ type: "members.list", workspaceId: WORKSPACE_ID }, POPUP)).toEqual(
+      failure("forbidden_sender"),
+    );
+    expect(disabled.data.listMembers).not.toHaveBeenCalled();
+    expect(data.listMembers).not.toHaveBeenCalled();
   });
 
   it("lets a content script ask about its own origin only", async () => {

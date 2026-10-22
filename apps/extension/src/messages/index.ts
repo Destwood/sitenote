@@ -4,10 +4,14 @@ import * as z from "zod/mini";
 import {
   THREAD_STATUSES,
   commentRecordSchema,
+  memberRecordSchema,
+  notificationListSchema,
   threadRecordSchema,
   workspaceInfoSchema,
   siteInfoSchema,
   type CommentRecord,
+  type MemberRecord,
+  type NotificationList,
   type SiteInfo,
   type ThreadRecord,
   type WorkspaceInfo,
@@ -68,6 +72,7 @@ export const ERROR_MESSAGES: Readonly<Record<ErrorCode, string>> = {
 export const OTP_LENGTH = 6;
 export const COMMENT_MAX_LENGTH = 10000;
 export const MENTIONS_MAX = 20;
+export const NOTIFICATIONS_PAGE_MAX = 100;
 export const PAGE_PORT_NAME = "sitenote:page";
 const MAX_EMAIL_LENGTH = 254;
 
@@ -98,6 +103,10 @@ const pageUrlSchema = z.string().check(z.refine((value) => parsePageUrl(value)?.
 const bodySchema = z.string().check(z.trim(), z.minLength(1), z.maxLength(COMMENT_MAX_LENGTH));
 const mentionsSchema = z.array(idSchema).check(z.maxLength(MENTIONS_MAX));
 const tabIdSchema = z.int().check(z.nonnegative());
+const notificationLimitSchema = z.int().check(z.minimum(1), z.maximum(NOTIFICATIONS_PAGE_MAX));
+const notificationIdsSchema = z
+  .array(idSchema)
+  .check(z.minLength(1), z.maxLength(NOTIFICATIONS_PAGE_MAX));
 
 export const dataRequestSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("sites.forOrigin"), origin: originSchema }),
@@ -125,6 +134,10 @@ export const dataRequestSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("comments.update"), commentId: idSchema, body: bodySchema }),
   z.object({ type: z.literal("comments.delete"), commentId: idSchema }),
   z.object({ type: z.literal("workspaces.list") }),
+  z.object({ type: z.literal("members.list"), workspaceId: idSchema }),
+  z.object({ type: z.literal("notifications.list"), limit: notificationLimitSchema }),
+  z.object({ type: z.literal("notifications.markRead"), ids: notificationIdsSchema }),
+  z.object({ type: z.literal("notifications.markAllRead") }),
   z.object({
     type: z.literal("sites.enable"),
     tabId: tabIdSchema,
@@ -164,6 +177,13 @@ export const authStateChangedSchema = z.object({
 
 export type AuthStateChangedMessage = z.infer<typeof authStateChangedSchema>;
 
+export const notificationsChangedSchema = z.object({
+  type: z.literal("notifications.changed"),
+  unread: z.int().check(z.nonnegative()),
+});
+
+export type NotificationsChangedMessage = z.infer<typeof notificationsChangedSchema>;
+
 const errorResponseSchema = z.object({
   ok: z.literal(false),
   error: z.object({ code: z.enum(ERROR_CODES), message: z.string() }),
@@ -195,6 +215,10 @@ export interface DataByType {
   "comments.update": CommentRecord;
   "comments.delete": CommentRecord;
   "workspaces.list": WorkspaceInfo[];
+  "members.list": MemberRecord[];
+  "notifications.list": NotificationList;
+  "notifications.markRead": null;
+  "notifications.markAllRead": null;
   "sites.enable": null;
   "sites.disable": null;
 }
@@ -221,6 +245,10 @@ export const RESPONSE_SCHEMAS: {
   "comments.update": resultSchema(commentRecordSchema),
   "comments.delete": resultSchema(commentRecordSchema),
   "workspaces.list": resultSchema(z.array(workspaceInfoSchema)),
+  "members.list": resultSchema(z.array(memberRecordSchema)),
+  "notifications.list": resultSchema(notificationListSchema),
+  "notifications.markRead": resultSchema(z.null()),
+  "notifications.markAllRead": resultSchema(z.null()),
   "sites.enable": resultSchema(z.null()),
   "sites.disable": resultSchema(z.null()),
 };

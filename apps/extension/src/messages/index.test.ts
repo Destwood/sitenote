@@ -11,6 +11,7 @@ import {
   commentModeToggleSchema,
   dataRequestSchema,
   failure,
+  notificationsChangedSchema,
   pageClientMessageSchema,
   pageEventSchema,
   requestSchema,
@@ -166,6 +167,18 @@ const COMMENT = {
   createdAt: "2026-10-21T10:00:00.000Z",
   editedAt: null,
   deleted: false,
+  mentions: [],
+};
+const NOTIFICATION = {
+  id: "50000000-0000-4000-8000-000000000001",
+  kind: "mention",
+  threadId: THREAD_ID,
+  pageUrl: PAGE_URL,
+  threadStatus: "open",
+  excerpt: "Please check",
+  actorName: "Ann",
+  createdAt: "2026-10-21T10:00:00.000Z",
+  read: false,
 };
 const THREAD = {
   id: THREAD_ID,
@@ -200,6 +213,10 @@ describe("dataRequestSchema", () => {
       { type: "comments.update", commentId: THREAD_ID, body: "Edited" },
       { type: "comments.delete", commentId: THREAD_ID },
       { type: "workspaces.list" },
+      { type: "members.list", workspaceId: WORKSPACE_ID },
+      { type: "notifications.list", limit: 30 },
+      { type: "notifications.markRead", ids: [NOTIFICATION.id] },
+      { type: "notifications.markAllRead" },
       ENABLE,
       { type: "sites.disable", origin: ORIGIN },
     ];
@@ -236,6 +253,16 @@ describe("dataRequestSchema", () => {
     ["a negative tab id", { ...ENABLE, tabId: -1 }],
     ["a fractional tab id", { ...ENABLE, tabId: 1.5 }],
     ["an unknown type", { type: "threads.deleteEverything" }],
+    ["members of a workspace id that is not a uuid", { type: "members.list", workspaceId: "x" }],
+    ["a notification page of zero", { type: "notifications.list", limit: 0 }],
+    ["a notification page above the maximum", { type: "notifications.list", limit: 101 }],
+    ["a fractional notification page", { type: "notifications.list", limit: 1.5 }],
+    ["marking no notification read", { type: "notifications.markRead", ids: [] }],
+    ["marking a non-uuid notification read", { type: "notifications.markRead", ids: ["x"] }],
+    [
+      "marking too many notifications read",
+      { type: "notifications.markRead", ids: Array.from({ length: 101 }, () => NOTIFICATION.id) },
+    ],
   ])("rejects %s", (_name, message) => {
     expect(dataRequestSchema.safeParse(message).success).toBe(false);
   });
@@ -276,6 +303,46 @@ describe("data responses", () => {
     ).toBe(true);
   });
 
+  it("validates members and notifications", () => {
+    expect(
+      RESPONSE_SCHEMAS["members.list"].safeParse(
+        success([{ id: THREAD_ID, displayName: "Ann", avatarUrl: null, role: "member" }]),
+      ).success,
+    ).toBe(true);
+    expect(
+      RESPONSE_SCHEMAS["members.list"].safeParse(
+        success([{ id: THREAD_ID, displayName: "Ann", avatarUrl: null, role: "admin" }]),
+      ).success,
+    ).toBe(false);
+    expect(
+      RESPONSE_SCHEMAS["notifications.list"].safeParse(
+        success({ items: [NOTIFICATION], unread: 1 }),
+      ).success,
+    ).toBe(true);
+    expect(
+      RESPONSE_SCHEMAS["notifications.list"].safeParse(
+        success({ items: [{ ...NOTIFICATION, kind: "like" }], unread: 1 }),
+      ).success,
+    ).toBe(false);
+    expect(
+      RESPONSE_SCHEMAS["notifications.list"].safeParse(success({ items: [], unread: -1 })).success,
+    ).toBe(false);
+    expect(RESPONSE_SCHEMAS["notifications.markRead"].safeParse(success(null)).success).toBe(true);
+    expect(RESPONSE_SCHEMAS["notifications.markAllRead"].safeParse(success(null)).success).toBe(
+      true,
+    );
+  });
+
+  it("requires the mentions of a comment", () => {
+    const withoutMentions = Object.fromEntries(
+      Object.entries(COMMENT).filter(([key]) => key !== "mentions"),
+    );
+
+    expect(RESPONSE_SCHEMAS["comments.create"].safeParse(success(withoutMentions)).success).toBe(
+      false,
+    );
+  });
+
   it("accepts a thread whose anchor could not be read", () => {
     expect(
       RESPONSE_SCHEMAS["threads.list"].safeParse(success([{ ...THREAD, anchor: null }])).success,
@@ -305,6 +372,20 @@ describe("data responses", () => {
       expect(ERROR_CODES).toContain(code);
       expect(RESPONSE_SCHEMAS["threads.list"].safeParse(failure(code)).success).toBe(true);
     }
+  });
+});
+
+describe("notificationsChangedSchema", () => {
+  it("accepts a broadcast with a non-negative unread count", () => {
+    expect(
+      notificationsChangedSchema.safeParse({ type: "notifications.changed", unread: 0 }).success,
+    ).toBe(true);
+    expect(
+      notificationsChangedSchema.safeParse({ type: "notifications.changed", unread: -1 }).success,
+    ).toBe(false);
+    expect(notificationsChangedSchema.safeParse({ type: "notifications.changed" }).success).toBe(
+      false,
+    );
   });
 });
 
