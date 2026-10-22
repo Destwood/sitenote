@@ -69,12 +69,12 @@ Done when: the full comment loop works on the fixture site and a real public sit
 
 ### Phase 4 — Statuses, mentions, guests
 
-- [ ] Open / Resolved with permission rules; resolved pins hidden behind a toggle
-- [ ] @mentions with member autocomplete, stored in `mentions`
-- [ ] In-extension notifications list and badge count
+- [x] Open / Resolved with permission rules; resolved pins hidden behind a toggle
+- [x] @mentions with member autocomplete, stored in `mentions`
+- [x] In-extension notifications list and badge count
 - [x] Invites: create, copy link, revoke, expiry
 - [x] `/invite/[token]`: anonymous sign-in, display name, join as guest, hand the session to the extension via `externally_connectable`
-- [ ] E2E: guest joins by link and comments; guest cannot manage members or resolve others' threads
+- [x] E2E: guest joins by link and comments; guest cannot manage members or resolve others' threads
 
 Done when: owner, member and guest flows pass e2e.
 
