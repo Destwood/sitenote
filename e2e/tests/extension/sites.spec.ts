@@ -126,7 +126,10 @@ test("a signed-in owner enables Sitenote on the fixture site from the popup", as
   await expect(host).toHaveAttribute("data-comment-count", String(SEEDED_COMMENT_COUNT));
   await expect(host).toHaveAttribute("data-comment-mode", "off");
   await expect(host).toHaveAttribute("data-live", "true");
-  expect(await registeredScriptIds(popup)).toEqual([`sitenote:${FIXTURE_ORIGIN}`]);
+  expect((await registeredScriptIds(popup)).sort()).toEqual([
+    `sitenote:errors:${FIXTURE_ORIGIN}`,
+    `sitenote:${FIXTURE_ORIGIN}`,
+  ]);
 });
 
 test("enabling survives a reload because the content script is registered", async ({
