@@ -6,6 +6,7 @@ import {
   authStateChangedSchema,
   commentModeResponseSchema,
   failure,
+  notificationsChangedSchema,
   type AuthState,
   type CommentModeState,
   type DataByRequestType,
@@ -50,6 +51,22 @@ export function onAuthStateChanged(listener: (state: AuthState) => void): () => 
     const parsed = authStateChangedSchema.safeParse(message);
     if (parsed.success) {
       listener(parsed.data.state);
+    }
+  };
+  browser.runtime.onMessage.addListener(handler);
+  return () => {
+    browser.runtime.onMessage.removeListener(handler);
+  };
+}
+
+export function onNotificationsChanged(listener: (unread: number) => void): () => void {
+  const handler = (message: unknown, sender: { id?: string | undefined }): undefined => {
+    if (sender.id !== browser.runtime.id) {
+      return;
+    }
+    const parsed = notificationsChangedSchema.safeParse(message);
+    if (parsed.success) {
+      listener(parsed.data.unread);
     }
   };
   browser.runtime.onMessage.addListener(handler);

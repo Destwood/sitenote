@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { failure, success } from "../messages";
-import { onAuthStateChanged, sendMessage, toggleCommentMode } from ".";
+import { onAuthStateChanged, onNotificationsChanged, sendMessage, toggleCommentMode } from ".";
 
 type Listener = (message: unknown, sender: { id?: string | undefined }) => undefined;
 
@@ -172,5 +172,38 @@ describe("toggleCommentMode", () => {
     mocks.tabsSendMessage.mockResolvedValue({ active: true });
 
     expect(await toggleCommentMode(7)).toEqual(failure("page_unavailable"));
+  });
+});
+
+describe("onNotificationsChanged", () => {
+  it("delivers the unread count of a broadcast from this extension", () => {
+    const listener = vi.fn();
+    onNotificationsChanged(listener);
+
+    emit({ type: "notifications.changed", unread: 3 }, { id: "own-extension-id" });
+
+    expect(listener).toHaveBeenCalledExactlyOnceWith(3);
+  });
+
+  it("ignores broadcasts from other senders and messages that are not broadcasts", () => {
+    const listener = vi.fn();
+    onNotificationsChanged(listener);
+
+    emit({ type: "notifications.changed", unread: 3 }, { id: "other-extension-id" });
+    emit({ type: "notifications.changed", unread: 3 }, {});
+    emit({ type: "notifications.changed", unread: -1 }, { id: "own-extension-id" });
+    emit({ type: "auth.getState" }, { id: "own-extension-id" });
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("stops delivering after unsubscribing", () => {
+    const listener = vi.fn();
+    const unsubscribe = onNotificationsChanged(listener);
+
+    unsubscribe();
+    emit({ type: "notifications.changed", unread: 3 }, { id: "own-extension-id" });
+
+    expect(listener).not.toHaveBeenCalled();
   });
 });
