@@ -20,16 +20,31 @@ async function findServiceWorker(context: BrowserContext): Promise<Worker> {
   return context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
 }
 
+export interface ExtensionContextOptions {
+  deviceScaleFactor?: number;
+}
+
 export async function launchExtensionContext(
   headless: boolean,
   baseURL: string | undefined,
+  options: ExtensionContextOptions = {},
 ): Promise<BrowserContext> {
   assertExtensionBuilt();
   return chromium.launchPersistentContext("", {
     channel: "chromium",
     headless,
     ...(baseURL === undefined ? {} : { baseURL }),
-    args: [`--disable-extensions-except=${EXTENSION_PATH}`, `--load-extension=${EXTENSION_PATH}`],
+    ...(options.deviceScaleFactor === undefined ? {} : { viewport: null }),
+    args: [
+      `--disable-extensions-except=${EXTENSION_PATH}`,
+      `--load-extension=${EXTENSION_PATH}`,
+      ...(options.deviceScaleFactor === undefined
+        ? []
+        : [
+            `--force-device-scale-factor=${String(options.deviceScaleFactor)}`,
+            "--window-size=1280,800",
+          ]),
+    ],
   });
 }
 

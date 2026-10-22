@@ -51,7 +51,7 @@ test("the extension id is the stable id from the manifest key", ({ extensionId }
   expect(extensionId).toBe(STABLE_EXTENSION_ID);
 });
 
-test("the e2e build asks for the documented permissions and only the fixture and example.com host access", async ({
+test("the e2e build asks for the documented permissions and the fixture, example.com and capture host access", async ({
   context,
   extensionId,
 }) => {
@@ -69,6 +69,7 @@ test("the e2e build asks for the documented permissions and only the fixture and
     "http://127.0.0.1/*",
     "http://localhost/*",
     "https://example.com/*",
+    "<all_urls>",
   ]);
   expect(manifest.content_scripts).toBeUndefined();
   expect(manifest.commands).toMatchObject({

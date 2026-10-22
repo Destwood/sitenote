@@ -44,6 +44,12 @@ function rewrite(pathname: string): string {
   if (pathname.startsWith("/p/")) {
     return "/index.html";
   }
+  if (pathname.startsWith("/b/")) {
+    return "/box.html";
+  }
+  if (pathname.startsWith("/e/")) {
+    return "/errors.html";
+  }
   return pathname.startsWith("/spa/") ? "/spa.html" : pathname;
 }
 
