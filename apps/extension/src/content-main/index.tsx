@@ -14,7 +14,10 @@ import { isolateEvents } from "../event-isolation";
 import { sendMessage } from "../message-client";
 import { failure, success } from "../messages";
 import { openPageConnection } from "../page-connection";
-import { createResolvedPreference } from "../resolved-preference";
+import { requestConsoleErrors } from "../errors-bridge";
+import { createPreferenceClient } from "../preference-client";
+import { createScreenshotTaker } from "../screenshot-taker";
+import { createContextCollector } from "../thread-context";
 
 export async function startContentScript(ctx: ContentScriptContext, css: string): Promise<void> {
   let ui: ShadowRootContentScriptUi<Root> | null = null;
@@ -31,7 +34,27 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
     origin: location.origin,
     isOwn,
     send: sendMessage,
-    preference: createResolvedPreference(browser.storage.local),
+    preference: createPreferenceClient(sendMessage),
+    screenshot: createScreenshotTaker({
+      win: window,
+      send: sendMessage,
+      setHostHidden: (hidden) => {
+        const host = ui?.shadowHost;
+        if (host === undefined) {
+          return;
+        }
+        if (hidden) {
+          host.style.setProperty("visibility", "hidden", "important");
+        } else {
+          host.style.removeProperty("visibility");
+        }
+      },
+    }),
+    collectContext: createContextCollector({
+      win: window,
+      doc: document,
+      requestErrors: () => requestConsoleErrors({ win: window }),
+    }),
     openConnection: (options) =>
       openPageConnection({ ...options, connect: (name) => browser.runtime.connect({ name }) }),
   });

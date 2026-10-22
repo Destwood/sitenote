@@ -6,17 +6,20 @@ import type { EnabledEntry } from "../enablement-store";
 import {
   failure,
   requestSchema,
+  success,
   type DataByRequestType,
   type ExtensionRequest,
   type MessageResult,
 } from "../messages";
 import type { NotificationCenter } from "../notification-center";
+import type { ResolvedPreference } from "../resolved-preference";
+import type { ScreenshotService } from "../screenshot-service";
 import type { SiteEnablement } from "../site-enablement";
 
 export interface RouterSender {
   id?: string | undefined;
   url?: string | undefined;
-  tab?: { id?: number | undefined } | undefined;
+  tab?: { id?: number | undefined; windowId?: number | undefined } | undefined;
 }
 
 export interface MessageRouterDeps {
@@ -25,8 +28,11 @@ export interface MessageRouterDeps {
   data: DataService;
   enablement: SiteEnablement;
   notifications: Pick<NotificationCenter, "list" | "markRead" | "markAllRead">;
+  screenshots: ScreenshotService;
+  preferences: ResolvedPreference;
   getEnabledSite: (origin: string) => Promise<EnabledEntry | null>;
   onWake: () => Promise<void>;
+  handleTestMessage?: ((message: unknown) => boolean) | undefined;
 }
 
 export type RouterResponse = MessageResult<DataByRequestType[ExtensionRequest["type"]]>;
@@ -43,6 +49,10 @@ const PAGE_SCOPED: ReadonlySet<ExtensionRequest["type"]> = new Set([
   "comments.update",
   "comments.delete",
   "members.list",
+  "threads.screenshotUrl",
+  "screenshot.capture",
+  "preferences.get",
+  "preferences.set",
 ]);
 
 export function senderOriginOf(sender: RouterSender): string | null {
@@ -51,7 +61,7 @@ export function senderOriginOf(sender: RouterSender): string | null {
 }
 
 export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
-  const { service, data, enablement, notifications } = deps;
+  const { service, data, enablement, notifications, screenshots, preferences } = deps;
   const extensionPrefix = `chrome-extension://${deps.extensionId}/`;
 
   function classify(sender: RouterSender): SenderKind {
@@ -86,6 +96,12 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
     if (request.type === "members.list" && enabled.workspaceId !== request.workspaceId) {
       return failure("forbidden");
     }
+    if (
+      (request.type === "preferences.get" || request.type === "preferences.set") &&
+      enabled.siteId !== request.siteId
+    ) {
+      return failure("forbidden");
+    }
     return null;
   }
 
@@ -93,6 +109,9 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
     const kind = classify(sender);
     if (kind === "foreign") {
       return failure("forbidden_sender");
+    }
+    if (kind === "extensionPage" && deps.handleTestMessage?.(message) === true) {
+      return success(null);
     }
     const parsed = requestSchema.safeParse(message);
     if (!parsed.success) {
@@ -132,6 +151,29 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
         return data.listThreads(request);
       case "threads.create":
         return data.createThread(request);
+      case "threads.screenshotUrl":
+        return data.screenshotUrl(request);
+      case "screenshot.capture": {
+        const tabId = sender.tab?.id;
+        const windowId = sender.tab?.windowId;
+        const origin = senderOriginOf(sender);
+        if (tabId === undefined || windowId === undefined || origin === null) {
+          return failure("forbidden_sender");
+        }
+        return screenshots.capture(
+          { tabId, windowId, origin },
+          { rect: request.rect, devicePixelRatio: request.devicePixelRatio },
+        );
+      }
+      case "preferences.get":
+        return success({ showResolved: await preferences.load(request.siteId) });
+      case "preferences.set":
+        try {
+          await preferences.save(request.siteId, request.showResolved);
+          return success(null);
+        } catch {
+          return failure("unknown");
+        }
       case "threads.setStatus":
         return data.setThreadStatus(request);
       case "comments.create":
@@ -154,6 +196,8 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
         return enablement.enable(request);
       case "sites.disable":
         return enablement.disable(request.origin);
+      case "sites.setErrorCapture":
+        return enablement.setErrorCapture(request);
     }
   };
 }

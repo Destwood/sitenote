@@ -7,6 +7,7 @@ export const E2E_HOST_PERMISSIONS: readonly string[] = [
   "http://127.0.0.1/*",
   "http://localhost/*",
   "https://example.com/*",
+  "<all_urls>",
 ];
 
 export const E2E_WEB_MATCHES: readonly string[] = [

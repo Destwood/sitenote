@@ -4,8 +4,9 @@ import {
   createTextAnchor,
   parsePageUrl,
   type Anchor,
+  type ThreadContext,
 } from "@sitenote/core";
-import type { AnchorRect, ComposerSubmission, ToastView } from "@sitenote/ui";
+import type { AnchorRect, ComposerSubmission, ScreenshotState, ToastView } from "@sitenote/ui";
 
 import {
   ORPHANED,
@@ -23,6 +24,7 @@ import { createPageSession, type PageSessionDeps, type PageSessionState } from "
 import type { PageSessionStatus } from "../page-session";
 import { createPinTracker, type Measurements, type TrackedTarget } from "../pin-tracker";
 import type { ResolvedPreference } from "../resolved-preference";
+import type { ScreenshotTaker } from "../screenshot-taker";
 import { watchSelection } from "../selection-watcher";
 import { createStore, type Store } from "../store";
 import { createTextHighlighter } from "../text-highlighter";
@@ -35,11 +37,13 @@ export const SELECTION_ID = "selection";
 export const MAX_TOASTS = 3;
 export const UNSUPPORTED_SELECTION_MESSAGE = "That selection cannot be commented on.";
 export const PREFERENCE_FAILED_MESSAGE = "Could not remember this setting for the next visit.";
+export const SCREENSHOT_FAILED_MESSAGE = "Screenshot could not be saved";
 export const COMMENT_CURSOR_CSS = `html, html * { cursor: crosshair !important; } ${SITENOTE_ROOT_TAG} { cursor: auto !important; }`;
 
 export interface PendingThread {
   anchor: Anchor;
   target: AnchorTarget;
+  captureId: string | null;
 }
 
 export interface ContentState {
@@ -48,6 +52,7 @@ export interface ContentState {
   live: boolean;
   threads: ThreadRecord[];
   members: MemberRecord[];
+  screenshots: ReadonlyMap<string, ScreenshotState>;
   resolutions: ReadonlyMap<string, Resolution>;
   positions: Measurements;
   commentMode: boolean;
@@ -70,6 +75,8 @@ export interface ContentControllerDeps {
   send: PageSessionDeps["send"];
   openConnection: PageSessionDeps["openConnection"];
   preference: ResolvedPreference;
+  screenshot: ScreenshotTaker;
+  collectContext: () => Promise<ThreadContext>;
 }
 
 export interface ContentController {
@@ -130,6 +137,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     live: false,
     threads: [],
     members: [],
+    screenshots: new Map(),
     resolutions: new Map(),
     positions: new Map(),
     commentMode: false,
@@ -149,6 +157,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
   let showResolvedChosen = false;
   let toastCounter = 0;
   let creating = false;
+  let capturing = false;
   let deactivate: (() => void) | null = null;
 
   const tracker = createPinTracker({
@@ -167,7 +176,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     },
     onPick: (element, point) => {
       const anchor = createElementAnchor(element, point);
-      beginPending({
+      void beginCaptured({
         anchor,
         target: { kind: "element", element, offset: anchor.offset },
       });
@@ -306,6 +315,48 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     }
   }
 
+  async function beginCaptured(base: Omit<PendingThread, "captureId">): Promise<void> {
+    if (capturing) {
+      return;
+    }
+    capturing = true;
+    const pageUrl = readPageUrl();
+    try {
+      const captureId = await deps.screenshot.take(base.target).catch(() => null);
+      if (readPageUrl() !== pageUrl) {
+        return;
+      }
+      if (base.target.kind === "text") {
+        doc.getSelection()?.removeAllRanges();
+      }
+      beginPending({ ...base, captureId });
+    } finally {
+      capturing = false;
+    }
+  }
+
+  async function loadScreenshot(threadId: string): Promise<void> {
+    const thread = store.getState().threads.find((candidate) => candidate.id === threadId);
+    if (thread?.hasScreenshot !== true) {
+      return;
+    }
+    const setScreenshot = (value: ScreenshotState): void => {
+      store.setState((state) => ({
+        ...state,
+        screenshots: new Map(state.screenshots).set(threadId, value),
+      }));
+    };
+    if (!store.getState().screenshots.has(threadId)) {
+      setScreenshot({ status: "loading" });
+    }
+    const result = await deps.send({ type: "threads.screenshotUrl", threadId });
+    setScreenshot(
+      result.ok && result.data !== null
+        ? { status: "ready", url: result.data }
+        : { status: "unavailable" },
+    );
+  }
+
   function beginPending(pending: PendingThread): void {
     void loadMembers();
     store.setState((state) => ({
@@ -398,6 +449,9 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       ) {
         syncTargets(state);
       }
+      if (state.activeThreadId !== previous.activeThreadId && state.activeThreadId !== null) {
+        void loadScreenshot(state.activeThreadId);
+      }
     });
     win.addEventListener("keydown", handleKeyDown, true);
     syncTargets(seen);
@@ -462,12 +516,14 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     creating = true;
     store.setState((state) => ({ ...state, panelError: undefined }));
     try {
+      const context = await deps.collectContext();
       const result = await deps.send({
         type: "threads.create",
         siteId: site.siteId,
         pageUrl,
         anchor: pending.anchor,
-        context: {},
+        context,
+        ...(pending.captureId === null ? {} : { captureId: pending.captureId }),
         body: submission.body,
         mentions: submission.mentions,
       });
@@ -484,6 +540,9 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
         throw new Error(message);
       }
       const record = result.data;
+      if (!record.hasScreenshot) {
+        pushToast({ message: SCREENSHOT_FAILED_MESSAGE, variant: "info" });
+      }
       if (readPageUrl() !== record.pageUrl) {
         return;
       }
@@ -601,13 +660,13 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
         return;
       }
       const anchor = createTextAnchor(range, doc);
-      doc.getSelection()?.removeAllRanges();
       if (anchor === null) {
+        doc.getSelection()?.removeAllRanges();
         store.setState((state) => ({ ...state, selection: null }));
         pushToast({ message: UNSUPPORTED_SELECTION_MESSAGE, variant: "info" });
         return;
       }
-      beginPending({ anchor, target: { kind: "text", range } });
+      void beginCaptured({ anchor, target: { kind: "text", range } });
     },
     submitNewThread,
     reply,

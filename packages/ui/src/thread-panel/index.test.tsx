@@ -341,3 +341,43 @@ describe("ThreadPanel", () => {
     });
   });
 });
+
+describe("ThreadPanel context", () => {
+  it("shows the context section inside the scrolling area of an existing thread", () => {
+    renderPanel({
+      thread: makeThread({
+        hasScreenshot: true,
+        context: {
+          viewport: { width: 1440, height: 900 },
+          devicePixelRatio: 2,
+          pageTitle: "Northwind",
+          url: "https://example.test/",
+          browser: { name: "Chrome", version: "130" },
+          os: { name: "Windows", version: "11" },
+          userAgent: "ua",
+          consoleErrors: [],
+          capturedAt: "2026-10-22T09:30:00.000Z",
+        },
+      }),
+      screenshot: { status: "ready", url: "https://x.test/s.webp" },
+    });
+
+    const section = screen.getByRole("region", { name: "Page context" });
+
+    expect(within(section).getByText("1440×900 @2x")).toBeTruthy();
+    expect(within(section).getByRole("link").getAttribute("href")).toBe("https://x.test/s.webp");
+    expect(screen.getByRole("dialog").contains(section)).toBe(true);
+  });
+
+  it("says the context is unavailable for a thread without a valid context", () => {
+    renderPanel();
+
+    expect(screen.getByText("Context unavailable")).toBeTruthy();
+  });
+
+  it("shows no context for a new thread", () => {
+    renderPanel({ thread: null });
+
+    expect(screen.queryByRole("region", { name: "Page context" })).toBeNull();
+  });
+});

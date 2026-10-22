@@ -25,15 +25,17 @@ describe("createManifest", () => {
     expect(serialized).not.toContain("127.0.0.1");
     expect(serialized).not.toContain("localhost");
     expect(serialized).not.toContain("example.com");
+    expect(serialized).not.toContain("<all_urls>");
   });
 
-  it("adds only the fixture hosts and example.com as host permissions in the e2e build", () => {
+  it("adds the fixture hosts, example.com and the capture permission as host permissions in the e2e build", () => {
     const manifest = createManifest({ e2e: true, webUrl: WEB_URL });
 
     expect(manifest.host_permissions).toEqual([
       "http://127.0.0.1/*",
       "http://localhost/*",
       "https://example.com/*",
+      "<all_urls>",
     ]);
     expect(manifest.host_permissions).toEqual([...E2E_HOST_PERMISSIONS]);
     expect(manifest.optional_host_permissions).toEqual(["http://*/*", "https://*/*"]);

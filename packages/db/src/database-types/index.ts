@@ -484,8 +484,10 @@ export type Database = {
           p_anchor: Json;
           p_body: string;
           p_context: Json;
+          p_id?: string;
           p_mentions: string[];
           p_page_url: string;
+          p_screenshot_path?: string;
           p_site_id: string;
         };
         Returns: {

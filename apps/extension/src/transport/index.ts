@@ -1,4 +1,4 @@
-import { anchorSchema } from "@sitenote/core";
+import { anchorSchema, threadContextSchema } from "@sitenote/core";
 import * as z from "zod/mini";
 
 export const MEMBER_ROLES = ["owner", "member", "guest"] as const;
@@ -13,6 +13,7 @@ export const siteInfoSchema = z.object({
   workspaceName: z.string(),
   role: z.enum(MEMBER_ROLES),
   userId: idSchema,
+  captureErrors: z.boolean(),
 });
 
 export type SiteInfo = z.infer<typeof siteInfoSchema>;
@@ -54,6 +55,8 @@ export const threadRecordSchema = z.object({
   anchor: z.nullable(anchorSchema),
   author: personRecordSchema,
   createdAt: z.iso.datetime(),
+  context: z.nullable(threadContextSchema),
+  hasScreenshot: z.boolean(),
   comments: z.array(commentRecordSchema),
 });
 
@@ -88,3 +91,24 @@ export const notificationListSchema = z.object({
 });
 
 export type NotificationList = z.infer<typeof notificationListSchema>;
+
+export const captureRectSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  width: z.number().check(z.gte(0)),
+  height: z.number().check(z.gte(0)),
+});
+
+export type CaptureRect = z.infer<typeof captureRectSchema>;
+
+export const capturedScreenshotSchema = z.object({
+  captureId: idSchema,
+  width: z.int().check(z.positive()),
+  height: z.int().check(z.positive()),
+});
+
+export type CapturedScreenshot = z.infer<typeof capturedScreenshotSchema>;
+
+export const preferencesSchema = z.object({ showResolved: z.boolean() });
+
+export type Preferences = z.infer<typeof preferencesSchema>;

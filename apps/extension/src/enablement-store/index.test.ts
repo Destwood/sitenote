@@ -7,10 +7,12 @@ const KEY = "sitenote.sites";
 const FIRST = {
   siteId: "20000000-0000-4000-8000-000000000001",
   workspaceId: "10000000-0000-4000-8000-000000000001",
+  captureErrors: true,
 };
 const SECOND = {
   siteId: "20000000-0000-4000-8000-000000000002",
   workspaceId: "10000000-0000-4000-8000-000000000001",
+  captureErrors: false,
 };
 
 function createArea(initial: Record<string, unknown> = {}, delayMs = 0) {
@@ -133,5 +135,35 @@ describe("createEnablementStore", () => {
     await store.set("https://b.test", SECOND);
 
     expect(await store.list()).toEqual({ "https://b.test": SECOND });
+  });
+});
+
+describe("captureErrors", () => {
+  it("defaults to true for an entry stored by an earlier version", async () => {
+    const { area } = createArea({
+      [KEY]: JSON.stringify({
+        "https://a.test": { siteId: FIRST.siteId, workspaceId: FIRST.workspaceId },
+      }),
+    });
+    const store = createEnablementStore(area);
+
+    expect(await store.get("https://a.test")).toEqual({ ...FIRST, captureErrors: true });
+  });
+
+  it("keeps an explicit false", async () => {
+    const { area } = createArea();
+    const store = createEnablementStore(area);
+
+    await store.set("https://a.test", SECOND);
+
+    expect((await store.get("https://a.test"))?.captureErrors).toBe(false);
+  });
+
+  it("rejects an entry whose flag is not a boolean", async () => {
+    const { area } = createArea({
+      [KEY]: JSON.stringify({ "https://a.test": { ...FIRST, captureErrors: "yes" } }),
+    });
+
+    expect(await createEnablementStore(area).list()).toEqual({});
   });
 });

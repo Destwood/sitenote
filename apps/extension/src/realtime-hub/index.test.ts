@@ -78,7 +78,11 @@ function setup(overrides: Partial<RealtimeHubDeps> = {}) {
       setAuth,
     },
     getEnabledSite: vi.fn((origin: string) =>
-      Promise.resolve(origin === ORIGIN ? { siteId: SITE_ID, workspaceId: WORKSPACE_ID } : null),
+      Promise.resolve(
+        origin === ORIGIN
+          ? { siteId: SITE_ID, workspaceId: WORKSPACE_ID, captureErrors: true }
+          : null,
+      ),
     ),
     findThreadPage: vi.fn(() => Promise.resolve<string | null>(PAGE)),
     hasSession: vi.fn(() => Promise.resolve(true)),
@@ -206,7 +210,11 @@ describe("attach", () => {
   });
 
   it("does not leak a subscriber when the port goes away during the permission lookup", async () => {
-    let resolveEnabled: (value: { siteId: string; workspaceId: string }) => void = () => undefined;
+    let resolveEnabled: (value: {
+      siteId: string;
+      workspaceId: string;
+      captureErrors: boolean;
+    }) => void = () => undefined;
     const { hub, channels } = setup({
       getEnabledSite: () =>
         new Promise((resolve) => {
@@ -218,7 +226,7 @@ describe("attach", () => {
     port.send(subscribe());
 
     port.drop();
-    resolveEnabled({ siteId: SITE_ID, workspaceId: WORKSPACE_ID });
+    resolveEnabled({ siteId: SITE_ID, workspaceId: WORKSPACE_ID, captureErrors: true });
     await flush();
 
     expect(channels).toEqual([]);

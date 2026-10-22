@@ -155,6 +155,7 @@ export function ContentApp({ controller }: ContentAppProps) {
         canChangeStatus={canChangeStatus(site, activeRecord)}
         error={state.panelError}
         mentionCandidates={mentionCandidates}
+        screenshot={state.screenshots.get(activeView.id)}
         onSubmit={(submission) => controller.reply(activeView.id, submission)}
         onEditComment={controller.editComment}
         onDeleteComment={controller.deleteComment}

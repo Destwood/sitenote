@@ -22,6 +22,7 @@ const SITE: SiteInfo = {
   workspaceName: "Northwind",
   role: "member",
   userId: ME,
+  captureErrors: true,
 };
 const OLENA = "00000000-0000-4000-8000-000000000001";
 const ME_MEMBER: MemberRecord = { id: ME, displayName: "Me", avatarUrl: null, role: "member" };
@@ -56,6 +57,8 @@ function thread(id: string, overrides: Partial<ThreadRecord> = {}): ThreadRecord
     anchor: null,
     author: { id: ME, displayName: "Me", avatarUrl: null },
     createdAt: id === FIRST_ID ? "2026-10-21T10:00:00.000Z" : "2026-10-21T11:00:00.000Z",
+    context: null,
+    hasScreenshot: false,
     comments: [comment(id)],
     ...overrides,
   };
@@ -88,6 +91,7 @@ function makeState(overrides: Partial<ContentState> = {}): ContentState {
     live: true,
     threads: [],
     members: [],
+    screenshots: new Map(),
     resolutions: new Map(),
     positions: new Map(),
     commentMode: false,
@@ -324,6 +328,7 @@ describe("pins", () => {
           container: "p",
         },
         target: { kind: "text", range: document.createRange() },
+        captureId: null,
       },
     });
 
@@ -399,7 +404,37 @@ describe("thread panel", () => {
       container: "p",
     },
     target: { kind: "text" as const, range: document.createRange() },
+    captureId: null,
   };
+
+  it("shows the context and the signed screenshot of the open thread", () => {
+    setup({
+      threads: [thread(FIRST_ID, { hasScreenshot: true })],
+      resolutions: new Map([[FIRST_ID, RESOLVED]]),
+      positions: new Map([[FIRST_ID, measurement(100, 200)]]),
+      activeThreadId: FIRST_ID,
+      screenshots: new Map([[FIRST_ID, { status: "ready", url: "https://storage.test/s.webp" }]]),
+    });
+
+    const section = screen.getByRole("region", { name: "Page context" });
+
+    expect(within(section).getByRole("link").getAttribute("href")).toBe(
+      "https://storage.test/s.webp",
+    );
+    expect(within(section).getByText("Context unavailable")).toBeTruthy();
+  });
+
+  it("shows a loading state while the screenshot url is requested", () => {
+    setup({
+      threads: [thread(FIRST_ID, { hasScreenshot: true })],
+      resolutions: new Map([[FIRST_ID, RESOLVED]]),
+      positions: new Map([[FIRST_ID, measurement(100, 200)]]),
+      activeThreadId: FIRST_ID,
+      screenshots: new Map([[FIRST_ID, { status: "loading" }]]),
+    });
+
+    expect(screen.getByText("Loading screenshot…")).toBeTruthy();
+  });
 
   it("opens the new thread form for a pending thread and submits through the controller", async () => {
     const user = userEvent.setup();

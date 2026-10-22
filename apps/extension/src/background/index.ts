@@ -4,6 +4,7 @@ import { browser } from "wxt/browser";
 
 import { createAuthService } from "../auth-service";
 import { createBadge } from "../badge";
+import { createCaptureStore } from "../capture-store";
 import { createCommandListener } from "../command-listener";
 import { createDataService } from "../data-service";
 import { createEnablementStore } from "../enablement-store";
@@ -21,9 +22,15 @@ import { createNotificationCenter } from "../notification-center";
 import { createChannelFactory, createNotificationChannelFactory } from "../realtime-channels";
 import { createRealtimeHub } from "../realtime-hub";
 import { planRefresh, REFRESH_ALARM_NAME, type RefreshOutcome } from "../refresh-schedule";
+import { createResolvedPreference } from "../resolved-preference";
+import { cropDataUrl } from "../screenshot-crop";
+import { createScreenshotService } from "../screenshot-service";
+import { createScreenshotUploader } from "../screenshot-upload";
 import { createSessionHandoff } from "../session-handoff";
 import { createSessionStorage } from "../session-storage";
 import { createSiteEnablement } from "../site-enablement";
+import { restrictToTrustedContexts } from "../storage-access";
+import { createTestHooks } from "../test-hooks";
 
 const BROADCAST_EVENTS: ReadonlySet<AuthChangeEvent> = new Set([
   "SIGNED_IN",
@@ -31,7 +38,12 @@ const BROADCAST_EVENTS: ReadonlySet<AuthChangeEvent> = new Set([
   "USER_UPDATED",
 ]);
 
+function ignoreFailure(task: Promise<unknown>): void {
+  task.catch(() => undefined);
+}
+
 export function startBackground(): void {
+  ignoreFailure(restrictToTrustedContexts(browser.storage.local));
   const env = getExtensionEnv();
   const storage = createSessionStorage(browser.storage.local);
   const client = createSitenoteClient(env.supabaseUrl, env.supabasePublishableKey, {
@@ -52,7 +64,31 @@ export function startBackground(): void {
   });
 
   const store = createEnablementStore(browser.storage.local);
-  const data = createDataService({ client, getEnabledSite: store.get });
+  const hooks = __SITENOTE_E2E__ ? createTestHooks() : null;
+  const captures = createCaptureStore();
+  const data = createDataService({
+    client,
+    getEnabledSite: store.get,
+    screenshots: createScreenshotUploader({
+      client,
+      store: captures,
+      ...(hooks === null ? {} : { consumeFailure: hooks.consumeUploadFailure }),
+    }),
+  });
+  const screenshots = createScreenshotService({
+    store: captures,
+    captureVisibleTab: (windowId) => browser.tabs.captureVisibleTab(windowId, { format: "png" }),
+    crop: cropDataUrl,
+    getTab: async (tabId) => {
+      try {
+        const tab = await browser.tabs.get(tabId);
+        return { active: tab.active, windowId: tab.windowId, url: tab.url };
+      } catch {
+        return null;
+      }
+    },
+    wait: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  });
   const hub = createRealtimeHub({
     factory: createChannelFactory(client),
     getEnabledSite: store.get,
@@ -90,10 +126,6 @@ export function startBackground(): void {
     await scheduleRefresh(outcome);
   }
 
-  function ignoreFailure(task: Promise<unknown>): void {
-    task.catch(() => undefined);
-  }
-
   async function handleAuthChange(event: AuthChangeEvent, session: Session | null): Promise<void> {
     hub.onSession(session === null ? null : { accessToken: session.access_token });
     notifications.onSession(session === null ? null : { userId: session.user.id });
@@ -123,8 +155,11 @@ export function startBackground(): void {
     data,
     enablement,
     notifications,
+    screenshots,
+    preferences: createResolvedPreference(browser.storage.local),
     getEnabledSite: store.get,
     onWake: keepSessionFresh,
+    handleTestMessage: hooks?.handle,
   });
 
   const routeExternal = createExternalRouter({
@@ -163,6 +198,7 @@ export function startBackground(): void {
   });
   browser.runtime.onInstalled.addListener(() => {
     ignoreFailure(keepSessionFresh());
+    ignoreFailure(enablement.reconcile());
     ignoreFailure(notifications.refresh());
   });
   browser.alarms.onAlarm.addListener((alarm) => {

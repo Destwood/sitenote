@@ -1,15 +1,17 @@
-import { createTextAnchor, type Anchor } from "@sitenote/core";
+import { createTextAnchor, type Anchor, type ThreadContext } from "@sitenote/core";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import { ORPHANED, type Resolution } from "../anchor-target";
 import { failure, success, type MessageResult } from "../messages";
 import type { PageConnectionOptions } from "../page-connection";
 import type { ResolvedPreference } from "../resolved-preference";
+import type { ScreenshotTaker } from "../screenshot-taker";
 import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "../transport";
 import {
   COMMENT_CURSOR_CSS,
   PREFERENCE_FAILED_MESSAGE,
   PENDING_ID,
+  SCREENSHOT_FAILED_MESSAGE,
   UNSUPPORTED_SELECTION_MESSAGE,
   createContentController,
   reconcileResolutions,
@@ -24,6 +26,7 @@ const SITE: SiteInfo = {
   workspaceName: "Northwind",
   role: "member",
   userId: ME,
+  captureErrors: true,
 };
 const PAGE = "http://localhost:3000";
 const THREAD_ID = "30000000-0000-4000-8000-000000000001";
@@ -31,6 +34,18 @@ const SECOND_THREAD_ID = "30000000-0000-4000-8000-000000000002";
 const COMMENT_ID = "40000000-0000-4000-8000-000000000001";
 const AUTHOR = { id: ME, displayName: "Me", avatarUrl: null };
 const OLENA = "00000000-0000-4000-8000-000000000001";
+const CAPTURE_ID = "60000000-0000-4000-8000-000000000001";
+const CONTEXT: ThreadContext = {
+  viewport: { width: 1440, height: 900 },
+  devicePixelRatio: 2,
+  pageTitle: "Northwind",
+  url: "http://localhost:3000/",
+  browser: { name: "Chrome", version: "130" },
+  os: { name: "Windows", version: "11" },
+  userAgent: "ua",
+  consoleErrors: [],
+  capturedAt: "2026-10-22T09:30:00.000Z",
+};
 const MEMBERS: MemberRecord[] = [
   { id: OLENA, displayName: "Olena Owner", avatarUrl: null, role: "owner" },
   { id: ME, displayName: "Me", avatarUrl: null, role: "member" },
@@ -118,6 +133,8 @@ function thread(overrides: Partial<ThreadRecord> = {}): ThreadRecord {
     anchor: CTA_ANCHOR,
     author: AUTHOR,
     createdAt: "2026-10-21T10:00:00.000Z",
+    context: null,
+    hasScreenshot: false,
     comments: [comment()],
     ...overrides,
   };
@@ -162,6 +179,8 @@ async function setup(
     isOwn: (node) => node !== null && (node === host || host.contains(node)),
     send: send as unknown as ContentControllerDeps["send"],
     preference: memoryPreference(),
+    screenshot: { take: vi.fn<ScreenshotTaker["take"]>().mockResolvedValue(CAPTURE_ID) },
+    collectContext: vi.fn(() => Promise.resolve(CONTEXT)),
     openConnection: (options) => {
       connection.options = options;
       return { update: connection.update, close: vi.fn() };
@@ -354,9 +373,13 @@ describe("comment mode", () => {
       }),
     );
 
+    await vi.waitFor(() => {
+      expect(state().pending).not.toBeNull();
+    });
     const pending = state().pending;
     expect(pending?.anchor.kind).toBe("element");
     expect(pending?.target.kind).toBe("element");
+    expect(pending?.captureId).toBe(CAPTURE_ID);
     expect(state().activeThreadId).toBeNull();
   });
 
@@ -387,7 +410,9 @@ describe("comment mode", () => {
     element("#cta").dispatchEvent(
       new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }),
     );
-    expect(state().pending).not.toBeNull();
+    await vi.waitFor(() => {
+      expect(state().pending).not.toBeNull();
+    });
 
     element("#copy").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(state().pending).toBeNull();
@@ -442,8 +467,8 @@ describe("comment mode", () => {
 });
 
 describe("text comments", () => {
-  async function withSelection(): Promise<Harness> {
-    const harness = await setup();
+  async function withSelection(deps: Partial<ContentControllerDeps> = {}): Promise<Harness> {
+    const harness = await setup([], {}, deps);
     const range = textRange();
     const selection = document.getSelection();
     selection?.removeAllRanges();
@@ -462,10 +487,35 @@ describe("text comments", () => {
     const { controller: api, state } = await withSelection();
 
     api.startTextComment();
+    await vi.waitFor(() => {
+      expect(state().pending).not.toBeNull();
+    });
 
     expect(state().pending?.anchor.kind).toBe("text");
     expect(state().pending?.target.kind).toBe("text");
+    expect(state().pending?.captureId).toBe(CAPTURE_ID);
     expect(state().selection).toBeNull();
+    expect(document.getSelection()?.rangeCount).toBe(0);
+  });
+
+  it("keeps the selection while the screenshot is taken and clears it afterwards", async () => {
+    let release: (value: string | null) => void = () => undefined;
+    const take = vi.fn<ScreenshotTaker["take"]>(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const { controller: api, state } = await withSelection({ screenshot: { take } });
+
+    api.startTextComment();
+    expect(document.getSelection()?.rangeCount).toBe(1);
+    expect(take).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ kind: "text" }));
+    release(CAPTURE_ID);
+
+    await vi.waitFor(() => {
+      expect(state().pending).not.toBeNull();
+    });
     expect(document.getSelection()?.rangeCount).toBe(0);
   });
 
@@ -496,8 +546,11 @@ describe("text comments", () => {
 });
 
 describe("creating a thread", () => {
-  async function pendingHarness(handlers: Record<string, Handler> = {}): Promise<Harness> {
-    const harness = await setup([], handlers);
+  async function pendingHarness(
+    handlers: Record<string, Handler> = {},
+    deps: Partial<ContentControllerDeps> = {},
+  ): Promise<Harness> {
+    const harness = await setup([], handlers, deps);
     harness.controller.toggleCommentMode();
     under = element("#cta");
     element("#cta").dispatchEvent(
@@ -509,11 +562,14 @@ describe("creating a thread", () => {
         clientY: 5,
       }),
     );
+    await vi.waitFor(() => {
+      expect(harness.state().pending).not.toBeNull();
+    });
     return harness;
   }
 
-  it("sends the anchor with an empty context and shows the created thread", async () => {
-    const created = thread();
+  it("sends the anchor with the collected context and the capture id and shows the created thread", async () => {
+    const created = thread({ hasScreenshot: true });
     const {
       controller: api,
       state,
@@ -529,7 +585,8 @@ describe("creating a thread", () => {
       type: "threads.create",
       siteId: SITE.siteId,
       pageUrl: PAGE,
-      context: {},
+      context: CONTEXT,
+      captureId: CAPTURE_ID,
       body: "  Looks off  ",
       mentions: [],
     });
@@ -538,6 +595,88 @@ describe("creating a thread", () => {
     expect(state().activeThreadId).toBe(THREAD_ID);
     expect(state().threads).toEqual([created]);
     expect(state().resolutions.get(THREAD_ID)?.status).toBe("resolved");
+    expect(state().toasts).toHaveLength(0);
+  });
+
+  it("tells the user when the created thread has no screenshot", async () => {
+    const { controller: api, state } = await pendingHarness({
+      "threads.create": () => success(thread({ hasScreenshot: false })),
+    });
+
+    await api.submitNewThread({ body: "Looks off", mentions: [] });
+
+    expect(state().toasts.map((toast) => [toast.message, toast.variant])).toEqual([
+      [SCREENSHOT_FAILED_MESSAGE, "info"],
+    ]);
+    expect(state().threads).toHaveLength(1);
+  });
+
+  it("creates the thread without a capture id when the screenshot failed", async () => {
+    const take = vi.fn<ScreenshotTaker["take"]>().mockResolvedValue(null);
+    const created = thread();
+    const { controller: api, send } = await pendingHarness(
+      { "threads.create": () => success(created) },
+      { screenshot: { take } },
+    );
+
+    await api.submitNewThread({ body: "Looks off", mentions: [] });
+
+    const request = send.mock.calls.find((call) => call[0].type === "threads.create")?.[0];
+    expect(request).not.toHaveProperty("captureId");
+  });
+
+  it("treats a screenshot that throws like a failed one", async () => {
+    const take = vi.fn<ScreenshotTaker["take"]>().mockRejectedValue(new Error("boom"));
+    const { state } = await pendingHarness({}, { screenshot: { take } });
+
+    expect(state().pending?.captureId).toBeNull();
+  });
+
+  it("opens the pending thread only after the screenshot was taken", async () => {
+    let release: (value: string | null) => void = () => undefined;
+    const take = vi.fn<ScreenshotTaker["take"]>(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const harness = await setup([], {}, { screenshot: { take } });
+    harness.controller.toggleCommentMode();
+    under = element("#cta");
+    element("#cta").dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }),
+    );
+    expect(harness.state().pending).toBeNull();
+    element("#cta").dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }),
+    );
+    release(CAPTURE_ID);
+
+    await vi.waitFor(() => {
+      expect(harness.state().pending).not.toBeNull();
+    });
+    expect(take).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops the pending thread when the page changed during the screenshot", async () => {
+    let release: (value: string | null) => void = () => undefined;
+    const take = vi.fn<ScreenshotTaker["take"]>(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const harness = await setup([], {}, { screenshot: { take } });
+    harness.controller.toggleCommentMode();
+    under = element("#cta");
+    element("#cta").dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }),
+    );
+    window.history.pushState({}, "", "/elsewhere");
+    release(CAPTURE_ID);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(harness.state().pending).toBeNull();
   });
 
   it("keeps the pending thread, shows the error and offers a retry when it fails", async () => {
@@ -582,7 +721,11 @@ describe("creating a thread", () => {
 
   it("does not add a thread created for a page the user has already left", async () => {
     let release: (value: MessageResult<ThreadRecord>) => void = () => undefined;
-    const { controller: api, state } = await pendingHarness({
+    const {
+      controller: api,
+      state,
+      requests,
+    } = await pendingHarness({
       "threads.create": () =>
         new Promise<MessageResult<ThreadRecord>>((resolve) => {
           release = resolve;
@@ -590,6 +733,9 @@ describe("creating a thread", () => {
     });
 
     const submitted = api.submitNewThread({ body: "One", mentions: [] });
+    await vi.waitFor(() => {
+      expect(requests().some((request) => request.type === "threads.create")).toBe(true);
+    });
     window.history.pushState({}, "", "/elsewhere");
     release(success(thread()));
     await submitted;
@@ -898,7 +1044,9 @@ describe("the page changes under the overlay", () => {
     element("#cta").dispatchEvent(
       new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }),
     );
-    expect(state().pending).not.toBeNull();
+    await vi.waitFor(() => {
+      expect(state().pending).not.toBeNull();
+    });
 
     window.history.pushState({}, "", "/other");
     window.dispatchEvent(new PopStateEvent("popstate"));
@@ -996,12 +1144,19 @@ describe("members and mentions", () => {
 
   it("sends the picked mentions with a new thread", async () => {
     const created = thread({ comments: [comment({ body: "@Olena Owner hi", mentions: [OLENA] })] });
-    const { controller: api, send } = await setup([], { "threads.create": () => success(created) });
+    const {
+      controller: api,
+      send,
+      state,
+    } = await setup([], { "threads.create": () => success(created) });
     api.toggleCommentMode();
     under = element("#cta");
     element("#cta").dispatchEvent(
       new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }),
     );
+    await vi.waitFor(() => {
+      expect(state().pending).not.toBeNull();
+    });
 
     await api.submitNewThread({ body: "@Olena Owner hi", mentions: [OLENA] });
 
@@ -1167,5 +1322,81 @@ describe("showing resolved threads", () => {
     await Promise.resolve();
 
     expect(state().showResolved).toBe(true);
+  });
+});
+
+describe("screenshots of existing threads", () => {
+  const withScreenshot = thread({ hasScreenshot: true });
+
+  it("requests the signed url when a thread with a screenshot is opened", async () => {
+    const {
+      controller: api,
+      state,
+      send,
+    } = await setup([withScreenshot], {
+      "threads.screenshotUrl": () => success("https://storage.test/s.webp?token=1"),
+    });
+
+    api.selectThread(THREAD_ID);
+
+    expect(state().screenshots.get(THREAD_ID)).toEqual({ status: "loading" });
+    await vi.waitFor(() => {
+      expect(state().screenshots.get(THREAD_ID)).toEqual({
+        status: "ready",
+        url: "https://storage.test/s.webp?token=1",
+      });
+    });
+    expect(send).toHaveBeenCalledWith({ type: "threads.screenshotUrl", threadId: THREAD_ID });
+  });
+
+  it("marks the screenshot unavailable when the url cannot be fetched or is empty", async () => {
+    const failed = await setup([withScreenshot], {
+      "threads.screenshotUrl": () => failure("network"),
+    });
+    failed.controller.selectThread(THREAD_ID);
+    await vi.waitFor(() => {
+      expect(failed.state().screenshots.get(THREAD_ID)).toEqual({ status: "unavailable" });
+    });
+    failed.controller.stop();
+
+    const empty = await setup([withScreenshot], {
+      "threads.screenshotUrl": () => success(null),
+    });
+    empty.controller.selectThread(THREAD_ID);
+    await vi.waitFor(() => {
+      expect(empty.state().screenshots.get(THREAD_ID)).toEqual({ status: "unavailable" });
+    });
+  });
+
+  it("does not ask for a screenshot when the thread has none", async () => {
+    const { controller: api, requests } = await setup([thread()]);
+
+    api.selectThread(THREAD_ID);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(requests().some((request) => request.type === "threads.screenshotUrl")).toBe(false);
+  });
+
+  it("keeps the shown screenshot while it is refreshed on the next opening", async () => {
+    let calls = 0;
+    const { controller: api, state } = await setup([withScreenshot], {
+      "threads.screenshotUrl": () =>
+        success(`https://storage.test/s.webp?token=${String((calls += 1))}`),
+    });
+    api.selectThread(THREAD_ID);
+    await vi.waitFor(() => {
+      expect(state().screenshots.get(THREAD_ID)?.status).toBe("ready");
+    });
+
+    api.closePanel();
+    api.selectThread(THREAD_ID);
+
+    expect(state().screenshots.get(THREAD_ID)?.status).toBe("ready");
+    await vi.waitFor(() => {
+      expect(state().screenshots.get(THREAD_ID)).toEqual({
+        status: "ready",
+        url: "https://storage.test/s.webp?token=2",
+      });
+    });
   });
 });

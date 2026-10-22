@@ -1,4 +1,12 @@
-import { anchorSchema, parsePageUrl, type Anchor } from "@sitenote/core";
+import {
+  anchorSchema,
+  fitThreadContext,
+  parsePageUrl,
+  parseThreadContext,
+  withoutConsoleErrors,
+  type Anchor,
+  type ThreadContext,
+} from "@sitenote/core";
 import type { SitenoteClient } from "@sitenote/db";
 
 import { mapDataError } from "../data-errors";
@@ -9,6 +17,7 @@ import {
   type ErrorResponse,
   type MessageResult,
 } from "../messages";
+import { SCREENSHOT_BUCKET, type ThreadScreenshots } from "../screenshot-upload";
 import type {
   CommentRecord,
   MemberRecord,
@@ -24,13 +33,15 @@ const PROFILE_COLUMNS = "user_id, display_name, avatar_url" as const;
 const COMMENT_COLUMNS =
   `id, thread_id, author_id, body, mentions, edited_at, deleted_at, created_at, author:profiles!comments_author_id_fkey(${PROFILE_COLUMNS})` as const;
 const THREAD_SELECT =
-  `id, site_id, page_url, anchor, status, created_at, created_by, author:profiles!threads_created_by_fkey(${PROFILE_COLUMNS}), comments(${COMMENT_COLUMNS})` as const;
+  `id, site_id, page_url, anchor, status, context, screenshot_path, created_at, created_by, author:profiles!threads_created_by_fkey(${PROFILE_COLUMNS}), comments(${COMMENT_COLUMNS})` as const;
 const MEMBER_SELECT = `role, profile:profiles!members_user_id_fkey(${PROFILE_COLUMNS})` as const;
 const NOTIFICATION_SELECT =
   "id, kind, read_at, created_at, thread_id, thread:threads(page_url, status), comment:comments(body, deleted_at, author:profiles!comments_author_id_fkey(display_name))" as const;
 const UNIQUE_VIOLATION = "23505";
 
 export const MEMBERS_CACHE_TTL_MS = 60_000;
+export const SIGNED_URL_TTL_SECONDS = 3600;
+export const SIGNED_URL_REFRESH_MARGIN_MS = 5 * 60 * 1000;
 export const EXCERPT_LENGTH = 140;
 export const FORMER_MEMBER_NAME = "Former member";
 
@@ -63,6 +74,8 @@ interface ThreadRow {
   page_url: string;
   anchor: unknown;
   status: "open" | "resolved";
+  context: unknown;
+  screenshot_path: string | null;
   created_at: string;
   created_by: string | null;
   author: ProfileRow | null;
@@ -94,14 +107,22 @@ interface CachedMembers {
   members: MemberRecord[];
 }
 
+interface CachedUrl {
+  userId: string;
+  url: string;
+  expiresAt: number;
+}
+
 export interface EnabledSite {
   siteId: string;
   workspaceId: string;
+  captureErrors: boolean;
 }
 
 export interface DataServiceDeps {
   client: SitenoteClient;
   getEnabledSite: (origin: string) => Promise<EnabledSite | null>;
+  screenshots: ThreadScreenshots;
   now?: () => number;
 }
 
@@ -111,6 +132,9 @@ export interface DataService {
   forOrigin: (request: Handled<"sites.forOrigin">) => Promise<MessageResult<SiteInfo | null>>;
   listThreads: (request: Handled<"threads.list">) => Promise<MessageResult<ThreadRecord[]>>;
   createThread: (request: Handled<"threads.create">) => Promise<MessageResult<ThreadRecord>>;
+  screenshotUrl: (
+    request: Handled<"threads.screenshotUrl">,
+  ) => Promise<MessageResult<string | null>>;
   setThreadStatus: (request: Handled<"threads.setStatus">) => Promise<MessageResult<ThreadRecord>>;
   createComment: (request: Handled<"comments.create">) => Promise<MessageResult<CommentRecord>>;
   updateComment: (request: Handled<"comments.update">) => Promise<MessageResult<CommentRecord>>;
@@ -137,6 +161,10 @@ function toIso(value: string): string {
 function toAnchor(value: unknown): Anchor | null {
   const parsed = anchorSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
+}
+
+function toContext(value: unknown): ThreadContext | null {
+  return parseThreadContext(value);
 }
 
 function toPerson(profile: ProfileRow | null, userId: string | null): PersonRecord {
@@ -200,6 +228,8 @@ function toThread(row: ThreadRow): ThreadRecord {
     anchor: toAnchor(row.anchor),
     author: toPerson(row.author, row.created_by),
     createdAt: toIso(row.created_at),
+    context: toContext(row.context),
+    hasScreenshot: row.screenshot_path !== null,
     comments: row.comments.map(toComment).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
   };
 }
@@ -208,6 +238,7 @@ export function createDataService(deps: DataServiceDeps): DataService {
   const { client } = deps;
   const now = deps.now ?? Date.now;
   const memberCache = new Map<string, CachedMembers>();
+  const urlCache = new Map<string, CachedUrl>();
 
   async function currentUserId(): Promise<string | null> {
     try {
@@ -275,6 +306,7 @@ export function createDataService(deps: DataServiceDeps): DataService {
           workspaceName: membership.data.workspaces.name,
           role: membership.data.role,
           userId,
+          captureErrors: enabled.captureErrors,
         });
       }),
 
@@ -289,17 +321,74 @@ export function createDataService(deps: DataServiceDeps): DataService {
         return result.error === null ? success(result.data.map(toThread)) : fail(result.error);
       }),
 
-    createThread: ({ siteId, pageUrl, anchor, context, body, mentions }) =>
+    createThread: ({ siteId, pageUrl, anchor, context, captureId, body, mentions }) =>
       guarded(async () => {
+        const origin = parsePageUrl(pageUrl)?.site;
+        const enabled = origin === undefined ? null : await deps.getEnabledSite(origin);
+        if (enabled?.siteId !== siteId) {
+          return failure("forbidden");
+        }
+        const fitted = fitThreadContext(context);
+        const attachment =
+          captureId === undefined
+            ? null
+            : await deps.screenshots.attach(captureId, enabled.workspaceId);
         const created = await client.rpc("create_thread", {
           p_site_id: siteId,
           p_page_url: pageUrl,
           p_anchor: anchor,
-          p_context: context,
+          p_context: enabled.captureErrors ? fitted : withoutConsoleErrors(fitted),
           p_body: body,
           p_mentions: mentions,
+          ...(attachment === null ? {} : { p_id: attachment.threadId }),
+          ...(attachment?.path == null ? {} : { p_screenshot_path: attachment.path }),
         });
-        return created.error === null ? fetchThread(created.data.id) : fail(created.error);
+        if (created.error !== null) {
+          return fail(created.error);
+        }
+        if (captureId !== undefined) {
+          deps.screenshots.discard(captureId);
+        }
+        return fetchThread(created.data.id);
+      }),
+
+    screenshotUrl: ({ threadId }) =>
+      guarded(async (userId) => {
+        const cached = urlCache.get(threadId);
+        if (cached?.userId === userId && cached.expiresAt - now() > SIGNED_URL_REFRESH_MARGIN_MS) {
+          return success(cached.url);
+        }
+        const row = await client
+          .from("threads")
+          .select("screenshot_path")
+          .eq("id", threadId)
+          .maybeSingle();
+        if (row.error !== null) {
+          return fail(row.error);
+        }
+        if (row.data === null) {
+          return failure("not_found");
+        }
+        if (row.data.screenshot_path === null) {
+          return success(null);
+        }
+        const signed = await client.storage
+          .from(SCREENSHOT_BUCKET)
+          .createSignedUrl(row.data.screenshot_path, SIGNED_URL_TTL_SECONDS);
+        if (signed.error !== null) {
+          return fail(signed.error);
+        }
+        for (const [key, entry] of urlCache) {
+          if (entry.expiresAt <= now()) {
+            urlCache.delete(key);
+          }
+        }
+        urlCache.set(threadId, {
+          userId,
+          url: signed.data.signedUrl,
+          expiresAt: now() + SIGNED_URL_TTL_SECONDS * 1000,
+        });
+        return success(signed.data.signedUrl);
       }),
 
     setThreadStatus: ({ threadId, status }) =>

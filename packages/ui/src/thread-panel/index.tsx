@@ -2,10 +2,11 @@ import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "re
 
 import { CommentItem } from "../comment-item";
 import { Composer, type ComposerSubmission } from "../composer";
+import { ContextSection } from "../context-section";
 import { ICON_BUTTON, PANEL_SURFACE, SECONDARY_BUTTON } from "../control-classes";
 import { useNow } from "../now";
 import { VIEWPORT_MARGIN, placePanel, type AnchorRect } from "../placement";
-import type { PersonView, ThreadView } from "../types";
+import type { PersonView, ScreenshotState, ThreadView } from "../types";
 import { useViewport } from "../viewport";
 import { Z_INDEX } from "../z-index";
 
@@ -17,6 +18,7 @@ export interface ThreadPanelProps {
   canChangeStatus: boolean;
   error?: string | undefined;
   mentionCandidates?: readonly PersonView[] | undefined;
+  screenshot?: ScreenshotState | undefined;
   onSubmit: (submission: ComposerSubmission) => Promise<void>;
   onEditComment: (commentId: string, body: string) => Promise<void>;
   onDeleteComment: (commentId: string) => Promise<void>;
@@ -38,6 +40,7 @@ export function ThreadPanel({
   canChangeStatus,
   error,
   mentionCandidates,
+  screenshot,
   onSubmit,
   onEditComment,
   onDeleteComment,
@@ -122,17 +125,24 @@ export function ThreadPanel({
         </button>
       </div>
       {thread === null ? null : (
-        <ul className="min-h-0 flex-1 divide-y divide-neutral-100 overflow-y-auto px-3">
-          {thread.comments.map((comment) => (
-            <CommentItem
-              key={comment.id}
-              comment={comment}
-              now={now}
-              onEdit={(body) => onEditComment(comment.id, body)}
-              onDelete={() => onDeleteComment(comment.id)}
-            />
-          ))}
-        </ul>
+        <div className="min-h-0 flex-1 overflow-y-auto px-3">
+          <ul className="divide-y divide-neutral-100">
+            {thread.comments.map((comment) => (
+              <CommentItem
+                key={comment.id}
+                comment={comment}
+                now={now}
+                onEdit={(body) => onEditComment(comment.id, body)}
+                onDelete={() => onDeleteComment(comment.id)}
+              />
+            ))}
+          </ul>
+          <ContextSection
+            context={thread.context}
+            hasScreenshot={thread.hasScreenshot}
+            screenshot={screenshot}
+          />
+        </div>
       )}
       <div className={thread === null ? "p-3" : "border-t border-neutral-200 p-3"}>
         <Composer

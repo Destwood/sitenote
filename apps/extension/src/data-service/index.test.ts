@@ -1,8 +1,16 @@
+import type { ThreadContext } from "@sitenote/core";
 import type { SitenoteClient } from "@sitenote/db";
 import { describe, expect, it, vi } from "vitest";
 
 import { failure, success, type DataRequest } from "../messages";
-import { createDataService, toExcerpt, type DataService } from ".";
+import type { ThreadScreenshots } from "../screenshot-upload";
+import {
+  SIGNED_URL_REFRESH_MARGIN_MS,
+  SIGNED_URL_TTL_SECONDS,
+  createDataService,
+  toExcerpt,
+  type DataService,
+} from ".";
 
 const USER_ID = "00000000-0000-4000-8000-000000000002";
 const OTHER_ID = "00000000-0000-4000-8000-000000000003";
@@ -20,6 +28,22 @@ const TEXT_ANCHOR = {
   position: { start: 0, end: 5 },
   container: "body",
 } as const;
+
+const CONTEXT: ThreadContext = {
+  viewport: { width: 1440, height: 900 },
+  devicePixelRatio: 2,
+  pageTitle: "Northwind",
+  url: "https://example.test/pricing?x=1",
+  browser: { name: "Chrome", version: "130" },
+  os: { name: "macOS", version: "14.5" },
+  userAgent: "ua",
+  consoleErrors: [
+    { kind: "error", message: "Boom", at: "2026-10-22T09:30:00.000Z" },
+    { kind: "console.error", message: "Clicked", at: "2026-10-22T09:30:01.000Z" },
+  ],
+  capturedAt: "2026-10-22T09:30:02.000Z",
+};
+const CAPTURE_ID = "60000000-0000-4000-8000-000000000001";
 
 interface Response {
   data: unknown;
@@ -49,11 +73,20 @@ function broken(error: unknown): Response {
   return { data: null, error };
 }
 
+interface SignedCall {
+  bucket: string;
+  path: string;
+  ttl: number;
+}
+
 function createFake(options: {
   session?: boolean | "throws";
   responses: Record<string, Response[]>;
+  signed?: unknown[];
 }) {
   const queries: Query[] = [];
+  const signedCalls: SignedCall[] = [];
+  const signedQueue = [...(options.signed ?? [])];
 
   function chain(target: string, calls: Call[]): unknown {
     const query: Query = { target, calls };
@@ -86,6 +119,18 @@ function createFake(options: {
   const client = {
     from: (table: string) => chain(table, []),
     rpc: (name: string, args: unknown) => chain(`rpc:${name}`, [{ method: "rpc", args: [args] }]),
+    storage: {
+      from: (bucket: string) => ({
+        createSignedUrl: (path: string, ttl: number) => {
+          signedCalls.push({ bucket, path, ttl });
+          const next = signedQueue.shift() ?? {
+            data: { signedUrl: "https://storage.test/signed" },
+            error: null,
+          };
+          return next instanceof Error ? Promise.reject(next) : Promise.resolve(next);
+        },
+      }),
+    },
     auth: {
       getSession: () => {
         if (options.session === "throws") {
@@ -98,28 +143,47 @@ function createFake(options: {
     },
   } as unknown as SitenoteClient;
 
-  return { client, queries };
+  return { client, queries, signedCalls };
 }
 
 function setup(
   responses: Record<string, Response[]>,
-  extra: { session?: boolean | "throws"; enabled?: boolean; now?: () => number } = {},
+  extra: {
+    session?: boolean | "throws";
+    enabled?: boolean;
+    captureErrors?: boolean;
+    now?: () => number;
+    signed?: unknown[];
+    attach?: ThreadScreenshots["attach"];
+  } = {},
 ) {
   const fake = createFake({
     responses,
     ...(extra.session === undefined ? {} : { session: extra.session }),
+    ...(extra.signed === undefined ? {} : { signed: extra.signed }),
   });
   const getEnabledSite = vi.fn(() =>
     Promise.resolve(
-      extra.enabled === false ? null : { siteId: SITE_ID, workspaceId: WORKSPACE_ID },
+      extra.enabled === false
+        ? null
+        : {
+            siteId: SITE_ID,
+            workspaceId: WORKSPACE_ID,
+            captureErrors: extra.captureErrors ?? true,
+          },
     ),
   );
+  const screenshots = {
+    attach: vi.fn<ThreadScreenshots["attach"]>(extra.attach ?? (() => Promise.resolve(null))),
+    discard: vi.fn<ThreadScreenshots["discard"]>(),
+  };
   const service = createDataService({
     client: fake.client,
     getEnabledSite,
+    screenshots,
     ...(extra.now === undefined ? {} : { now: extra.now }),
   });
-  return { service, getEnabledSite, ...fake };
+  return { service, getEnabledSite, screenshots, ...fake };
 }
 
 function profile(id: string, name: string) {
@@ -148,6 +212,8 @@ function threadRow(overrides: Record<string, unknown> = {}) {
     page_url: PAGE_URL,
     anchor: TEXT_ANCHOR,
     status: "open",
+    context: CONTEXT,
+    screenshot_path: null,
     created_at: "2026-10-21T09:00:00+00:00",
     created_by: USER_ID,
     author: profile(USER_ID, "Max Member"),
@@ -249,6 +315,8 @@ describe("listThreads", () => {
           anchor: TEXT_ANCHOR,
           author: { id: USER_ID, displayName: "Max Member", avatarUrl: null },
           createdAt: "2026-10-21T09:00:00.000Z",
+          context: CONTEXT,
+          hasScreenshot: false,
           comments: [
             {
               id: COMMENT_ID,
@@ -372,13 +440,15 @@ describe("createThread", () => {
     siteId: SITE_ID,
     pageUrl: PAGE_URL,
     anchor: TEXT_ANCHOR,
-    context: { viewport: { width: 1, height: 2 } },
+    context: CONTEXT,
     body: "Looks wrong",
     mentions: [OTHER_ID],
   };
+  const WITH_CAPTURE = { ...REQUEST, captureId: CAPTURE_ID };
+  const PATH = `${WORKSPACE_ID}/${THREAD_ID}.webp`;
 
   it("calls the create_thread function and returns the stored thread", async () => {
-    const { service, queries } = setup({
+    const { service, queries, screenshots } = setup({
       "rpc:create_thread": [ok({ id: THREAD_ID })],
       threads: [ok(threadRow())],
     });
@@ -390,10 +460,115 @@ describe("createThread", () => {
       p_site_id: SITE_ID,
       p_page_url: PAGE_URL,
       p_anchor: TEXT_ANCHOR,
-      p_context: { viewport: { width: 1, height: 2 } },
+      p_context: CONTEXT,
       p_body: "Looks wrong",
       p_mentions: [OTHER_ID],
     });
+    expect(screenshots.attach).not.toHaveBeenCalled();
+    expect(screenshots.discard).not.toHaveBeenCalled();
+  });
+
+  it("passes the thread id and the path of the uploaded screenshot and forgets the capture", async () => {
+    const { service, queries, screenshots } = setup(
+      {
+        "rpc:create_thread": [ok({ id: THREAD_ID })],
+        threads: [ok(threadRow({ screenshot_path: PATH }))],
+      },
+      { attach: () => Promise.resolve({ threadId: THREAD_ID, path: PATH }) },
+    );
+
+    const result = await service.createThread(WITH_CAPTURE);
+
+    expect(result.ok && result.data.hasScreenshot).toBe(true);
+    expect(screenshots.attach).toHaveBeenCalledExactlyOnceWith(CAPTURE_ID, WORKSPACE_ID);
+    expect(callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0]).toMatchObject({
+      p_id: THREAD_ID,
+      p_screenshot_path: PATH,
+    });
+    expect(screenshots.discard).toHaveBeenCalledExactlyOnceWith(CAPTURE_ID);
+  });
+
+  it("passes only the thread id when the upload failed", async () => {
+    const { service, queries } = setup(
+      { "rpc:create_thread": [ok({ id: THREAD_ID })], threads: [ok(threadRow())] },
+      { attach: () => Promise.resolve({ threadId: THREAD_ID, path: null }) },
+    );
+
+    const result = await service.createThread(WITH_CAPTURE);
+
+    const args = callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0];
+    expect(args).toMatchObject({ p_id: THREAD_ID });
+    expect(args).not.toHaveProperty("p_screenshot_path");
+    expect(result.ok && result.data.hasScreenshot).toBe(false);
+  });
+
+  it("creates the thread without id and path when the capture is gone", async () => {
+    const { service, queries, screenshots } = setup({
+      "rpc:create_thread": [ok({ id: THREAD_ID })],
+      threads: [ok(threadRow())],
+    });
+
+    await service.createThread(WITH_CAPTURE);
+
+    const args = callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0];
+    expect(args).not.toHaveProperty("p_id");
+    expect(args).not.toHaveProperty("p_screenshot_path");
+    expect(screenshots.discard).toHaveBeenCalledWith(CAPTURE_ID);
+  });
+
+  it("keeps the capture for a retry when the function fails", async () => {
+    const { service, screenshots } = setup(
+      { "rpc:create_thread": [broken({ code: "23514", message: "x" })] },
+      { attach: () => Promise.resolve({ threadId: THREAD_ID, path: PATH }) },
+    );
+
+    await service.createThread(WITH_CAPTURE);
+
+    expect(screenshots.discard).not.toHaveBeenCalled();
+  });
+
+  it("drops the console errors when the site does not capture them", async () => {
+    const { service, queries } = setup(
+      { "rpc:create_thread": [ok({ id: THREAD_ID })], threads: [ok(threadRow())] },
+      { captureErrors: false },
+    );
+
+    await service.createThread(REQUEST);
+
+    expect(callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0]).toMatchObject({
+      p_context: { ...CONTEXT, consoleErrors: [] },
+    });
+  });
+
+  it("removes control characters from the context before storing it", async () => {
+    const { service, queries } = setup({
+      "rpc:create_thread": [ok({ id: THREAD_ID })],
+      threads: [ok(threadRow())],
+    });
+
+    await service.createThread({
+      ...REQUEST,
+      context: { ...CONTEXT, pageTitle: "a\u0000b\uD800" },
+    });
+
+    expect(callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0]).toMatchObject({
+      p_context: { pageTitle: "ab\uFFFD" },
+    });
+  });
+
+  it("is forbidden for a site that is not enabled for the page", async () => {
+    const disabled = setup({}, { enabled: false });
+    expect(await disabled.service.createThread(REQUEST)).toEqual(failure("forbidden"));
+    expect(disabled.queries).toEqual([]);
+
+    const other = setup({});
+    expect(
+      await other.service.createThread({
+        ...REQUEST,
+        siteId: "20000000-0000-4000-8000-0000000000ff",
+      }),
+    ).toEqual(failure("forbidden"));
+    expect(other.queries).toEqual([]);
   });
 
   it("returns the mapped error and reads nothing when the function fails", async () => {
@@ -553,6 +728,7 @@ describe("forOrigin", () => {
         workspaceName: "Northwind",
         role: "guest",
         userId: USER_ID,
+        captureErrors: true,
       }),
     );
     expect(callsOf(queries, "sites")[0]?.map((call) => call.args)).toEqual([
@@ -995,5 +1171,118 @@ describe("countUnreadNotifications", () => {
     const { service } = setup({ notifications: [broken({ code: "PGRST301", message: "jwt" })] });
 
     expect(await service.countUnreadNotifications()).toEqual(failure("unauthorized"));
+  });
+});
+
+describe("thread context and screenshot mapping", () => {
+  it("maps an invalid or empty stored context to null and keeps the thread", async () => {
+    const { service } = setup({
+      threads: [
+        ok([
+          threadRow({ context: {} }),
+          threadRow({ id: "30000000-0000-4000-8000-000000000002", context: { viewport: "wide" } }),
+          threadRow({ id: "30000000-0000-4000-8000-000000000003", context: null }),
+        ]),
+      ],
+    });
+
+    const result = await service.listThreads(LIST);
+
+    expect(result.ok && result.data.map((thread) => thread.context)).toEqual([null, null, null]);
+  });
+
+  it("reports whether a screenshot path is stored", async () => {
+    const { service } = setup({
+      threads: [
+        ok([
+          threadRow({ screenshot_path: `${WORKSPACE_ID}/${THREAD_ID}.webp` }),
+          threadRow({ id: "30000000-0000-4000-8000-000000000002" }),
+        ]),
+      ],
+    });
+
+    const result = await service.listThreads(LIST);
+
+    expect(result.ok && result.data.map((thread) => thread.hasScreenshot)).toEqual([true, false]);
+  });
+
+  it("selects the context and the screenshot path with the thread", async () => {
+    const { service, queries } = setup({ threads: [ok([])] });
+
+    await service.listThreads(LIST);
+
+    const select = String(callsOf(queries, "threads")[0]?.[0]?.args[0]);
+    expect(select).toContain("context, screenshot_path");
+  });
+});
+
+describe("screenshotUrl", () => {
+  const REQUEST = { type: "threads.screenshotUrl", threadId: THREAD_ID } as const;
+  const PATH = `${WORKSPACE_ID}/${THREAD_ID}.webp`;
+  const HOUR_MS = SIGNED_URL_TTL_SECONDS * 1000;
+
+  it("signs the stored path for one hour", async () => {
+    const { service, signedCalls, queries } = setup({
+      threads: [ok({ screenshot_path: PATH })],
+    });
+
+    expect(await service.screenshotUrl(REQUEST)).toEqual(success("https://storage.test/signed"));
+
+    expect(signedCalls).toEqual([{ bucket: "screenshots", path: PATH, ttl: 3600 }]);
+    expect(callsOf(queries, "threads")[0]?.map((call) => call.args)).toEqual([
+      ["screenshot_path"],
+      ["id", THREAD_ID],
+      [],
+    ]);
+  });
+
+  it("answers null for a thread without a screenshot and not found for a hidden thread", async () => {
+    const none = setup({ threads: [ok({ screenshot_path: null })] });
+    expect(await none.service.screenshotUrl(REQUEST)).toEqual(success(null));
+    expect(none.signedCalls).toEqual([]);
+
+    const hidden = setup({ threads: [ok(null)] });
+    expect(await hidden.service.screenshotUrl(REQUEST)).toEqual(failure("not_found"));
+  });
+
+  it("reuses a signed url until five minutes before it expires", async () => {
+    let now = 1_000_000;
+    const { service, signedCalls } = setup(
+      { threads: [ok({ screenshot_path: PATH }), ok({ screenshot_path: PATH })] },
+      {
+        now: () => now,
+        signed: [
+          { data: { signedUrl: "https://storage.test/one" }, error: null },
+          { data: { signedUrl: "https://storage.test/two" }, error: null },
+        ],
+      },
+    );
+
+    expect(await service.screenshotUrl(REQUEST)).toEqual(success("https://storage.test/one"));
+    now += HOUR_MS - SIGNED_URL_REFRESH_MARGIN_MS - 1;
+    expect(await service.screenshotUrl(REQUEST)).toEqual(success("https://storage.test/one"));
+    expect(signedCalls).toHaveLength(1);
+
+    now += 1;
+    expect(await service.screenshotUrl(REQUEST)).toEqual(success("https://storage.test/two"));
+    expect(signedCalls).toHaveLength(2);
+  });
+
+  it("does not cache failures", async () => {
+    const { service, signedCalls } = setup(
+      { threads: [ok({ screenshot_path: PATH }), ok({ screenshot_path: PATH })] },
+      { signed: [{ data: null, error: { message: "boom", status: 500 } }] },
+    );
+
+    expect((await service.screenshotUrl(REQUEST)).ok).toBe(false);
+    expect(await service.screenshotUrl(REQUEST)).toEqual(success("https://storage.test/signed"));
+    expect(signedCalls).toHaveLength(2);
+  });
+
+  it("answers unauthorized without a session", async () => {
+    const { service, queries } = setup({}, { session: false });
+
+    expect(await service.screenshotUrl(REQUEST)).toEqual(failure("unauthorized"));
+    expect(queries).toEqual([]);
   });
 });
