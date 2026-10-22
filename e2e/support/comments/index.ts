@@ -30,13 +30,14 @@ export async function openReviewPage(
   email: string,
   path: string,
   origin: string = FIXTURE_ORIGIN,
+  workspaceName: string = WORKSPACE_NAME,
 ): Promise<ReviewSession> {
   const popup = await openPopup(context, extensionId);
   await signIn(popup, email);
   const page = await context.newPage();
   await page.goto(`${origin}${path}`);
   await pointPopupAt(popup, extensionId, page, `${origin}${path}`);
-  await enableSite(popup, WORKSPACE_NAME);
+  await enableSite(popup, workspaceName);
   await expect(hostOf(page)).toHaveAttribute("data-live", "true");
   return { page, popup };
 }
@@ -46,11 +47,19 @@ export async function openInSecondContext(
   baseURL: string | undefined,
   email: string,
   path: string,
+  workspaceName: string = WORKSPACE_NAME,
 ): Promise<{ context: BrowserContext; session: ReviewSession }> {
   const context = await launchExtensionContext(headless, baseURL);
   try {
     const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
-    const session = await openReviewPage(context, new URL(worker.url()).host, email, path);
+    const session = await openReviewPage(
+      context,
+      new URL(worker.url()).host,
+      email,
+      path,
+      FIXTURE_ORIGIN,
+      workspaceName,
+    );
     return { context, session };
   } catch (error) {
     await context.close();
