@@ -80,11 +80,11 @@ Done when: owner, member and guest flows pass e2e.
 
 ### Phase 5 — Automatic context
 
-- [ ] Background screenshot: scroll element into view, `captureVisibleTab`, crop by rect and device pixel ratio, upload, signed URL
-- [ ] Context record: viewport, DPR, browser, OS, page title
-- [ ] MAIN-world console error buffer (last 20 errors and unhandled rejections) with nonce messaging and a per-site toggle
-- [ ] Thread panel shows the screenshot and context
-- [ ] E2E: screenshot exists and matches the element area; console error from the fixture appears in context
+- [x] Background screenshot: scroll element into view, `captureVisibleTab`, crop by rect and device pixel ratio, upload, signed URL (needs `activeTab`, see D-097)
+- [x] Context record: viewport, DPR, browser, OS, page title
+- [x] MAIN-world console error buffer (last 20 errors and unhandled rejections) with nonce messaging and a per-site toggle
+- [x] Thread panel shows the screenshot and context
+- [x] E2E: screenshot exists and matches the element area; console error from the fixture appears in context
 
 Done when: every new thread carries context and failures degrade gracefully.
 

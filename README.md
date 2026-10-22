@@ -89,6 +89,10 @@ On an enabled site, open comment mode from the popup or with `Alt+Shift+C`: the 
 
 The end-to-end suite covers this on the fixture site and on `https://example.com` (it needs network access): `pnpm e2e` after `pnpm db:start && pnpm db:env`.
 
+## Context of a comment
+
+Every new thread stores the page context: a screenshot of the commented element or text (16 px of padding, WebP), the viewport and device pixel ratio, browser and system, the page title and URL, and the last 20 console errors, unhandled rejections and `console.error` calls of the page. The thread panel shows them under the comments. The popup's site panel has a "Capture console errors" switch per site. Chrome allows the screenshot only for a tab on which Sitenote was started from the toolbar popup or with `Alt+Shift+C` (`activeTab`, see D-097); without it the comment is saved without a screenshot and a notice says so.
+
 ## Docs
 
 - [Design](docs/plans/2026-10-20-sitenote-design.md)
