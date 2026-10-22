@@ -2,11 +2,12 @@ import type { Anchor } from "@sitenote/core";
 import { describe, expect, it } from "vitest";
 
 import { ORPHANED, type Resolution } from "../anchor-target";
-import type { CommentRecord, SiteInfo, ThreadRecord } from "../transport";
+import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "../transport";
 import {
   ANCHOR_LABEL_LIMIT,
   UNKNOWN_ANCHOR_LABEL,
   anchorLabel,
+  buildMentionCandidates,
   buildThreadViews,
   canChangeStatus,
   upsertComment,
@@ -40,6 +41,7 @@ function comment(overrides: Partial<CommentRecord> = {}): CommentRecord {
     createdAt: "2026-10-21T10:00:00.000Z",
     editedAt: null,
     deleted: false,
+    mentions: [],
     ...overrides,
   };
 }
@@ -158,6 +160,55 @@ describe("buildThreadViews", () => {
       author: { id: ME },
       anchorLabel: UNKNOWN_ANCHOR_LABEL,
     });
+  });
+});
+
+const MAX: MemberRecord = { id: ME, displayName: "Max Member", avatarUrl: null, role: "member" };
+const MEMBERS: MemberRecord[] = [
+  MAX,
+  { id: OTHER, displayName: "Olena Owner", avatarUrl: "https://cdn.test/o.png", role: "owner" },
+];
+
+describe("buildThreadViews mentions", () => {
+  it("resolves the mentioned ids to the display names of the members", () => {
+    const mentioning = comment({ body: "cc @Olena Owner", mentions: [OTHER] });
+
+    const [view] = buildThreadViews([thread({ comments: [mentioning] })], new Map(), ME, MEMBERS);
+
+    expect(view?.comments[0]?.mentions).toEqual([{ id: OTHER, displayName: "Olena Owner" }]);
+  });
+
+  it("leaves out people who are no longer members and shows no mentions before the members arrive", () => {
+    const mentioning = comment({ body: "cc @Olena Owner", mentions: [OTHER] });
+
+    const [withoutMembers] = buildThreadViews([thread({ comments: [mentioning] })], new Map(), ME);
+    const [withOthers] = buildThreadViews([thread({ comments: [mentioning] })], new Map(), ME, [
+      MAX,
+    ]);
+
+    expect(withoutMembers?.comments[0]?.mentions).toEqual([]);
+    expect(withOthers?.comments[0]?.mentions).toEqual([]);
+  });
+
+  it("drops the mentions of a deleted comment", () => {
+    const removed = comment({ deleted: true, body: "", mentions: [OTHER] });
+
+    const [view] = buildThreadViews([thread({ comments: [removed] })], new Map(), ME, MEMBERS);
+
+    expect(view?.comments[0]?.mentions).toEqual([]);
+  });
+});
+
+describe("buildMentionCandidates", () => {
+  it("offers every member except the viewer, without their role", () => {
+    expect(buildMentionCandidates(MEMBERS, ME)).toEqual([
+      { id: OTHER, displayName: "Olena Owner", avatarUrl: "https://cdn.test/o.png" },
+    ]);
+  });
+
+  it("offers nobody when the viewer is alone", () => {
+    expect(buildMentionCandidates([MAX], ME)).toEqual([]);
+    expect(buildMentionCandidates([], ME)).toEqual([]);
   });
 });
 

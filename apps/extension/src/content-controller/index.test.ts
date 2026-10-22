@@ -4,9 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vite
 import { ORPHANED, type Resolution } from "../anchor-target";
 import { failure, success, type MessageResult } from "../messages";
 import type { PageConnectionOptions } from "../page-connection";
-import type { CommentRecord, SiteInfo, ThreadRecord } from "../transport";
+import type { ResolvedPreference } from "../resolved-preference";
+import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "../transport";
 import {
   COMMENT_CURSOR_CSS,
+  PREFERENCE_FAILED_MESSAGE,
   PENDING_ID,
   UNSUPPORTED_SELECTION_MESSAGE,
   createContentController,
@@ -28,6 +30,18 @@ const THREAD_ID = "30000000-0000-4000-8000-000000000001";
 const SECOND_THREAD_ID = "30000000-0000-4000-8000-000000000002";
 const COMMENT_ID = "40000000-0000-4000-8000-000000000001";
 const AUTHOR = { id: ME, displayName: "Me", avatarUrl: null };
+const OLENA = "00000000-0000-4000-8000-000000000001";
+const MEMBERS: MemberRecord[] = [
+  { id: OLENA, displayName: "Olena Owner", avatarUrl: null, role: "owner" },
+  { id: ME, displayName: "Me", avatarUrl: null, role: "member" },
+];
+
+function memoryPreference(initial = false) {
+  return {
+    load: vi.fn<ResolvedPreference["load"]>().mockResolvedValue(initial),
+    save: vi.fn<ResolvedPreference["save"]>().mockResolvedValue(undefined),
+  };
+}
 
 let host: HTMLElement;
 let controller: ContentController | null = null;
@@ -90,6 +104,7 @@ function comment(overrides: Partial<CommentRecord> = {}): CommentRecord {
     createdAt: "2026-10-21T10:00:00.000Z",
     editedAt: null,
     deleted: false,
+    mentions: [],
     ...overrides,
   };
 }
@@ -135,6 +150,9 @@ async function setup(
     if (request.type === "threads.list") {
       return Promise.resolve(success(threads));
     }
+    if (request.type === "members.list") {
+      return Promise.resolve(success(MEMBERS));
+    }
     return Promise.resolve(failure("unknown"));
   });
   const created = createContentController({
@@ -143,6 +161,7 @@ async function setup(
     origin: "http://localhost:3000",
     isOwn: (node) => node !== null && (node === host || host.contains(node)),
     send: send as unknown as ContentControllerDeps["send"],
+    preference: memoryPreference(),
     openConnection: (options) => {
       connection.options = options;
       return { update: connection.update, close: vi.fn() };
@@ -503,7 +522,7 @@ describe("creating a thread", () => {
       "threads.create": () => success(created),
     });
 
-    await api.submitNewThread("  Looks off  ");
+    await api.submitNewThread({ body: "  Looks off  ", mentions: [] });
 
     const request = send.mock.calls.find((call) => call[0].type === "threads.create")?.[0];
     expect(request).toMatchObject({
@@ -528,7 +547,9 @@ describe("creating a thread", () => {
       "threads.create": () => (fail ? failure("network") : success(created)),
     });
 
-    await expect(api.submitNewThread("Looks off")).rejects.toThrow("could not reach the server");
+    await expect(api.submitNewThread({ body: "Looks off", mentions: [] })).rejects.toThrow(
+      "could not reach the server",
+    );
 
     expect(state().pending).not.toBeNull();
     expect(state().panelError).toContain("could not reach the server");
@@ -552,8 +573,8 @@ describe("creating a thread", () => {
         }),
     });
 
-    const first = api.submitNewThread("One");
-    await expect(api.submitNewThread("One")).rejects.toThrow();
+    const first = api.submitNewThread({ body: "One", mentions: [] });
+    await expect(api.submitNewThread({ body: "One", mentions: [] })).rejects.toThrow();
     release(success(thread()));
 
     await expect(first).resolves.toBeUndefined();
@@ -568,7 +589,7 @@ describe("creating a thread", () => {
         }),
     });
 
-    const submitted = api.submitNewThread("One");
+    const submitted = api.submitNewThread({ body: "One", mentions: [] });
     window.history.pushState({}, "", "/elsewhere");
     release(success(thread()));
     await submitted;
@@ -579,7 +600,7 @@ describe("creating a thread", () => {
   it("rejects when there is no pending thread", async () => {
     const { controller: api } = await setup();
 
-    await expect(api.submitNewThread("Hello")).rejects.toThrow();
+    await expect(api.submitNewThread({ body: "Hello", mentions: [] })).rejects.toThrow();
   });
 
   it("closes the pending thread without sending anything", async () => {
@@ -605,7 +626,7 @@ describe("comments and status", () => {
       "comments.create": () => success(reply),
     });
 
-    await api.reply(THREAD_ID, "Reply");
+    await api.reply(THREAD_ID, { body: "Reply", mentions: [] });
 
     expect(send).toHaveBeenCalledWith({
       type: "comments.create",
@@ -621,7 +642,9 @@ describe("comments and status", () => {
       "comments.create": () => failure("forbidden"),
     });
 
-    await expect(api.reply(THREAD_ID, "Reply")).rejects.toThrow("do not have permission");
+    await expect(api.reply(THREAD_ID, { body: "Reply", mentions: [] })).rejects.toThrow(
+      "do not have permission",
+    );
 
     expect(state().panelError).toContain("do not have permission");
     expect(state().threads[0]?.comments).toHaveLength(1);
@@ -909,5 +932,240 @@ describe("stop", () => {
     expect(() => {
       api.stop();
     }).not.toThrow();
+  });
+});
+
+describe("members and mentions", () => {
+  it("loads the members of the workspace once the site is known", async () => {
+    const { state, requests } = await setup([thread()]);
+
+    await vi.waitFor(() => {
+      expect(state().members).toEqual(MEMBERS);
+    });
+    expect(requests()).toContainEqual({ type: "members.list", workspaceId: SITE.workspaceId });
+  });
+
+  it("does not ask for members when the site is not enabled", async () => {
+    const { requests } = await setup([], { "sites.forOrigin": () => success(null) });
+
+    expect(requests().map((request) => request.type)).not.toContain("members.list");
+  });
+
+  it("keeps working without members when the request fails", async () => {
+    const { state, controller: api } = await setup([thread()], {
+      "members.list": () => failure("network"),
+    });
+
+    api.selectThread(THREAD_ID);
+
+    expect(state().members).toEqual([]);
+    expect(state().activeThreadId).toBe(THREAD_ID);
+  });
+
+  it("keeps the same list when the members did not change", async () => {
+    const { state, controller: api } = await setup([thread()]);
+    await vi.waitFor(() => {
+      expect(state().members).toEqual(MEMBERS);
+    });
+    const before = state().members;
+
+    api.selectThread(THREAD_ID);
+    await Promise.resolve();
+
+    expect(state().members).toBe(before);
+  });
+
+  it("asks again when a thread or a new comment is opened and takes up changes", async () => {
+    const lists: MemberRecord[][] = [[], MEMBERS];
+    const {
+      controller: api,
+      state,
+      requests,
+    } = await setup([thread()], {
+      "members.list": () => success(lists.shift() ?? MEMBERS),
+    });
+    expect(state().members).toEqual([]);
+
+    api.selectThread(THREAD_ID);
+
+    await vi.waitFor(() => {
+      expect(state().members).toEqual(MEMBERS);
+    });
+    expect(requests().filter((request) => request.type === "members.list")).toHaveLength(2);
+  });
+
+  it("sends the picked mentions with a new thread", async () => {
+    const created = thread({ comments: [comment({ body: "@Olena Owner hi", mentions: [OLENA] })] });
+    const { controller: api, send } = await setup([], { "threads.create": () => success(created) });
+    api.toggleCommentMode();
+    under = element("#cta");
+    element("#cta").dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }),
+    );
+
+    await api.submitNewThread({ body: "@Olena Owner hi", mentions: [OLENA] });
+
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "threads.create",
+        body: "@Olena Owner hi",
+        mentions: [OLENA],
+      }),
+    );
+  });
+
+  it("sends the picked mentions with a reply", async () => {
+    const reply = comment({
+      id: "40000000-0000-4000-8000-000000000002",
+      body: "@Olena Owner ping",
+      mentions: [OLENA],
+    });
+    const {
+      controller: api,
+      send,
+      state,
+    } = await setup([thread()], {
+      "comments.create": () => success(reply),
+    });
+
+    await api.reply(THREAD_ID, { body: "@Olena Owner ping", mentions: [OLENA] });
+
+    expect(send).toHaveBeenCalledWith({
+      type: "comments.create",
+      threadId: THREAD_ID,
+      body: "@Olena Owner ping",
+      mentions: [OLENA],
+    });
+    expect(state().threads[0]?.comments.at(-1)?.mentions).toEqual([OLENA]);
+  });
+});
+
+describe("showing resolved threads", () => {
+  const resolvedThread = () => thread({ status: "resolved" });
+
+  class VisibleObserver {
+    constructor(private readonly callback: IntersectionObserverCallback) {}
+
+    observe(target: Element): void {
+      queueMicrotask(() => {
+        this.callback(
+          [{ isIntersecting: true, target } as IntersectionObserverEntry],
+          this as unknown as IntersectionObserver,
+        );
+      });
+    }
+
+    unobserve(): void {
+      return;
+    }
+
+    disconnect(): void {
+      return;
+    }
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal("IntersectionObserver", VisibleObserver);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function flushFrames(): Promise<void> {
+    for (let round = 0; round < 3; round += 1) {
+      await Promise.resolve();
+      for (const frame of frames.splice(0)) {
+        frame();
+      }
+    }
+  }
+
+  it("hides resolved pins by default and shows them when the toggle is on", async () => {
+    const { controller: api, state } = await setup([resolvedThread()]);
+    await flushFrames();
+    expect(state().showResolved).toBe(false);
+    expect(state().positions.has(THREAD_ID)).toBe(false);
+
+    api.setShowResolved(true);
+    await flushFrames();
+
+    expect(state().showResolved).toBe(true);
+    expect(state().positions.has(THREAD_ID)).toBe(true);
+
+    api.setShowResolved(false);
+    await flushFrames();
+
+    expect(state().positions.has(THREAD_ID)).toBe(false);
+  });
+
+  it("always tracks open threads and the resolved thread that is open in the panel", async () => {
+    const { controller: api, state } = await setup([
+      resolvedThread(),
+      thread({ id: SECOND_THREAD_ID, anchor: COPY_ANCHOR, createdAt: "2026-10-21T11:00:00.000Z" }),
+    ]);
+    await flushFrames();
+    expect(state().positions.has(SECOND_THREAD_ID)).toBe(true);
+    expect(state().positions.has(THREAD_ID)).toBe(false);
+
+    api.selectThread(THREAD_ID);
+    await flushFrames();
+
+    expect(state().positions.has(THREAD_ID)).toBe(true);
+  });
+
+  it("restores the saved choice for the site", async () => {
+    const preference = memoryPreference(true);
+    const { state } = await setup([resolvedThread()], {}, { preference });
+
+    await vi.waitFor(() => {
+      expect(state().showResolved).toBe(true);
+    });
+    expect(preference.load).toHaveBeenCalledExactlyOnceWith(SITE.siteId);
+  });
+
+  it("saves every change for the site", async () => {
+    const preference = memoryPreference();
+    const { controller: api } = await setup([resolvedThread()], {}, { preference });
+
+    api.setShowResolved(true);
+    api.setShowResolved(true);
+    api.setShowResolved(false);
+
+    expect(preference.save.mock.calls).toEqual([
+      [SITE.siteId, true],
+      [SITE.siteId, false],
+    ]);
+  });
+
+  it("tells the user when the choice could not be saved but keeps it for this visit", async () => {
+    const preference = memoryPreference();
+    preference.save.mockRejectedValue(new Error("quota"));
+    const { controller: api, state } = await setup([resolvedThread()], {}, { preference });
+
+    api.setShowResolved(true);
+
+    await vi.waitFor(() => {
+      expect(state().toasts.map((toast) => toast.message)).toEqual([PREFERENCE_FAILED_MESSAGE]);
+    });
+    expect(state().showResolved).toBe(true);
+  });
+
+  it("does not override a choice made before the saved one arrived", async () => {
+    const preference = memoryPreference();
+    let release: (value: boolean) => void = () => undefined;
+    preference.load.mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const { controller: api, state } = await setup([resolvedThread()], {}, { preference });
+
+    api.setShowResolved(true);
+    release(false);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(state().showResolved).toBe(true);
   });
 });

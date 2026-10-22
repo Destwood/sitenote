@@ -1,8 +1,8 @@
 import type { Anchor } from "@sitenote/core";
-import type { CommentView, ThreadView } from "@sitenote/ui";
+import type { CommentView, PersonView, ThreadView } from "@sitenote/ui";
 
 import type { Resolution } from "../anchor-target";
-import type { CommentRecord, SiteInfo, ThreadRecord } from "../transport";
+import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "../transport";
 
 export const ANCHOR_LABEL_LIMIT = 80;
 export const UNKNOWN_ANCHOR_LABEL = "Unknown location";
@@ -24,7 +24,20 @@ export function canChangeStatus(site: SiteInfo, thread: ThreadRecord): boolean {
   return site.role !== "guest" || thread.author.id === site.userId;
 }
 
-function toCommentView(comment: CommentRecord, userId: string): CommentView {
+export function buildMentionCandidates(
+  members: readonly MemberRecord[],
+  userId: string,
+): PersonView[] {
+  return members
+    .filter((member) => member.id !== userId)
+    .map(({ id, displayName, avatarUrl }) => ({ id, displayName, avatarUrl }));
+}
+
+function toCommentView(
+  comment: CommentRecord,
+  userId: string,
+  names: ReadonlyMap<string, string>,
+): CommentView {
   return {
     id: comment.id,
     author: comment.author,
@@ -33,6 +46,12 @@ function toCommentView(comment: CommentRecord, userId: string): CommentView {
     editedAt: comment.editedAt,
     deleted: comment.deleted,
     canEdit: !comment.deleted && comment.author.id === userId,
+    mentions: comment.deleted
+      ? []
+      : comment.mentions.flatMap((id) => {
+          const displayName = names.get(id);
+          return displayName === undefined ? [] : [{ id, displayName }];
+        }),
   };
 }
 
@@ -40,7 +59,9 @@ export function buildThreadViews(
   threads: readonly ThreadRecord[],
   resolutions: ReadonlyMap<string, Resolution>,
   userId: string,
+  members: readonly MemberRecord[] = [],
 ): ThreadView[] {
+  const names = new Map(members.map((member) => [member.id, member.displayName]));
   return [...threads]
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
     .map((thread, index) => ({
@@ -49,7 +70,7 @@ export function buildThreadViews(
       number: index + 1,
       author: thread.author,
       createdAt: thread.createdAt,
-      comments: thread.comments.map((comment) => toCommentView(comment, userId)),
+      comments: thread.comments.map((comment) => toCommentView(comment, userId, names)),
       orphaned: resolutions.get(thread.id)?.status !== "resolved",
       anchorLabel: anchorLabel(thread.anchor),
     }));
