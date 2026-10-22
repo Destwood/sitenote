@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { failure, success, type AuthState } from "../messages";
-import { PopupApp } from ".";
+import { PopupApp, notificationsTabLabel } from ".";
 
 const mocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
@@ -17,6 +17,20 @@ vi.mock("../message-client", () => ({
 
 vi.mock("../site-panel", () => ({
   SitePanel: ({ webUrl }: { webUrl: string }) => <div data-testid="site-panel">{webUrl}</div>,
+}));
+
+vi.mock("../notifications-panel", () => ({
+  NotificationsPanel: ({ onUnreadChange }: { onUnreadChange: (unread: number) => void }) => (
+    <button
+      type="button"
+      data-testid="notifications-panel"
+      onClick={() => {
+        onUnreadChange(3);
+      }}
+    >
+      report unread
+    </button>
+  ),
 }));
 
 const WEB_URL = "https://web.test";
@@ -90,6 +104,84 @@ describe("PopupApp", () => {
     render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
 
     expect((await screen.findByTestId("site-panel")).textContent).toBe(WEB_URL);
+  });
+
+  it("labels the notifications tab with the unread count", () => {
+    expect(notificationsTabLabel(0)).toBe("Notifications");
+    expect(notificationsTabLabel(1)).toBe("Notifications (1)");
+    expect(notificationsTabLabel(120)).toBe("Notifications (120)");
+  });
+
+  it("shows the Site tab first and the notifications panel hidden behind its tab", async () => {
+    const user = userEvent.setup();
+    mocks.sendMessage.mockResolvedValue(success(SIGNED_IN));
+    render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
+    await screen.findByTestId("site-panel");
+
+    const site = screen.getByRole("tab", { name: "Site" });
+    const notifications = screen.getByRole("tab", { name: "Notifications" });
+    expect(site.getAttribute("aria-selected")).toBe("true");
+    expect(notifications.getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByRole("tabpanel", { name: "Site" })).toBeTruthy();
+    expect(screen.queryByRole("tabpanel", { name: "Notifications" })).toBeNull();
+
+    await user.click(notifications);
+
+    expect(notifications.getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tabpanel", { name: "Notifications" })).toBeTruthy();
+    expect(screen.queryByRole("tabpanel", { name: "Site" })).toBeNull();
+    expect(notifications.getAttribute("aria-controls")).toBe(
+      screen.getByRole("tabpanel", { name: "Notifications" }).getAttribute("id"),
+    );
+  });
+
+  it("shows the unread count reported by the notifications panel in its tab", async () => {
+    const user = userEvent.setup();
+    mocks.sendMessage.mockResolvedValue(success(SIGNED_IN));
+    render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
+    await screen.findByTestId("site-panel");
+
+    await user.click(screen.getByRole("tab", { name: "Notifications" }));
+    await user.click(screen.getByTestId("notifications-panel"));
+
+    expect(screen.getByRole("tab", { name: "Notifications (3)" })).toBeTruthy();
+  });
+
+  it("moves between the tabs with the arrow keys, Home and End", async () => {
+    const user = userEvent.setup();
+    mocks.sendMessage.mockResolvedValue(success(SIGNED_IN));
+    render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
+    await screen.findByTestId("site-panel");
+    const site = screen.getByRole("tab", { name: "Site" });
+    const notifications = screen.getByRole("tab", { name: "Notifications" });
+
+    site.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(document.activeElement).toBe(notifications);
+    expect(notifications.getAttribute("aria-selected")).toBe("true");
+    expect(notifications.getAttribute("tabindex")).toBe("0");
+    expect(site.getAttribute("tabindex")).toBe("-1");
+
+    await user.keyboard("{ArrowRight}");
+    expect(document.activeElement).toBe(site);
+
+    await user.keyboard("{ArrowLeft}");
+    expect(document.activeElement).toBe(notifications);
+
+    await user.keyboard("{Home}");
+    expect(document.activeElement).toBe(site);
+
+    await user.keyboard("{End}");
+    expect(document.activeElement).toBe(notifications);
+  });
+
+  it("does not show the tabs to a signed-out user", async () => {
+    mocks.sendMessage.mockResolvedValue(success(SIGNED_OUT));
+    render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
+    await screen.findByLabelText("Email");
+
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.queryByTestId("notifications-panel")).toBeNull();
   });
 
   it("follows a state broadcast from the background", async () => {

@@ -220,7 +220,35 @@ describe("ThreadPanel", () => {
     await user.type(screen.getByRole("textbox", { name: "Reply" }), "Thanks");
     await user.click(screen.getByRole("button", { name: "Reply" }));
 
-    expect(onSubmit).toHaveBeenCalledExactlyOnceWith("Thanks");
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith({ body: "Thanks", mentions: [] });
+  });
+
+  it("offers mention suggestions in the reply composer and reports the picks", async () => {
+    const user = userEvent.setup();
+    const candidates = [{ id: "u-max", displayName: "Max Member", avatarUrl: null }];
+    const { onSubmit } = renderPanel({ mentionCandidates: candidates });
+
+    await user.type(screen.getByRole("textbox", { name: "Reply" }), "@ma");
+    await user.keyboard("{Enter}");
+    await user.click(screen.getByRole("button", { name: "Reply" }));
+
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith({
+      body: "@Max Member",
+      mentions: ["u-max"],
+    });
+  });
+
+  it("keeps the editing composer free of mention suggestions", async () => {
+    const user = userEvent.setup();
+    renderPanel({
+      thread: makeThread({ comments: [makeComment({ canEdit: true })] }),
+      mentionCandidates: [{ id: "u-max", displayName: "Max Member", avatarUrl: null }],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.type(screen.getByRole("textbox", { name: "Edit comment" }), " @ma");
+
+    expect(screen.queryByRole("listbox")).toBeNull();
   });
 
   it("passes the error to the reply composer", () => {
@@ -289,7 +317,7 @@ describe("ThreadPanel", () => {
 
       await user.keyboard("First comment{Control>}{Enter}{/Control}");
 
-      expect(onSubmit).toHaveBeenCalledExactlyOnceWith("First comment");
+      expect(onSubmit).toHaveBeenCalledExactlyOnceWith({ body: "First comment", mentions: [] });
     });
 
     it("closes with Cancel and with Escape", async () => {

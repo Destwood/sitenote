@@ -448,6 +448,37 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      accept_invite: {
+        Args: { p_display_name?: string; p_token: string };
+        Returns: {
+          role: Database["public"]["Enums"]["member_role"];
+          workspace_id: string;
+        }[];
+      };
+      create_invite: {
+        Args: {
+          p_expires_in?: string;
+          p_role: Database["public"]["Enums"]["member_role"];
+          p_workspace_id: string;
+        };
+        Returns: {
+          created_at: string;
+          created_by: string | null;
+          expires_at: string;
+          id: string;
+          revoked_at: string | null;
+          role: Database["public"]["Enums"]["member_role"];
+          token: string;
+          updated_at: string;
+          workspace_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "invites";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       create_thread: {
         Args: {
           p_anchor: Json;
@@ -480,6 +511,15 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      invite_preview: {
+        Args: { p_token: string };
+        Returns: {
+          expires_at: string;
+          role: Database["public"]["Enums"]["member_role"];
+          valid: boolean;
+          workspace_name: string;
+        }[];
       };
     };
     Enums: {

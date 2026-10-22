@@ -283,7 +283,7 @@ describe("table security posture", () => {
 });
 
 describe("functions and schemas", () => {
-  it("defines only create_thread in the public schema, as a security invoker with a pinned search path", async () => {
+  it("defines only the documented functions in the public schema, each with a pinned search path", async () => {
     const rows = await withDb((db) =>
       db.query<{
         proname: string;
@@ -299,15 +299,41 @@ describe("functions and schemas", () => {
                 exists (select 1 from aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a where a.grantee = 0) as public_exec
          from pg_proc p
          where p.pronamespace = 'public'::regnamespace
-           and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')`,
+           and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
+         order by 1`,
       ),
     );
+    const pinned = ['search_path=""'];
     expect(rows.rows).toEqual([
+      {
+        proname: "accept_invite",
+        prosecdef: true,
+        proconfig: pinned,
+        anon: false,
+        authenticated: true,
+        public_exec: false,
+      },
+      {
+        proname: "create_invite",
+        prosecdef: false,
+        proconfig: pinned,
+        anon: false,
+        authenticated: true,
+        public_exec: false,
+      },
       {
         proname: "create_thread",
         prosecdef: false,
-        proconfig: ['search_path=""'],
+        proconfig: pinned,
         anon: false,
+        authenticated: true,
+        public_exec: false,
+      },
+      {
+        proname: "invite_preview",
+        prosecdef: true,
+        proconfig: pinned,
+        anon: true,
         authenticated: true,
         public_exec: false,
       },
@@ -370,14 +396,14 @@ describe("functions and schemas", () => {
 });
 
 describe("realtime publication", () => {
-  it("publishes threads and comments only", async () => {
+  it("publishes threads, comments and notifications only", async () => {
     const rows = await withDb((db) =>
       db.query<{ tablename: string }>(
         `select tablename from pg_publication_tables
          where pubname = 'supabase_realtime' and schemaname = 'public' order by 1`,
       ),
     );
-    expect(rows.rows.map((row) => row.tablename)).toEqual(["comments", "threads"]);
+    expect(rows.rows.map((row) => row.tablename)).toEqual(["comments", "notifications", "threads"]);
   });
 });
 

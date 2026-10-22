@@ -5,7 +5,7 @@ import {
   parsePageUrl,
   type Anchor,
 } from "@sitenote/core";
-import type { AnchorRect, ToastView } from "@sitenote/ui";
+import type { AnchorRect, ComposerSubmission, ToastView } from "@sitenote/ui";
 
 import {
   ORPHANED,
@@ -22,10 +22,11 @@ import { ERROR_MESSAGES } from "../messages";
 import { createPageSession, type PageSessionDeps, type PageSessionState } from "../page-session";
 import type { PageSessionStatus } from "../page-session";
 import { createPinTracker, type Measurements, type TrackedTarget } from "../pin-tracker";
+import type { ResolvedPreference } from "../resolved-preference";
 import { watchSelection } from "../selection-watcher";
 import { createStore, type Store } from "../store";
 import { createTextHighlighter } from "../text-highlighter";
-import type { SiteInfo, ThreadRecord } from "../transport";
+import type { MemberRecord, SiteInfo, ThreadRecord } from "../transport";
 import { watchPageUrl } from "../url-watcher";
 import { upsertComment, upsertThread } from "../view-model";
 
@@ -33,6 +34,7 @@ export const PENDING_ID = "pending";
 export const SELECTION_ID = "selection";
 export const MAX_TOASTS = 3;
 export const UNSUPPORTED_SELECTION_MESSAGE = "That selection cannot be commented on.";
+export const PREFERENCE_FAILED_MESSAGE = "Could not remember this setting for the next visit.";
 export const COMMENT_CURSOR_CSS = `html, html * { cursor: crosshair !important; } ${SITENOTE_ROOT_TAG} { cursor: auto !important; }`;
 
 export interface PendingThread {
@@ -45,6 +47,7 @@ export interface ContentState {
   site: SiteInfo | null;
   live: boolean;
   threads: ThreadRecord[];
+  members: MemberRecord[];
   resolutions: ReadonlyMap<string, Resolution>;
   positions: Measurements;
   commentMode: boolean;
@@ -53,6 +56,7 @@ export interface ContentState {
   pending: PendingThread | null;
   selection: Range | null;
   sidebarOpen: boolean;
+  showResolved: boolean;
   toasts: ToastView[];
   panelError: string | undefined;
   fallbackHighlights: boolean;
@@ -65,6 +69,7 @@ export interface ContentControllerDeps {
   isOwn: (node: Node | null) => boolean;
   send: PageSessionDeps["send"];
   openConnection: PageSessionDeps["openConnection"];
+  preference: ResolvedPreference;
 }
 
 export interface ContentController {
@@ -75,12 +80,13 @@ export interface ContentController {
   exitCommentMode: () => void;
   toggleSidebar: () => void;
   closeSidebar: () => void;
+  setShowResolved: (show: boolean) => void;
   selectThread: (threadId: string) => void;
   togglePin: (threadId: string) => void;
   closePanel: () => void;
   startTextComment: () => void;
-  submitNewThread: (body: string) => Promise<void>;
-  reply: (threadId: string, body: string) => Promise<void>;
+  submitNewThread: (submission: ComposerSubmission) => Promise<void>;
+  reply: (threadId: string, submission: ComposerSubmission) => Promise<void>;
   editComment: (commentId: string, body: string) => Promise<void>;
   deleteComment: (commentId: string) => Promise<void>;
   toggleStatus: (threadId: string) => Promise<void>;
@@ -123,6 +129,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     site: null,
     live: false,
     threads: [],
+    members: [],
     resolutions: new Map(),
     positions: new Map(),
     commentMode: false,
@@ -131,12 +138,15 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     pending: null,
     selection: null,
     sidebarOpen: false,
+    showResolved: false,
     toasts: [],
     panelError: undefined,
     fallbackHighlights: !highlighter.supported,
   });
 
   let sessionThreads: ThreadRecord[] | null = null;
+  let loadedSiteId: string | null = null;
+  let showResolvedChosen = false;
   let toastCounter = 0;
   let creating = false;
   let deactivate: (() => void) | null = null;
@@ -204,7 +214,8 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     for (const thread of state.threads) {
       const resolution = state.resolutions.get(thread.id);
       const isActive = thread.id === state.activeThreadId;
-      if (resolution?.status !== "resolved" || (thread.status === "resolved" && !isActive)) {
+      const hidden = thread.status === "resolved" && !isActive && !state.showResolved;
+      if (resolution?.status !== "resolved" || hidden) {
         continue;
       }
       targets.push({ id: thread.id, target: resolution.target, always: isActive });
@@ -257,7 +268,46 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     );
   }
 
+  async function loadMembers(): Promise<void> {
+    const site = store.getState().site;
+    if (site === null) {
+      return;
+    }
+    const result = await deps.send({ type: "members.list", workspaceId: site.workspaceId });
+    if (!result.ok) {
+      return;
+    }
+    const members = result.data;
+    store.setState((state) =>
+      JSON.stringify(state.members) === JSON.stringify(members) ? state : { ...state, members },
+    );
+  }
+
+  async function loadShowResolved(siteId: string): Promise<void> {
+    const show = await deps.preference.load(siteId);
+    if (!showResolvedChosen && store.getState().site?.siteId === siteId) {
+      store.setState((state) =>
+        state.showResolved === show ? state : { ...state, showResolved: show },
+      );
+    }
+  }
+
+  function setShowResolved(show: boolean): void {
+    showResolvedChosen = true;
+    if (store.getState().showResolved === show) {
+      return;
+    }
+    store.setState((state) => ({ ...state, showResolved: show }));
+    const site = store.getState().site;
+    if (site !== null) {
+      deps.preference.save(site.siteId, show).catch(() => {
+        pushToast({ message: PREFERENCE_FAILED_MESSAGE, variant: "info" });
+      });
+    }
+  }
+
   function beginPending(pending: PendingThread): void {
+    void loadMembers();
     store.setState((state) => ({
       ...state,
       pending,
@@ -280,6 +330,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     if (!state.threads.some((thread) => thread.id === threadId)) {
       return;
     }
+    void loadMembers();
     const resolution = state.resolutions.get(threadId);
     if (resolution?.status === "resolved" && state.positions.get(threadId)?.visible !== true) {
       scrollTargetIntoView(resolution.target);
@@ -342,7 +393,8 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
         state.resolutions !== previous.resolutions ||
         state.activeThreadId !== previous.activeThreadId ||
         state.pending !== previous.pending ||
-        state.selection !== previous.selection
+        state.selection !== previous.selection ||
+        state.showResolved !== previous.showResolved
       ) {
         syncTargets(state);
       }
@@ -372,6 +424,11 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       sessionThreads = next.threads;
       applyThreads(next.threads);
     }
+    if (next.site !== null && next.site.siteId !== loadedSiteId) {
+      loadedSiteId = next.site.siteId;
+      void loadMembers();
+      void loadShowResolved(next.site.siteId);
+    }
     if (next.status === "ready") {
       activate();
     } else if (next.status === "disabled") {
@@ -396,7 +453,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     onState: handleSession,
   });
 
-  async function submitNewThread(body: string): Promise<void> {
+  async function submitNewThread(submission: ComposerSubmission): Promise<void> {
     const { pending, site } = store.getState();
     const pageUrl = readPageUrl();
     if (pending === null || site === null || pageUrl === null || creating) {
@@ -411,8 +468,8 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
         pageUrl,
         anchor: pending.anchor,
         context: {},
-        body,
-        mentions: [],
+        body: submission.body,
+        mentions: submission.mentions,
       });
       if (!result.ok) {
         const message = result.error.message;
@@ -421,7 +478,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
           message,
           variant: "error",
           onRetry: () => {
-            submitNewThread(body).catch(() => undefined);
+            submitNewThread(submission).catch(() => undefined);
           },
         });
         throw new Error(message);
@@ -448,9 +505,14 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     }
   }
 
-  async function reply(threadId: string, body: string): Promise<void> {
+  async function reply(threadId: string, submission: ComposerSubmission): Promise<void> {
     store.setState((state) => ({ ...state, panelError: undefined }));
-    const result = await deps.send({ type: "comments.create", threadId, body, mentions: [] });
+    const result = await deps.send({
+      type: "comments.create",
+      threadId,
+      body: submission.body,
+      mentions: submission.mentions,
+    });
     if (!result.ok) {
       const message = result.error.message;
       store.setState((state) => ({ ...state, panelError: message }));
@@ -520,6 +582,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     closeSidebar: () => {
       store.setState((state) => (state.sidebarOpen ? { ...state, sidebarOpen: false } : state));
     },
+    setShowResolved,
     selectThread,
     togglePin: (threadId) => {
       if (threadId === PENDING_ID) {

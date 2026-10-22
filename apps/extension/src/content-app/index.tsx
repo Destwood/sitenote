@@ -23,7 +23,7 @@ import {
 } from "../content-controller";
 import type { PinMeasurement } from "../pin-tracker";
 import { useStore } from "../store";
-import { buildThreadViews, canChangeStatus } from "../view-model";
+import { buildMentionCandidates, buildThreadViews, canChangeStatus } from "../view-model";
 
 export const PANEL_FALLBACK_MARGIN = 16;
 export const PANEL_FALLBACK_TOP = 72;
@@ -63,7 +63,9 @@ function buildPins(state: ContentState, views: readonly ThreadView[]): PinLayerP
       status: view.status,
       x: measurement.x,
       y: measurement.y,
-      visible: measurement.visible && (view.status === "open" || view.id === state.activeThreadId),
+      visible:
+        measurement.visible &&
+        (view.status === "open" || state.showResolved || view.id === state.activeThreadId),
     });
   }
   const pendingMeasurement = state.positions.get(PENDING_ID);
@@ -91,11 +93,15 @@ export function ContentApp({ controller }: ContentAppProps) {
   const launcherRef = useRef<HTMLDivElement>(null);
   const sidebarWasOpen = useRef(false);
 
-  const { site, threads, resolutions, sidebarOpen } = state;
+  const { site, threads, members, resolutions, sidebarOpen } = state;
   const userId = site?.userId ?? "";
   const views = useMemo(
-    () => buildThreadViews(threads, resolutions, userId),
-    [threads, resolutions, userId],
+    () => buildThreadViews(threads, resolutions, userId, members),
+    [threads, resolutions, userId, members],
+  );
+  const mentionCandidates = useMemo(
+    () => buildMentionCandidates(members, userId),
+    [members, userId],
   );
 
   useEffect(() => {
@@ -128,6 +134,7 @@ export function ContentApp({ controller }: ContentAppProps) {
         }
         canChangeStatus={false}
         error={state.panelError}
+        mentionCandidates={mentionCandidates}
         onSubmit={controller.submitNewThread}
         onEditComment={() => Promise.resolve()}
         onDeleteComment={() => Promise.resolve()}
@@ -147,7 +154,8 @@ export function ContentApp({ controller }: ContentAppProps) {
         }
         canChangeStatus={canChangeStatus(site, activeRecord)}
         error={state.panelError}
-        onSubmit={(body) => controller.reply(activeView.id, body)}
+        mentionCandidates={mentionCandidates}
+        onSubmit={(submission) => controller.reply(activeView.id, submission)}
         onEditComment={controller.editComment}
         onDeleteComment={controller.deleteComment}
         onToggleStatus={() => {
@@ -185,6 +193,8 @@ export function ContentApp({ controller }: ContentAppProps) {
             key="sidebar"
             threads={views}
             activeThreadId={state.activeThreadId}
+            showResolved={state.showResolved}
+            onShowResolvedChange={controller.setShowResolved}
             onSelectThread={controller.selectThread}
             onClose={controller.closeSidebar}
           />

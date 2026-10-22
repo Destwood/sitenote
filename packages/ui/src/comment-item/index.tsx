@@ -1,3 +1,4 @@
+import { splitMentions } from "@sitenote/core";
 import { useEffect, useRef, useState } from "react";
 
 import { Avatar } from "../avatar";
@@ -91,14 +92,28 @@ export function CommentItem({ comment, now, onEdit, onDelete }: CommentItemProps
               submitLabel="Save"
               initialValue={comment.body}
               autoFocus
-              onSubmit={handleEdit}
+              onSubmit={({ body }) => handleEdit(body)}
               onCancel={() => {
                 leave("edit");
               }}
             />
           </div>
         ) : (
-          <p className="mt-0.5 break-words whitespace-pre-wrap">{comment.body}</p>
+          <p className="mt-0.5 break-words whitespace-pre-wrap">
+            {splitMentions(comment.body, comment.mentions).map((segment, index) =>
+              segment.kind === "mention" ? (
+                <span
+                  key={index}
+                  data-mention={segment.userId}
+                  className="rounded-sm bg-blue-100 px-0.5 font-medium text-blue-900"
+                >
+                  {segment.text}
+                </span>
+              ) : (
+                segment.text
+              ),
+            )}
+          </p>
         )}
         {actionable && mode === "view" ? (
           <div className="mt-1 flex gap-3">

@@ -11,7 +11,7 @@ import {
 } from "../content-controller";
 import type { PinMeasurement } from "../pin-tracker";
 import { createStore, type Store } from "../store";
-import type { CommentRecord, SiteInfo, ThreadRecord } from "../transport";
+import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "../transport";
 import { ContentApp } from ".";
 
 const ME = "00000000-0000-4000-8000-000000000002";
@@ -23,6 +23,13 @@ const SITE: SiteInfo = {
   role: "member",
   userId: ME,
 };
+const OLENA = "00000000-0000-4000-8000-000000000001";
+const ME_MEMBER: MemberRecord = { id: ME, displayName: "Me", avatarUrl: null, role: "member" };
+const MEMBERS: MemberRecord[] = [
+  { id: OLENA, displayName: "Olena Owner", avatarUrl: null, role: "owner" },
+  ME_MEMBER,
+  { id: OTHER, displayName: "Other", avatarUrl: null, role: "guest" },
+];
 const FIRST_ID = "30000000-0000-4000-8000-000000000001";
 const SECOND_ID = "30000000-0000-4000-8000-000000000002";
 
@@ -35,6 +42,7 @@ function comment(threadId: string, overrides: Partial<CommentRecord> = {}): Comm
     createdAt: "2026-10-21T10:00:00.000Z",
     editedAt: null,
     deleted: false,
+    mentions: [],
     ...overrides,
   };
 }
@@ -79,6 +87,7 @@ function makeState(overrides: Partial<ContentState> = {}): ContentState {
     site: SITE,
     live: true,
     threads: [],
+    members: [],
     resolutions: new Map(),
     positions: new Map(),
     commentMode: false,
@@ -87,6 +96,7 @@ function makeState(overrides: Partial<ContentState> = {}): ContentState {
     pending: null,
     selection: null,
     sidebarOpen: false,
+    showResolved: false,
     toasts: [],
     panelError: undefined,
     fallbackHighlights: false,
@@ -102,6 +112,7 @@ function makeController(store: Store<ContentState>) {
     exitCommentMode: vi.fn(),
     toggleSidebar: vi.fn(),
     closeSidebar: vi.fn(),
+    setShowResolved: vi.fn(),
     selectThread: vi.fn(),
     togglePin: vi.fn(),
     closePanel: vi.fn(),
@@ -182,6 +193,29 @@ describe("launcher and sidebar", () => {
     expect(document.activeElement).toBe(screen.getByRole("button", { name: /^Comments, / }));
   });
 
+  it("lists resolved threads and reports the toggle to the controller", async () => {
+    const user = userEvent.setup();
+    const { actions, store } = setup({
+      sidebarOpen: true,
+      threads: [thread(FIRST_ID), thread(SECOND_ID, { status: "resolved" })],
+      resolutions: new Map<string, Resolution>([
+        [FIRST_ID, RESOLVED],
+        [SECOND_ID, RESOLVED],
+      ]),
+    });
+    const section = screen.getByRole("region", { name: "On this page" });
+    expect(within(section).getAllByRole("button")).toHaveLength(2);
+
+    await user.click(screen.getByRole("button", { name: "Show resolved (1)" }));
+    expect(actions.setShowResolved).toHaveBeenCalledExactlyOnceWith(true);
+
+    act(() => {
+      store.setState((state) => ({ ...state, showResolved: true }));
+    });
+    expect(screen.getByRole("button", { name: "Hide resolved (1)" })).toBeTruthy();
+    expect(within(section).getAllByRole("button")).toHaveLength(3);
+  });
+
   it("closes the sidebar from its close button", async () => {
     const user = userEvent.setup();
     const { actions } = setup({ sidebarOpen: true });
@@ -227,6 +261,22 @@ describe("pins", () => {
     });
 
     expect(screen.getByRole("button", { name: "Thread 2, resolved" })).toBeTruthy();
+  });
+
+  it("draws the pins of resolved threads when they are shown", () => {
+    const positions = new Map([
+      [FIRST_ID, measurement(100, 200)],
+      [SECOND_ID, measurement(300, 400)],
+    ]);
+    const { store } = setup({ threads, resolutions, positions, showResolved: true });
+
+    expect(screen.getByRole("button", { name: "Thread 2, resolved" })).toBeTruthy();
+
+    act(() => {
+      store.setState((state) => ({ ...state, showResolved: false }));
+    });
+
+    expect(screen.queryByRole("button", { name: "Thread 2, resolved" })).toBeNull();
   });
 
   it("hides pins that are outside the viewport and pins of orphaned threads", () => {
@@ -362,7 +412,7 @@ describe("thread panel", () => {
     await user.type(within(dialog).getByRole("textbox", { name: "Comment" }), "Hello there");
     await user.click(within(dialog).getByRole("button", { name: /^Comment$/ }));
 
-    expect(actions.submitNewThread).toHaveBeenCalledWith("Hello there");
+    expect(actions.submitNewThread).toHaveBeenCalledWith({ body: "Hello there", mentions: [] });
   });
 
   it("cancels the pending thread", async () => {
@@ -394,7 +444,67 @@ describe("thread panel", () => {
     await user.click(within(dialog).getByRole("button", { name: /^Reply$/ }));
 
     expect(within(dialog).getByText("A first comment")).toBeTruthy();
-    expect(actions.reply).toHaveBeenCalledWith(FIRST_ID, "Thanks");
+    expect(actions.reply).toHaveBeenCalledWith(FIRST_ID, { body: "Thanks", mentions: [] });
+  });
+
+  it("offers the other members when typing an @ and sends the picked person", async () => {
+    const user = userEvent.setup();
+    const { actions } = setup({
+      threads: [thread(FIRST_ID)],
+      members: MEMBERS,
+      resolutions: new Map([[FIRST_ID, RESOLVED]]),
+      positions: new Map([[FIRST_ID, measurement(100, 200)]]),
+      activeThreadId: FIRST_ID,
+    });
+
+    const dialog = screen.getByRole("dialog", { name: "Thread 1" });
+    await user.type(within(dialog).getByRole("textbox", { name: "Reply" }), "@o");
+
+    expect(
+      within(dialog)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["OOlena Owner", "OOther"]);
+
+    await user.keyboard("{Enter}");
+    await user.click(within(dialog).getByRole("button", { name: /^Reply$/ }));
+
+    expect(actions.reply).toHaveBeenCalledWith(FIRST_ID, {
+      body: "@Olena Owner",
+      mentions: [OLENA],
+    });
+  });
+
+  it("does not offer the viewer themselves and offers nobody before the members are known", async () => {
+    const user = userEvent.setup();
+    setup({
+      pending,
+      members: [ME_MEMBER],
+      positions: new Map([[PENDING_ID, measurement(100, 100)]]),
+    });
+
+    await user.type(screen.getByRole("textbox", { name: "Comment" }), "@m");
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("highlights the mentions of a comment", () => {
+    setup({
+      threads: [
+        thread(FIRST_ID, {
+          comments: [comment(FIRST_ID, { body: "cc @Olena Owner", mentions: [OLENA] })],
+        }),
+      ],
+      members: MEMBERS,
+      resolutions: new Map([[FIRST_ID, RESOLVED]]),
+      positions: new Map([[FIRST_ID, measurement(100, 200)]]),
+      activeThreadId: FIRST_ID,
+    });
+
+    const mark = document.querySelector("[data-mention]");
+
+    expect(mark?.textContent).toBe("@Olena Owner");
+    expect(mark?.getAttribute("data-mention")).toBe(OLENA);
   });
 
   it("lets the author edit and delete only their own comments", async () => {

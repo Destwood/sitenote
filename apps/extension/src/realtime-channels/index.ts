@@ -32,10 +32,19 @@ export interface ChannelFactory {
   setAuth: (token: string | null) => void;
 }
 
+export interface NotificationHandlers {
+  onChange: () => void;
+  onSubscribed: () => void;
+}
+
+export interface NotificationChannelFactory {
+  open: (userId: string, handlers: NotificationHandlers) => ChannelHandle;
+}
+
 interface ChangeFilter {
   event: "*";
   schema: "public";
-  table: "threads" | "comments";
+  table: "threads" | "comments" | "notifications";
   filter: string;
 }
 
@@ -122,6 +131,39 @@ export function createChannelFactory(client: RealtimeClientLike): ChannelFactory
     },
     setAuth: (token) => {
       void client.realtime.setAuth(token);
+    },
+  };
+}
+
+export function createNotificationChannelFactory(
+  client: RealtimeClientLike,
+): NotificationChannelFactory {
+  return {
+    open(userId, handlers) {
+      const channel = client
+        .channel(`sitenote:notifications:${userId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${userId}`,
+          },
+          () => {
+            handlers.onChange();
+          },
+        )
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            handlers.onSubscribed();
+          }
+        });
+      return {
+        close: () => {
+          void client.removeChannel(channel);
+        },
+      };
     },
   };
 }

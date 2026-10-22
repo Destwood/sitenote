@@ -8,10 +8,13 @@ import {
   COMPOSER_MAX_HEIGHT,
   Composer,
   type ComposerProps,
+  type ComposerSubmission,
 } from ".";
 
 function renderComposer(props: Partial<ComposerProps> = {}) {
-  const onSubmit = vi.fn<(body: string) => Promise<void>>().mockResolvedValue(undefined);
+  const onSubmit = vi
+    .fn<(submission: ComposerSubmission) => Promise<void>>()
+    .mockResolvedValue(undefined);
   render(
     <Composer
       label="Comment"
@@ -48,7 +51,7 @@ describe("Composer", () => {
     await user.type(textbox(), "  hello world  ");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(onSubmit).toHaveBeenCalledExactlyOnceWith("hello world");
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith({ body: "hello world", mentions: [] });
     await waitFor(() => {
       expect(textbox().value).toBe("");
     });
@@ -67,7 +70,10 @@ describe("Composer", () => {
 
     await user.keyboard(combo);
 
-    expect(onSubmit).toHaveBeenCalledExactlyOnceWith("line one\nline two");
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith({
+      body: "line one\nline two",
+      mentions: [],
+    });
   });
 
   it("does not submit whitespace-only text", async () => {
@@ -171,7 +177,7 @@ describe("Composer", () => {
   it("keeps the text and shows a fallback error when onSubmit rejects, then recovers", async () => {
     const user = userEvent.setup();
     const onSubmit = vi
-      .fn<(body: string) => Promise<void>>()
+      .fn<(submission: ComposerSubmission) => Promise<void>>()
       .mockRejectedValueOnce(new Error("network"))
       .mockResolvedValueOnce(undefined);
     renderComposer({ onSubmit });
@@ -194,7 +200,7 @@ describe("Composer", () => {
     await waitFor(() => {
       expect(textbox().value).toBe("");
     });
-    expect(onSubmit).toHaveBeenLastCalledWith("keep me!");
+    expect(onSubmit).toHaveBeenLastCalledWith({ body: "keep me!", mentions: [] });
   });
 
   it("shows the error passed by the parent instead of the fallback", async () => {
@@ -263,5 +269,274 @@ describe("Composer", () => {
     scrollHeight = 900;
     fireEvent.change(textbox(), { target: { value: "x\n".repeat(40) } });
     expect(textbox().style.height).toBe(`${String(COMPOSER_MAX_HEIGHT)}px`);
+  });
+});
+
+const PEOPLE = [
+  { id: "u-olena", displayName: "Olena Owner", avatarUrl: null },
+  { id: "u-max", displayName: "Max Member", avatarUrl: null },
+  { id: "u-olga", displayName: "Olga Marsh", avatarUrl: null },
+  { id: "u-sam-1", displayName: "Sam Stone", avatarUrl: null },
+  { id: "u-sam-2", displayName: "Sam Stone", avatarUrl: null },
+  { id: "u-pat", displayName: "Pat Brown", avatarUrl: null },
+  { id: "u-quinn", displayName: "Quinn Marsh", avatarUrl: null },
+  { id: "u-riley", displayName: "Riley Marsh", avatarUrl: null },
+];
+
+function optionNames(): (string | null)[] {
+  return screen
+    .queryAllByRole("option")
+    .map((option) => option.querySelector("span.truncate")?.textContent ?? null);
+}
+
+describe("Composer mention autocomplete", () => {
+  it("offers no suggestions without candidates", async () => {
+    const user = userEvent.setup();
+    renderComposer();
+
+    await user.type(textbox(), "@Ol");
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(textbox().getAttribute("aria-autocomplete")).toBeNull();
+  });
+
+  it("opens a listbox for an @ query and filters by the prefix of any word, ignoring case", async () => {
+    const user = userEvent.setup();
+    renderComposer({ mentionCandidates: PEOPLE });
+
+    await user.type(textbox(), "hi @mar");
+
+    expect(screen.getByRole("listbox", { name: "Mention suggestions" })).toBeTruthy();
+    expect(optionNames()).toEqual(["Olga Marsh", "Quinn Marsh", "Riley Marsh"]);
+    expect(textbox().getAttribute("aria-autocomplete")).toBe("list");
+    expect(textbox().getAttribute("aria-controls")).toBe(
+      screen.getByRole("listbox").getAttribute("id"),
+    );
+  });
+
+  it("matches a multi-word query that starts at a later word", async () => {
+    const user = userEvent.setup();
+    renderComposer({ mentionCandidates: PEOPLE });
+
+    await user.type(textbox(), "@Owner");
+    expect(optionNames()).toEqual(["Olena Owner"]);
+
+    await user.clear(textbox());
+    await user.type(textbox(), "@Max Me");
+    expect(optionNames()).toEqual(["Max Member"]);
+  });
+
+  it("shows at most six suggestions for a bare @", async () => {
+    const user = userEvent.setup();
+    renderComposer({ mentionCandidates: PEOPLE });
+
+    await user.type(textbox(), "@");
+
+    expect(optionNames()).toHaveLength(6);
+  });
+
+  it("does not open for an @ inside a word or an unmatched query", async () => {
+    const user = userEvent.setup();
+    renderComposer({ mentionCandidates: PEOPLE });
+
+    await user.type(textbox(), "mail me at ann@ol");
+    expect(screen.queryByRole("listbox")).toBeNull();
+
+    await user.type(textbox(), " @zzz");
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("marks the first option active and moves with the arrow keys, wrapping around", async () => {
+    const user = userEvent.setup();
+    renderComposer({ mentionCandidates: PEOPLE });
+
+    await user.type(textbox(), "@mar");
+    const [first, second, third] = screen.getAllByRole("option");
+    expect(first?.getAttribute("aria-selected")).toBe("true");
+    expect(textbox().getAttribute("aria-activedescendant")).toBe(first?.getAttribute("id"));
+
+    await user.keyboard("{ArrowDown}");
+    expect(second?.getAttribute("aria-selected")).toBe("true");
+    expect(textbox().getAttribute("aria-activedescendant")).toBe(second?.getAttribute("id"));
+
+    await user.keyboard("{ArrowDown}{ArrowDown}");
+    expect(first?.getAttribute("aria-selected")).toBe("true");
+
+    await user.keyboard("{ArrowUp}");
+    expect(third?.getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("inserts the active person with Enter, keeps the cursor after the name and submits their id", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer({ mentionCandidates: PEOPLE });
+
+    await user.type(textbox(), "cc @max");
+    await user.keyboard("{Enter}");
+
+    expect(textbox().value).toBe("cc @Max Member ");
+    expect(textbox().selectionStart).toBe("cc @Max Member ".length);
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    await user.type(textbox(), "please check");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith({
+      body: "cc @Max Member please check",
+      mentions: ["u-max"],
+    });
+  });
+
+  it("picks with Tab", async () => {
+    const user = userEvent.setup();
+    renderComposer({ mentionCandidates: PEOPLE });
+
+    await user.type(textbox(), "@ol{ArrowDown}");
+    await user.keyboard("{Tab}");
+
+    expect(textbox().value).toBe("@Olga Marsh ");
+  });
+
+  it("picks with the mouse and keeps focus in the field", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer({ mentionCandidates: PEOPLE });
+
+    await user.type(textbox(), "@mar");
+    await user.click(screen.getByRole("option", { name: /Quinn Marsh/ }));
+
+    expect(textbox().value).toBe("@Quinn Marsh ");
+    expect(document.activeElement).toBe(textbox());
+
+    await user.keyboard("{Control>}{Enter}{/Control}");
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith({
+      body: "@Quinn Marsh",
+      mentions: ["u-quinn"],
+    });
+  });
+
+  it("hovering an option makes it the active one", async () => {
+    const user = userEvent.setup();
+    renderComposer({ mentionCandidates: PEOPLE });
+
+    await user.type(textbox(), "@mar");
+    await user.hover(screen.getByRole("option", { name: /Riley Marsh/ }));
+
+    expect(screen.getByRole("option", { name: /Riley Marsh/ }).getAttribute("aria-selected")).toBe(
+      "true",
+    );
+  });
+
+  it("closes the list with Escape without cancelling the composer or reaching the parent", async () => {
+    const user = userEvent.setup();
+    const escapes: string[] = [];
+    const outer = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        escapes.push(event.key);
+      }
+    };
+    const onCancel = vi.fn();
+    renderComposer({ mentionCandidates: PEOPLE, onCancel });
+    document.addEventListener("keydown", outer);
+
+    await user.type(textbox(), "@mar");
+    await user.keyboard("{Escape}");
+    document.removeEventListener("keydown", outer);
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(escapes).toEqual([]);
+    expect(textbox().value).toBe("@mar");
+
+    await user.keyboard("{Escape}");
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("reopens for a new @ after Escape", async () => {
+    const user = userEvent.setup();
+    renderComposer({ mentionCandidates: PEOPLE });
+
+    await user.type(textbox(), "@mar{Escape}");
+    expect(screen.queryByRole("listbox")).toBeNull();
+
+    await user.type(textbox(), " and @pat");
+    expect(optionNames()).toEqual(["Pat Brown"]);
+  });
+
+  it("drops the id of a person whose name was edited before sending", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer({ mentionCandidates: PEOPLE });
+
+    await user.type(textbox(), "@max");
+    await user.keyboard("{Enter}");
+    await user.type(textbox(), "and @pat");
+    await user.keyboard("{Enter}");
+    fireEvent.change(textbox(), { target: { value: "@Max Membe and @Pat Brown go" } });
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith({
+      body: "@Max Membe and @Pat Brown go",
+      mentions: ["u-pat"],
+    });
+  });
+
+  it("resolves two people with the same name in the order they were picked", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer({ mentionCandidates: PEOPLE });
+
+    await user.type(textbox(), "@sam");
+    await user.keyboard("{Enter}");
+    await user.type(textbox(), "and @sam{ArrowDown}");
+    await user.keyboard("{Enter}");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith({
+      body: "@Sam Stone and @Sam Stone",
+      mentions: ["u-sam-1", "u-sam-2"],
+    });
+  });
+
+  it("stops suggesting once twenty people are mentioned", async () => {
+    const user = userEvent.setup();
+    const crowd = Array.from({ length: 21 }, (_, index) => ({
+      id: `u-${String(index)}`,
+      displayName: `P${String(index).padStart(2, "0")}`,
+      avatarUrl: null,
+    }));
+    renderComposer({ mentionCandidates: crowd });
+
+    for (let index = 0; index < 20; index += 1) {
+      await user.type(textbox(), `@P${String(index).padStart(2, "0")}`);
+      await user.keyboard("{Enter}");
+    }
+    await user.type(textbox(), "@P20");
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+  }, 30_000);
+
+  it("does not treat Ctrl+Enter as a pick", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer({ mentionCandidates: PEOPLE });
+
+    await user.type(textbox(), "@max");
+    await user.keyboard("{Control>}{Enter}{/Control}");
+
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith({ body: "@max", mentions: [] });
+  });
+
+  it("forgets the picked people after a successful send", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer({ mentionCandidates: PEOPLE });
+
+    await user.type(textbox(), "@max");
+    await user.keyboard("{Enter}");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => {
+      expect(textbox().value).toBe("");
+    });
+    await user.type(textbox(), "@Max Member");
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(onSubmit).toHaveBeenLastCalledWith({ body: "@Max Member", mentions: [] });
   });
 });

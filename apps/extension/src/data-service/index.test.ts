@@ -2,7 +2,7 @@ import type { SitenoteClient } from "@sitenote/db";
 import { describe, expect, it, vi } from "vitest";
 
 import { failure, success, type DataRequest } from "../messages";
-import { createDataService, type DataService } from ".";
+import { createDataService, toExcerpt, type DataService } from ".";
 
 const USER_ID = "00000000-0000-4000-8000-000000000002";
 const OTHER_ID = "00000000-0000-4000-8000-000000000003";
@@ -10,6 +10,7 @@ const SITE_ID = "20000000-0000-4000-8000-000000000001";
 const WORKSPACE_ID = "10000000-0000-4000-8000-000000000001";
 const THREAD_ID = "30000000-0000-4000-8000-000000000001";
 const COMMENT_ID = "40000000-0000-4000-8000-000000000001";
+const NOTIFICATION_ID = "50000000-0000-4000-8000-000000000001";
 const ORIGIN = "https://example.test";
 const PAGE_URL = "https://example.test/pricing";
 
@@ -23,6 +24,7 @@ const TEXT_ANCHOR = {
 interface Response {
   data: unknown;
   error: unknown;
+  count?: number;
 }
 
 interface Call {
@@ -37,6 +39,10 @@ interface Query {
 
 function ok(data: unknown): Response {
   return { data, error: null };
+}
+
+function counted(count: number): Response {
+  return { data: null, error: null, count };
 }
 
 function broken(error: unknown): Response {
@@ -97,7 +103,7 @@ function createFake(options: {
 
 function setup(
   responses: Record<string, Response[]>,
-  extra: { session?: boolean | "throws"; enabled?: boolean } = {},
+  extra: { session?: boolean | "throws"; enabled?: boolean; now?: () => number } = {},
 ) {
   const fake = createFake({
     responses,
@@ -108,7 +114,11 @@ function setup(
       extra.enabled === false ? null : { siteId: SITE_ID, workspaceId: WORKSPACE_ID },
     ),
   );
-  const service = createDataService({ client: fake.client, getEnabledSite });
+  const service = createDataService({
+    client: fake.client,
+    getEnabledSite,
+    ...(extra.now === undefined ? {} : { now: extra.now }),
+  });
   return { service, getEnabledSite, ...fake };
 }
 
@@ -122,6 +132,7 @@ function commentRow(overrides: Record<string, unknown> = {}) {
     thread_id: THREAD_ID,
     author_id: USER_ID,
     body: "Looks wrong",
+    mentions: [],
     edited_at: null,
     deleted_at: null,
     created_at: "2026-10-21T10:00:00+00:00",
@@ -159,6 +170,23 @@ describe("without a session", () => {
     ],
     ["listThreads", (service: DataService) => service.listThreads(LIST)],
     ["listWorkspaces", (service: DataService) => service.listWorkspaces()],
+    [
+      "listMembers",
+      (service: DataService) =>
+        service.listMembers({ type: "members.list", workspaceId: WORKSPACE_ID }),
+    ],
+    [
+      "listNotifications",
+      (service: DataService) =>
+        service.listNotifications({ type: "notifications.list", limit: 10 }),
+    ],
+    [
+      "markNotificationsRead",
+      (service: DataService) =>
+        service.markNotificationsRead({ type: "notifications.markRead", ids: [NOTIFICATION_ID] }),
+    ],
+    ["markAllNotificationsRead", (service: DataService) => service.markAllNotificationsRead()],
+    ["countUnreadNotifications", (service: DataService) => service.countUnreadNotifications()],
     ["ensureSite", (service: DataService) => service.ensureSite(WORKSPACE_ID, ORIGIN)],
     [
       "createComment",
@@ -230,6 +258,7 @@ describe("listThreads", () => {
               createdAt: "2026-10-21T10:00:00.000Z",
               editedAt: null,
               deleted: false,
+              mentions: [],
             },
             {
               id: "40000000-0000-4000-8000-000000000002",
@@ -239,6 +268,7 @@ describe("listThreads", () => {
               createdAt: "2026-10-21T11:00:00.000Z",
               editedAt: "2026-10-21T12:00:00.000Z",
               deleted: false,
+              mentions: [],
             },
           ],
         },
@@ -633,5 +663,337 @@ describe("findThreadPage", () => {
     ["the request throws", {}],
   ])("returns null when %s", async (_name, responses) => {
     expect(await setup(responses).service.findThreadPage(THREAD_ID)).toBeNull();
+  });
+});
+
+describe("comment mentions", () => {
+  it("returns the mentioned ids of a comment", async () => {
+    const { service } = setup({
+      threads: [ok({ workspace_id: WORKSPACE_ID })],
+      comments: [ok(commentRow({ mentions: [OTHER_ID] }))],
+    });
+
+    const result = await service.createComment({
+      type: "comments.create",
+      threadId: THREAD_ID,
+      body: "Hi",
+      mentions: [OTHER_ID],
+    });
+
+    expect(result.ok && result.data.mentions).toEqual([OTHER_ID]);
+  });
+});
+
+function memberRow(id: string, name: string, role: "owner" | "member" | "guest") {
+  return { role, profile: profile(id, name) };
+}
+
+const MEMBERS = {
+  type: "members.list",
+  workspaceId: WORKSPACE_ID,
+} as const;
+
+describe("listMembers", () => {
+  it("maps the members with their profile and role, sorted by name, and skips unreadable ones", async () => {
+    const { service, queries } = setup({
+      members: [
+        ok([
+          memberRow(OTHER_ID, "Olena Owner", "owner"),
+          { role: "guest", profile: null },
+          memberRow(USER_ID, "Max Member", "member"),
+        ]),
+      ],
+    });
+
+    expect(await service.listMembers(MEMBERS)).toEqual(
+      success([
+        { id: USER_ID, displayName: "Max Member", avatarUrl: null, role: "member" },
+        { id: OTHER_ID, displayName: "Olena Owner", avatarUrl: null, role: "owner" },
+      ]),
+    );
+    expect(callsOf(queries, "members")[0]?.map((call) => call.method)).toEqual(["select", "eq"]);
+    expect(callsOf(queries, "members")[0]?.[1]?.args).toEqual(["workspace_id", WORKSPACE_ID]);
+  });
+
+  it("serves a second request within a minute from the cache and asks again after it", async () => {
+    let clock = 1_000_000;
+    const { service, queries } = setup(
+      {
+        members: [
+          ok([memberRow(USER_ID, "Max Member", "member")]),
+          ok([memberRow(USER_ID, "Max Renamed", "member")]),
+        ],
+      },
+      { now: () => clock },
+    );
+
+    const first = await service.listMembers(MEMBERS);
+    clock += 59_999;
+    const cached = await service.listMembers(MEMBERS);
+    clock += 1;
+    const refreshed = await service.listMembers(MEMBERS);
+
+    expect(first.ok && first.data[0]?.displayName).toBe("Max Member");
+    expect(cached).toEqual(first);
+    expect(refreshed.ok && refreshed.data[0]?.displayName).toBe("Max Renamed");
+    expect(callsOf(queries, "members")).toHaveLength(2);
+  });
+
+  it("caches per workspace", async () => {
+    const { service, queries } = setup({
+      members: [ok([memberRow(USER_ID, "Max Member", "member")]), ok([])],
+    });
+
+    await service.listMembers(MEMBERS);
+    await service.listMembers({ ...MEMBERS, workspaceId: SITE_ID });
+
+    expect(callsOf(queries, "members")).toHaveLength(2);
+  });
+
+  it("does not cache a failure", async () => {
+    const { service } = setup({
+      members: [
+        broken({ code: "42501", message: "x" }),
+        ok([memberRow(USER_ID, "Max Member", "member")]),
+      ],
+    });
+
+    expect(await service.listMembers(MEMBERS)).toEqual(failure("forbidden"));
+    expect((await service.listMembers(MEMBERS)).ok).toBe(true);
+  });
+});
+
+function notificationRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: NOTIFICATION_ID,
+    kind: "mention",
+    read_at: null,
+    created_at: "2026-10-21T10:00:00+00:00",
+    thread_id: THREAD_ID,
+    thread: { page_url: PAGE_URL, status: "open" },
+    comment: {
+      body: "Please check",
+      deleted_at: null,
+      author: { display_name: "Max Member" },
+    },
+    ...overrides,
+  };
+}
+
+const NOTIFICATIONS = { type: "notifications.list", limit: 30 } as const;
+
+describe("toExcerpt", () => {
+  it("collapses whitespace and keeps short text", () => {
+    expect(toExcerpt("  one\n\n two\tthree  ")).toBe("one two three");
+  });
+
+  it("cuts at 140 characters and marks the cut", () => {
+    expect(toExcerpt("a".repeat(140))).toBe("a".repeat(140));
+    expect(toExcerpt("a".repeat(141))).toBe(`${"a".repeat(140)}…`);
+  });
+
+  it("counts whole characters, not surrogate halves", () => {
+    const cut = toExcerpt("😀".repeat(141));
+
+    expect(Array.from(cut)).toHaveLength(141);
+    expect(cut.endsWith("😀…")).toBe(true);
+  });
+
+  it("leaves markup as the text it is", () => {
+    expect(toExcerpt("<img src=x onerror=alert(1)>")).toBe("<img src=x onerror=alert(1)>");
+  });
+});
+
+describe("listNotifications", () => {
+  it("maps the notifications of the user and the exact unread count", async () => {
+    const { service, queries } = setup({
+      notifications: [
+        ok([
+          notificationRow(),
+          notificationRow({
+            id: "50000000-0000-4000-8000-000000000002",
+            kind: "reply",
+            read_at: "2026-10-21T11:00:00+00:00",
+            thread: { page_url: PAGE_URL, status: "resolved" },
+            comment: { body: "x".repeat(200), deleted_at: null, author: null },
+          }),
+        ]),
+        counted(7),
+      ],
+    });
+
+    const result = await service.listNotifications(NOTIFICATIONS);
+
+    expect(result).toEqual(
+      success({
+        unread: 7,
+        items: [
+          {
+            id: NOTIFICATION_ID,
+            kind: "mention",
+            threadId: THREAD_ID,
+            pageUrl: PAGE_URL,
+            threadStatus: "open",
+            excerpt: "Please check",
+            actorName: "Max Member",
+            createdAt: "2026-10-21T10:00:00.000Z",
+            read: false,
+          },
+          {
+            id: "50000000-0000-4000-8000-000000000002",
+            kind: "reply",
+            threadId: THREAD_ID,
+            pageUrl: PAGE_URL,
+            threadStatus: "resolved",
+            excerpt: `${"x".repeat(140)}…`,
+            actorName: "Former member",
+            createdAt: "2026-10-21T10:00:00.000Z",
+            read: true,
+          },
+        ],
+      }),
+    );
+    const [list, count] = callsOf(queries, "notifications");
+    expect(list?.map((call) => call.method)).toEqual(["select", "eq", "order", "limit"]);
+    expect(list?.[1]?.args).toEqual(["user_id", USER_ID]);
+    expect(list?.[2]?.args).toEqual(["created_at", { ascending: false }]);
+    expect(list?.[3]?.args).toEqual([30]);
+    expect(count?.map((call) => call.method)).toEqual(["select", "eq", "is"]);
+    expect(count?.[0]?.args).toEqual(["id", { count: "exact", head: true }]);
+    expect(count?.[2]?.args).toEqual(["read_at", null]);
+  });
+
+  it("blanks the excerpt of a deleted comment", async () => {
+    const { service } = setup({
+      notifications: [
+        ok([
+          notificationRow({
+            comment: {
+              body: "secret",
+              deleted_at: "2026-10-21T11:00:00+00:00",
+              author: { display_name: "Max Member" },
+            },
+          }),
+        ]),
+        counted(1),
+      ],
+    });
+
+    const result = await service.listNotifications(NOTIFICATIONS);
+
+    expect(result.ok && result.data.items[0]?.excerpt).toBe("");
+  });
+
+  it.each([
+    ["the thread is not readable", { thread: null }],
+    ["the comment is not readable", { comment: null }],
+    [
+      "the page url is not a normal web address",
+      { thread: { page_url: "javascript:alert(1)", status: "open" } },
+    ],
+  ])("skips a notification when %s", async (_name, overrides) => {
+    const { service } = setup({
+      notifications: [ok([notificationRow(overrides), notificationRow()]), counted(2)],
+    });
+
+    const result = await service.listNotifications(NOTIFICATIONS);
+
+    expect(result.ok && result.data.items).toHaveLength(1);
+    expect(result.ok && result.data.unread).toBe(2);
+  });
+
+  it("normalises the page url of the thread", async () => {
+    const { service } = setup({
+      notifications: [
+        ok([notificationRow({ thread: { page_url: `${PAGE_URL}/?a=1#top`, status: "open" } })]),
+        counted(1),
+      ],
+    });
+
+    const result = await service.listNotifications(NOTIFICATIONS);
+
+    expect(result.ok && result.data.items[0]?.pageUrl).toBe(PAGE_URL);
+  });
+
+  it("maps a failing list or count to a whitelisted code", async () => {
+    const failingList = setup({
+      notifications: [broken({ code: "42501", message: "x" }), counted(0)],
+    });
+    const failingCount = setup({
+      notifications: [ok([]), broken({ code: "PGRST301", message: "jwt" })],
+    });
+
+    expect(await failingList.service.listNotifications(NOTIFICATIONS)).toEqual(
+      failure("forbidden"),
+    );
+    expect(await failingCount.service.listNotifications(NOTIFICATIONS)).toEqual(
+      failure("unauthorized"),
+    );
+  });
+});
+
+describe("markNotificationsRead", () => {
+  it("marks only the given unread notifications of the user", async () => {
+    const now = Date.parse("2026-10-21T12:00:00.000Z");
+    const { service, queries } = setup({ notifications: [ok(null)] }, { now: () => now });
+
+    const result = await service.markNotificationsRead({
+      type: "notifications.markRead",
+      ids: [NOTIFICATION_ID],
+    });
+
+    expect(result).toEqual(success(null));
+    expect(callsOf(queries, "notifications")[0]).toEqual([
+      { method: "update", args: [{ read_at: "2026-10-21T12:00:00.000Z" }] },
+      { method: "eq", args: ["user_id", USER_ID] },
+      { method: "in", args: ["id", [NOTIFICATION_ID]] },
+      { method: "is", args: ["read_at", null] },
+    ]);
+  });
+
+  it("maps a database error", async () => {
+    const { service } = setup({ notifications: [broken({ code: "42501", message: "x" })] });
+
+    expect(
+      await service.markNotificationsRead({
+        type: "notifications.markRead",
+        ids: [NOTIFICATION_ID],
+      }),
+    ).toEqual(failure("forbidden"));
+  });
+});
+
+describe("markAllNotificationsRead", () => {
+  it("marks every unread notification of the user", async () => {
+    const now = Date.parse("2026-10-21T12:00:00.000Z");
+    const { service, queries } = setup({ notifications: [ok(null)] }, { now: () => now });
+
+    expect(await service.markAllNotificationsRead()).toEqual(success(null));
+    expect(callsOf(queries, "notifications")[0]).toEqual([
+      { method: "update", args: [{ read_at: "2026-10-21T12:00:00.000Z" }] },
+      { method: "eq", args: ["user_id", USER_ID] },
+      { method: "is", args: ["read_at", null] },
+    ]);
+  });
+
+  it("maps a database error", async () => {
+    const { service } = setup({ notifications: [broken({ message: "boom" })] });
+
+    expect(await service.markAllNotificationsRead()).toEqual(failure("unknown"));
+  });
+});
+
+describe("countUnreadNotifications", () => {
+  it("returns the exact count and treats a missing count as zero", async () => {
+    const { service } = setup({ notifications: [counted(12), ok(null)] });
+
+    expect(await service.countUnreadNotifications()).toEqual(success(12));
+    expect(await service.countUnreadNotifications()).toEqual(success(0));
+  });
+
+  it("maps a database error", async () => {
+    const { service } = setup({ notifications: [broken({ code: "PGRST301", message: "jwt" })] });
+
+    expect(await service.countUnreadNotifications()).toEqual(failure("unauthorized"));
   });
 });

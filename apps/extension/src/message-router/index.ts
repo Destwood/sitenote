@@ -10,6 +10,7 @@ import {
   type ExtensionRequest,
   type MessageResult,
 } from "../messages";
+import type { NotificationCenter } from "../notification-center";
 import type { SiteEnablement } from "../site-enablement";
 
 export interface RouterSender {
@@ -23,6 +24,7 @@ export interface MessageRouterDeps {
   service: AuthService;
   data: DataService;
   enablement: SiteEnablement;
+  notifications: Pick<NotificationCenter, "list" | "markRead" | "markAllRead">;
   getEnabledSite: (origin: string) => Promise<EnabledEntry | null>;
   onWake: () => Promise<void>;
 }
@@ -40,6 +42,7 @@ const PAGE_SCOPED: ReadonlySet<ExtensionRequest["type"]> = new Set([
   "comments.create",
   "comments.update",
   "comments.delete",
+  "members.list",
 ]);
 
 export function senderOriginOf(sender: RouterSender): string | null {
@@ -48,7 +51,7 @@ export function senderOriginOf(sender: RouterSender): string | null {
 }
 
 export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
-  const { service, data, enablement } = deps;
+  const { service, data, enablement, notifications } = deps;
   const extensionPrefix = `chrome-extension://${deps.extensionId}/`;
 
   function classify(sender: RouterSender): SenderKind {
@@ -79,6 +82,9 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
       if (!sameSite || !samePage) {
         return failure("forbidden");
       }
+    }
+    if (request.type === "members.list" && enabled.workspaceId !== request.workspaceId) {
+      return failure("forbidden");
     }
     return null;
   }
@@ -136,6 +142,14 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
         return data.deleteComment(request);
       case "workspaces.list":
         return data.listWorkspaces();
+      case "members.list":
+        return data.listMembers(request);
+      case "notifications.list":
+        return notifications.list(request.limit);
+      case "notifications.markRead":
+        return notifications.markRead(request.ids);
+      case "notifications.markAllRead":
+        return notifications.markAllRead();
       case "sites.enable":
         return enablement.enable(request);
       case "sites.disable":

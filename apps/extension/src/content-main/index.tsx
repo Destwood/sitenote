@@ -14,6 +14,7 @@ import { isolateEvents } from "../event-isolation";
 import { sendMessage } from "../message-client";
 import { failure, success } from "../messages";
 import { openPageConnection } from "../page-connection";
+import { createResolvedPreference } from "../resolved-preference";
 
 export async function startContentScript(ctx: ContentScriptContext, css: string): Promise<void> {
   let ui: ShadowRootContentScriptUi<Root> | null = null;
@@ -30,6 +31,7 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
     origin: location.origin,
     isOwn,
     send: sendMessage,
+    preference: createResolvedPreference(browser.storage.local),
     openConnection: (options) =>
       openPageConnection({ ...options, connect: (name) => browser.runtime.connect({ name }) }),
   });

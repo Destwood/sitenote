@@ -1,16 +1,22 @@
 import * as z from "zod/mini";
 
+export const DEFAULT_EXTENSION_ID = "anefihllkbkenhjbjggfndgemgkfaeoa";
+
 const nonEmptyString = z.string().check(z.minLength(1));
 
 const publicEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.url(),
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: nonEmptyString,
+  NEXT_PUBLIC_WEB_URL: z.url(),
+  NEXT_PUBLIC_EXTENSION_ID: z.optional(z.string().check(z.regex(/^[a-p]{32}$/))),
   NEXT_PUBLIC_AUTH_GOOGLE_ENABLED: z.optional(z.enum(["true", "false"])),
 });
 
 export interface PublicEnv {
   supabaseUrl: string;
   supabasePublishableKey: string;
+  webUrl: string;
+  extensionId: string;
   googleAuthEnabled: boolean;
 }
 
@@ -30,6 +36,8 @@ export function parsePublicEnv(source: EnvSource): PublicEnv {
   return {
     supabaseUrl: result.data.NEXT_PUBLIC_SUPABASE_URL,
     supabasePublishableKey: result.data.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    webUrl: new URL(result.data.NEXT_PUBLIC_WEB_URL).origin,
+    extensionId: result.data.NEXT_PUBLIC_EXTENSION_ID ?? DEFAULT_EXTENSION_ID,
     googleAuthEnabled: result.data.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED === "true",
   };
 }
@@ -40,6 +48,8 @@ export function getPublicEnv(): PublicEnv {
   cached ??= parsePublicEnv({
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    NEXT_PUBLIC_WEB_URL: process.env.NEXT_PUBLIC_WEB_URL,
+    NEXT_PUBLIC_EXTENSION_ID: process.env.NEXT_PUBLIC_EXTENSION_ID,
     NEXT_PUBLIC_AUTH_GOOGLE_ENABLED: process.env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED,
   });
   return cached;

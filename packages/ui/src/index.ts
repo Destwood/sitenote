@@ -1,7 +1,7 @@
 export { CommentModeBanner } from "./comment-mode-banner";
 export type { CommentModeBannerProps } from "./comment-mode-banner";
 export { COMMENT_MAX_LENGTH, Composer } from "./composer";
-export type { ComposerProps } from "./composer";
+export type { ComposerProps, ComposerSubmission } from "./composer";
 export { HighlightBox } from "./highlight-box";
 export type { HighlightBoxProps } from "./highlight-box";
 export { Launcher } from "./launcher";
@@ -11,6 +11,7 @@ export type { PinProps } from "./pin";
 export { PinLayer } from "./pin-layer";
 export type { PinLayerPin, PinLayerProps } from "./pin-layer";
 export { placeAbove, placePanel } from "./placement";
+export { formatRelativeTime } from "./relative-time";
 export type { AnchorRect, PanelPlacement, PanelSide, Size } from "./placement";
 export { SelectionButton } from "./selection-button";
 export type { SelectionButtonProps } from "./selection-button";

@@ -1,3 +1,5 @@
+import type { MentionCandidate } from "@sitenote/core";
+
 export interface PersonView {
   id: string;
   displayName: string;
@@ -12,6 +14,7 @@ export interface CommentView {
   editedAt: string | null;
   deleted: boolean;
   canEdit: boolean;
+  mentions: readonly MentionCandidate[];
 }
 
 export type ThreadStatus = "open" | "resolved";

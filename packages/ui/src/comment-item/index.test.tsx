@@ -52,6 +52,42 @@ describe("CommentItem", () => {
     expect(screen.getByText(/https:\/\/evil\.test/)).toBeTruthy();
   });
 
+  it("highlights mentioned people as styled text and leaves everything else alone", () => {
+    renderItem(
+      makeComment({
+        body: "Thanks @Max Member, cc @Olena Owner.\nmail ann@Max Member and @Nobody",
+        mentions: [
+          { id: "u-max", displayName: "Max Member" },
+          { id: "u-olena", displayName: "Olena Owner" },
+        ],
+      }),
+    );
+
+    const marks = [...document.querySelectorAll("[data-mention]")];
+
+    expect(marks.map((mark) => [mark.getAttribute("data-mention"), mark.textContent])).toEqual([
+      ["u-max", "@Max Member"],
+      ["u-olena", "@Olena Owner"],
+    ]);
+    expect(document.querySelector("p.whitespace-pre-wrap")?.textContent).toBe(
+      "Thanks @Max Member, cc @Olena Owner.\nmail ann@Max Member and @Nobody",
+    );
+  });
+
+  it("renders a mention name that contains markup as text", () => {
+    renderItem(
+      makeComment({
+        body: "hi @<img src=x onerror=alert(1)>",
+        mentions: [{ id: "u-x", displayName: "<img src=x onerror=alert(1)>" }],
+      }),
+    );
+
+    expect(document.querySelector("img")).toBeNull();
+    expect(document.querySelector("[data-mention]")?.textContent).toBe(
+      "@<img src=x onerror=alert(1)>",
+    );
+  });
+
   it("marks an edited comment", () => {
     renderItem(makeComment({ editedAt: new Date().toISOString() }));
 

@@ -5,6 +5,6 @@ import baseConfig from "./wxt.config";
 
 export default defineConfig({
   ...baseConfig,
-  manifest: createManifest({ e2e: true }),
+  manifest: () => createManifest({ e2e: true, webUrl: process.env.WXT_WEB_URL }),
   outDirTemplate: "{{browser}}-mv{{manifestVersion}}-e2e",
 });
