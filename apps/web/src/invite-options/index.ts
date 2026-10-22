@@ -22,7 +22,7 @@ export function parseInviteRole(value: unknown): InviteRole | null {
 }
 
 export function parseExpiryDays(value: unknown): number | null {
-  const days = typeof value === "string" ? Number(value) : Number.NaN;
+  const days = typeof value === "string" && /^[0-9]+$/.test(value) ? Number(value) : Number.NaN;
   return EXPIRY_OPTIONS.find((option) => option.days === days)?.days ?? null;
 }
 
