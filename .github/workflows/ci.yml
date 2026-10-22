@@ -21,6 +21,8 @@ jobs:
     name: Checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      WXT_WEB_URL: https://app.sitenote.test
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6

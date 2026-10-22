@@ -64,6 +64,10 @@ pnpm db:start && pnpm db:env   # once per boot of the stack
 pnpm e2e                       # builds the extension and the web app, then runs Playwright
 ```
 
+## Invites and guests
+
+Owners open "Invites" on a workspace row of `/app`, create a member or guest link (1, 7 or 30 days), copy it and revoke it. A guest opens the link, types a name and joins without an account; the page then hands the guest session to the Sitenote extension (`externally_connectable`, see D-084) and the guest enables a registered site from the popup. The extension manifest accepts the web app origin from `WXT_WEB_URL` (`NEXT_PUBLIC_WEB_URL` on the web side, both written by `pnpm db:env`); `NEXT_PUBLIC_EXTENSION_ID` defaults to the stable id.
+
 ## Extension sign-in
 
 The popup signs in with the same 6-digit e-mail code, independently of the web app (each surface owns its own session). Build it after `pnpm db:env`, because WXT inlines `apps/extension/.env.local` at build time, then load `apps/extension/.output/chrome-mv3` unpacked. The extension id is stable (`anefihllkbkenhjbjggfndgemgkfaeoa`, from the manifest `key`), so `https://anefihllkbkenhjbjggfndgemgkfaeoa.chromiumapp.org/**` is already in the Supabase redirect allow-list. The Google button appears only with `WXT_AUTH_GOOGLE_ENABLED=true` and a configured provider.
