@@ -107,16 +107,27 @@ jobs:
       - run: pnpm --filter @sitenote/e2e exec playwright install --with-deps chromium
       - run: pnpm exec supabase start -x studio,imgproxy,edge-runtime,logflare,vector,postgres-meta
       - run: pnpm db:env
+      - name: Start the mock ClickUp server
+        run: |
+          nohup node e2e/fixtures/clickup/server.ts > clickup-mock.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:4411/health > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat clickup-mock.log
+          exit 1
       - name: Write Edge Function settings for the mock ClickUp server
         run: |
+          gateway=$(docker network inspect supabase_network_sitenote -f '{{(index .IPAM.Config 0).Gateway}}')
+          echo "Mock ClickUp reachable from the Edge runtime at http://$gateway:4411"
           {
             echo "SITE_URL=http://localhost:3000"
             echo "WEBHOOK_SECRET=ci-webhook-secret"
-            echo "CLICKUP_API_BASE=http://host.docker.internal:4411"
+            echo "CLICKUP_API_BASE=http://$gateway:4411"
           } > supabase/functions/.env
       - name: Serve Edge Functions
         run: |
-          pnpm exec supabase functions serve --env-file supabase/functions/.env > functions.log 2>&1 &
+          nohup pnpm exec supabase functions serve --env-file supabase/functions/.env > functions.log 2>&1 &
           for attempt in $(seq 1 60); do
             code=$(curl -s -o /dev/null -w "%{http_code}" -X OPTIONS -H "Origin: http://localhost:3000" http://127.0.0.1:54321/functions/v1/clickup-hierarchy || true)
             if [ "$code" = "204" ]; then exit 0; fi
@@ -124,11 +135,30 @@ jobs:
           done
           cat functions.log
           exit 1
+      - name: Smoke the clickup-hierarchy function with the owner session
+        run: |
+          status=$(pnpm --silent exec supabase status -o env)
+          api_url=$(echo "$status" | sed -n 's/^API_URL="\(.*\)"$/\1/p')
+          key=$(echo "$status" | sed -n 's/^PUBLISHABLE_KEY="\(.*\)"$/\1/p')
+          jwt=$(curl -sS -X POST "$api_url/auth/v1/token?grant_type=password" -H "apikey: $key" -H "Content-Type: application/json" -d '{"email":"owner@sitenote.test","password":"sitenote-dev-password"}' | jq -r .access_token)
+          code=$(curl -sS -o smoke.json -D smoke.headers -w "%{http_code}" -X POST "$api_url/functions/v1/clickup-hierarchy" -H "Authorization: Bearer $jwt" -H "apikey: $key" -H "Origin: http://localhost:3000" -H "Content-Type: application/json" -d '{"workspaceId":"10000000-0000-4000-8000-000000000001","token":"pk_smoke"}' || true)
+          echo "clickup-hierarchy answered HTTP $code"
+          cat smoke.headers smoke.json
+          if [ "$code" != "200" ] || ! grep -q "Northwind ClickUp" smoke.json; then
+            echo "::group::functions.log"; cat functions.log; echo "::endgroup::"
+            echo "::group::clickup-mock.log"; cat clickup-mock.log; echo "::endgroup::"
+            exit 1
+          fi
       - run: pnpm e2e
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: playwright-report
-          path: e2e/playwright-report
+          name: e2e-diagnostics
+          path: |
+            e2e/playwright-report
+            functions.log
+            clickup-mock.log
+            smoke.json
+            smoke.headers
           retention-days: 7
           if-no-files-found: ignore

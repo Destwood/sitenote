@@ -54,7 +54,7 @@ export default defineConfig({
     {
       command: "node fixtures/clickup/server.ts",
       url: `http://127.0.0.1:${String(CLICKUP_MOCK_PORT)}/health`,
-      reuseExistingServer: !isCi,
+      reuseExistingServer: true,
       env: { CLICKUP_MOCK_PORT: String(CLICKUP_MOCK_PORT) },
     },
     {
