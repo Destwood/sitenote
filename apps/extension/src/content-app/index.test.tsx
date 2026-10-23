@@ -104,6 +104,8 @@ function makeState(overrides: Partial<ContentState> = {}): ContentState {
     toasts: [],
     panelError: undefined,
     fallbackHighlights: false,
+    clickUpConfigured: false,
+    clickUpPending: new Set<string>(),
     ...overrides,
   };
 }
@@ -126,6 +128,7 @@ function makeController(store: Store<ContentState>) {
     editComment: vi.fn(() => Promise.resolve()),
     deleteComment: vi.fn(() => Promise.resolve()),
     toggleStatus: vi.fn(() => Promise.resolve()),
+    createClickUpTask: vi.fn(() => Promise.resolve()),
     dismissToast: vi.fn(),
   };
   const controller: ContentController = { store, ...actions };

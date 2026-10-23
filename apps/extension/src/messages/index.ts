@@ -42,6 +42,8 @@ export const ERROR_CODES = [
   "forbidden",
   "not_found",
   "validation",
+  "not_configured",
+  "upstream",
   "network",
   "unknown",
   "page_unavailable",
@@ -49,6 +51,10 @@ export const ERROR_CODES = [
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
+
+export function isErrorCode(value: string): value is ErrorCode {
+  return (ERROR_CODES as readonly string[]).includes(value);
+}
 
 export const ERROR_MESSAGES: Readonly<Record<ErrorCode, string>> = {
   invalid_request: "The request was not understood.",
@@ -70,6 +76,8 @@ export const ERROR_MESSAGES: Readonly<Record<ErrorCode, string>> = {
   forbidden: "You do not have permission to do this.",
   not_found: "That item no longer exists.",
   validation: "That input was not accepted. Check it and try again.",
+  not_configured: "ClickUp is not connected to this workspace yet.",
+  upstream: "ClickUp did not answer. Try again.",
   network: "Sitenote could not reach the server. Check your connection and try again.",
   unknown: "Something went wrong. Try again.",
   page_unavailable: "Sitenote is not available on this page.",
@@ -172,6 +180,8 @@ export const dataRequestSchema = z.discriminatedUnion("type", [
     workspaceId: idSchema,
   }),
   z.object({ type: z.literal("sites.disable"), origin: originSchema }),
+  z.object({ type: z.literal("clickup.status"), workspaceId: idSchema }),
+  z.object({ type: z.literal("clickup.createTask"), threadId: idSchema }),
   z.object({
     type: z.literal("sites.setErrorCapture"),
     tabId: tabIdSchema,
@@ -259,6 +269,8 @@ export interface DataByType {
   "sites.enable": null;
   "sites.disable": null;
   "sites.setErrorCapture": null;
+  "clickup.status": boolean;
+  "clickup.createTask": ClickUpTaskResult;
 }
 
 export type DataByRequestType = AuthDataByType & DataByType;
@@ -266,6 +278,15 @@ export type DataByRequestType = AuthDataByType & DataByType;
 export function resultSchema<Data>(data: z.ZodMiniType<Data>): z.ZodMiniType<MessageResult<Data>> {
   return z.union([z.object({ ok: z.literal(true), data }), errorResponseSchema]);
 }
+
+export const clickUpTaskResultSchema = z.object({
+  taskId: z.string(),
+  taskUrl: httpUrlSchema,
+  created: z.boolean(),
+  screenshotAttached: z.boolean(),
+});
+
+export type ClickUpTaskResult = z.infer<typeof clickUpTaskResultSchema>;
 
 export const RESPONSE_SCHEMAS: {
   [Type in ExtensionRequestType]: z.ZodMiniType<MessageResult<DataByRequestType[Type]>>;
@@ -294,6 +315,8 @@ export const RESPONSE_SCHEMAS: {
   "sites.enable": resultSchema(z.null()),
   "sites.disable": resultSchema(z.null()),
   "sites.setErrorCapture": resultSchema(z.null()),
+  "clickup.status": resultSchema(z.boolean()),
+  "clickup.createTask": resultSchema(clickUpTaskResultSchema),
 };
 
 export const pageSubscribeSchema = z.object({

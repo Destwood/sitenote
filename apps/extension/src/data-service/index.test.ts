@@ -1,5 +1,6 @@
 import type { ThreadContext } from "@sitenote/core";
 import type { SitenoteClient } from "@sitenote/db";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 
 import { failure, success, type DataRequest } from "../messages";
@@ -83,10 +84,13 @@ function createFake(options: {
   session?: boolean | "throws";
   responses: Record<string, Response[]>;
   signed?: unknown[];
+  invokes?: Response[];
 }) {
   const queries: Query[] = [];
   const signedCalls: SignedCall[] = [];
   const signedQueue = [...(options.signed ?? [])];
+  const invokeCalls: { name: string; body: unknown }[] = [];
+  const invokeQueue = [...(options.invokes ?? [])];
 
   function chain(target: string, calls: Call[]): unknown {
     const query: Query = { target, calls };
@@ -117,6 +121,12 @@ function createFake(options: {
   }
 
   const client = {
+    functions: {
+      invoke: (name: string, init: { body: unknown }) => {
+        invokeCalls.push({ name, body: init.body });
+        return Promise.resolve(invokeQueue.shift() ?? broken(new Error("no invoke queued")));
+      },
+    },
     from: (table: string) => chain(table, []),
     rpc: (name: string, args: unknown) => chain(`rpc:${name}`, [{ method: "rpc", args: [args] }]),
     storage: {
@@ -143,7 +153,7 @@ function createFake(options: {
     },
   } as unknown as SitenoteClient;
 
-  return { client, queries, signedCalls };
+  return { client, queries, signedCalls, invokeCalls };
 }
 
 function setup(
@@ -154,6 +164,7 @@ function setup(
     captureErrors?: boolean;
     now?: () => number;
     signed?: unknown[];
+    invokes?: Response[];
     attach?: ThreadScreenshots["attach"];
   } = {},
 ) {
@@ -161,6 +172,7 @@ function setup(
     responses,
     ...(extra.session === undefined ? {} : { session: extra.session }),
     ...(extra.signed === undefined ? {} : { signed: extra.signed }),
+    ...(extra.invokes === undefined ? {} : { invokes: extra.invokes }),
   });
   const getEnabledSite = vi.fn(() =>
     Promise.resolve(
@@ -431,6 +443,64 @@ describe("listThreads", () => {
     const { service } = setup({});
 
     expect(await service.listThreads(LIST)).toEqual(failure("unknown"));
+  });
+});
+
+describe("ClickUp", () => {
+  const TASK = {
+    taskId: "86abc",
+    taskUrl: "https://app.clickup.com/t/86abc",
+    created: true,
+    screenshotAttached: true,
+  };
+
+  it("reports whether ClickUp is configured for the workspace", async () => {
+    const { service, queries } = setup({ "rpc:clickup_configured": [ok(true)] });
+
+    expect(
+      await service.clickUpStatus({ type: "clickup.status", workspaceId: WORKSPACE_ID }),
+    ).toEqual(success(true));
+    expect(callsOf(queries, "rpc:clickup_configured")[0]?.[0]?.args[0]).toEqual({
+      p_workspace_id: WORKSPACE_ID,
+    });
+  });
+
+  it("creates the task through the function and returns its link", async () => {
+    const { service, invokeCalls } = setup({}, { invokes: [ok(TASK)] });
+
+    expect(
+      await service.clickUpCreateTask({ type: "clickup.createTask", threadId: THREAD_ID }),
+    ).toEqual(success(TASK));
+    expect(invokeCalls).toEqual([{ name: "clickup-create-task", body: { threadId: THREAD_ID } }]);
+  });
+
+  it("passes on the whitelisted code the function answered with", async () => {
+    const error = new FunctionsHttpError(
+      new globalThis.Response(
+        JSON.stringify({ error: { code: "not_configured", message: "Connect" } }),
+        {
+          status: 409,
+        },
+      ),
+    );
+    const { service } = setup({}, { invokes: [broken(error)] });
+
+    expect(
+      await service.clickUpCreateTask({ type: "clickup.createTask", threadId: THREAD_ID }),
+    ).toEqual(failure("not_configured"));
+  });
+
+  it("answers unknown for a code it does not recognise", async () => {
+    const error = new FunctionsHttpError(
+      new globalThis.Response(JSON.stringify({ error: { code: "teapot", message: "x" } }), {
+        status: 418,
+      }),
+    );
+    const { service } = setup({}, { invokes: [broken(error)] });
+
+    expect(
+      await service.clickUpCreateTask({ type: "clickup.createTask", threadId: THREAD_ID }),
+    ).toEqual(failure("unknown"));
   });
 });
 

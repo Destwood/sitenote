@@ -37,6 +37,8 @@ export const PENDING_ID = "pending";
 export const SELECTION_ID = "selection";
 export const MAX_TOASTS = 3;
 export const UNSUPPORTED_SELECTION_MESSAGE = "That selection cannot be commented on.";
+export const CLICKUP_SCREENSHOT_MISSING_MESSAGE =
+  "The ClickUp task was created without the screenshot.";
 export const PREFERENCE_FAILED_MESSAGE = "Could not remember this setting for the next visit.";
 export const SCREENSHOT_FAILED_MESSAGE = "Screenshot could not be saved";
 export const THREAD_NOT_HERE_MESSAGE = "This comment is on another page or you do not have access.";
@@ -67,6 +69,8 @@ export interface ContentState {
   toasts: ToastView[];
   panelError: string | undefined;
   fallbackHighlights: boolean;
+  clickUpConfigured: boolean;
+  clickUpPending: ReadonlySet<string>;
 }
 
 export interface ContentControllerDeps {
@@ -99,6 +103,7 @@ export interface ContentController {
   editComment: (commentId: string, body: string) => Promise<void>;
   deleteComment: (commentId: string) => Promise<void>;
   toggleStatus: (threadId: string) => Promise<void>;
+  createClickUpTask: (threadId: string) => Promise<void>;
   dismissToast: (toastId: string) => void;
 }
 
@@ -152,6 +157,8 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     toasts: [],
     panelError: undefined,
     fallbackHighlights: !highlighter.supported,
+    clickUpConfigured: false,
+    clickUpPending: new Set<string>(),
   });
 
   let sessionThreads: ThreadRecord[] | null = null;
@@ -295,6 +302,55 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     );
   }
 
+  async function loadClickUpStatus(): Promise<void> {
+    const site = store.getState().site;
+    if (site === null) {
+      return;
+    }
+    const result = await deps.send({ type: "clickup.status", workspaceId: site.workspaceId });
+    if (!result.ok) {
+      return;
+    }
+    const configured = result.data;
+    store.setState((state) =>
+      state.clickUpConfigured === configured ? state : { ...state, clickUpConfigured: configured },
+    );
+  }
+
+  async function createClickUpTask(threadId: string): Promise<void> {
+    if (store.getState().clickUpPending.has(threadId)) {
+      return;
+    }
+    store.setState((state) => ({
+      ...state,
+      clickUpPending: new Set(state.clickUpPending).add(threadId),
+    }));
+    const result = await deps.send({ type: "clickup.createTask", threadId });
+    store.setState((state) => {
+      const pending = new Set(state.clickUpPending);
+      pending.delete(threadId);
+      const threads = result.ok
+        ? state.threads.map((thread) =>
+            thread.id === threadId ? { ...thread, clickUpTaskUrl: result.data.taskUrl } : thread,
+          )
+        : state.threads;
+      return { ...state, clickUpPending: pending, threads };
+    });
+    if (!result.ok) {
+      pushToast({
+        message: result.error.message,
+        variant: "error",
+        onRetry: () => {
+          void createClickUpTask(threadId);
+        },
+      });
+      return;
+    }
+    if (!result.data.screenshotAttached) {
+      pushToast({ message: CLICKUP_SCREENSHOT_MISSING_MESSAGE, variant: "info" });
+    }
+  }
+
   async function loadShowResolved(siteId: string): Promise<void> {
     const show = await deps.preference.load(siteId);
     if (!showResolvedChosen && store.getState().site?.siteId === siteId) {
@@ -385,6 +441,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       return;
     }
     void loadMembers();
+    void loadClickUpStatus();
     const resolution = state.resolutions.get(threadId);
     if (resolution?.status === "resolved" && state.positions.get(threadId)?.visible !== true) {
       scrollTargetIntoView(resolution.target);
@@ -715,6 +772,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     editComment,
     deleteComment,
     toggleStatus,
+    createClickUpTask,
     dismissToast,
   };
 }

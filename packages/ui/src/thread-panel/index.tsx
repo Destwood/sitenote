@@ -1,5 +1,6 @@
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 
+import { ClickUpTask, type ClickUpTaskState } from "../clickup-task";
 import { CommentItem } from "../comment-item";
 import { Composer, type ComposerSubmission } from "../composer";
 import { ContextSection } from "../context-section";
@@ -19,6 +20,7 @@ export interface ThreadPanelProps {
   error?: string | undefined;
   mentionCandidates?: readonly PersonView[] | undefined;
   screenshot?: ScreenshotState | undefined;
+  clickUp?: ClickUpTaskState | undefined;
   onSubmit: (submission: ComposerSubmission) => Promise<void>;
   onEditComment: (commentId: string, body: string) => Promise<void>;
   onDeleteComment: (commentId: string) => Promise<void>;
@@ -41,6 +43,7 @@ export function ThreadPanel({
   error,
   mentionCandidates,
   screenshot,
+  clickUp,
   onSubmit,
   onEditComment,
   onDeleteComment,
@@ -137,6 +140,11 @@ export function ThreadPanel({
               />
             ))}
           </ul>
+          {clickUp === undefined ? null : (
+            <div className="py-3">
+              <ClickUpTask {...clickUp} />
+            </div>
+          )}
           <ContextSection
             context={thread.context}
             hasScreenshot={thread.hasScreenshot}

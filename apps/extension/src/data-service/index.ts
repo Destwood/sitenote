@@ -8,11 +8,16 @@ import {
   type ThreadContext,
 } from "@sitenote/core";
 import type { SitenoteClient } from "@sitenote/db";
+import { FunctionsHttpError } from "@supabase/supabase-js";
+import * as z from "zod/mini";
 
 import { mapDataError } from "../data-errors";
 import {
+  clickUpTaskResultSchema,
   failure,
+  isErrorCode,
   success,
+  type ClickUpTaskResult,
   type DataRequest,
   type ErrorResponse,
   type MessageResult,
@@ -33,11 +38,12 @@ const PROFILE_COLUMNS = "user_id, display_name, avatar_url" as const;
 const COMMENT_COLUMNS =
   `id, thread_id, author_id, body, mentions, edited_at, deleted_at, created_at, author:profiles!comments_author_id_fkey(${PROFILE_COLUMNS})` as const;
 const THREAD_SELECT =
-  `id, site_id, page_url, anchor, status, context, screenshot_path, created_at, created_by, author:profiles!threads_created_by_fkey(${PROFILE_COLUMNS}), comments(${COMMENT_COLUMNS})` as const;
+  `id, site_id, page_url, anchor, status, context, screenshot_path, clickup_task_url, created_at, created_by, author:profiles!threads_created_by_fkey(${PROFILE_COLUMNS}), comments(${COMMENT_COLUMNS})` as const;
 const MEMBER_SELECT = `role, profile:profiles!members_user_id_fkey(${PROFILE_COLUMNS})` as const;
 const NOTIFICATION_SELECT =
   "id, kind, read_at, created_at, thread_id, thread:threads(page_url, status), comment:comments(body, deleted_at, author:profiles!comments_author_id_fkey(display_name))" as const;
 const UNIQUE_VIOLATION = "23505";
+const functionErrorSchema = z.object({ error: z.object({ code: z.string() }) });
 
 export const MEMBERS_CACHE_TTL_MS = 60_000;
 export const SIGNED_URL_TTL_SECONDS = 3600;
@@ -76,6 +82,7 @@ interface ThreadRow {
   status: "open" | "resolved";
   context: unknown;
   screenshot_path: string | null;
+  clickup_task_url: string | null;
   created_at: string;
   created_by: string | null;
   author: ProfileRow | null;
@@ -136,6 +143,10 @@ export interface DataService {
     request: Handled<"threads.screenshotUrl">,
   ) => Promise<MessageResult<string | null>>;
   setThreadStatus: (request: Handled<"threads.setStatus">) => Promise<MessageResult<ThreadRecord>>;
+  clickUpStatus: (request: Handled<"clickup.status">) => Promise<MessageResult<boolean>>;
+  clickUpCreateTask: (
+    request: Handled<"clickup.createTask">,
+  ) => Promise<MessageResult<ClickUpTaskResult>>;
   createComment: (request: Handled<"comments.create">) => Promise<MessageResult<CommentRecord>>;
   updateComment: (request: Handled<"comments.update">) => Promise<MessageResult<CommentRecord>>;
   deleteComment: (request: Handled<"comments.delete">) => Promise<MessageResult<CommentRecord>>;
@@ -230,6 +241,7 @@ function toThread(row: ThreadRow): ThreadRecord {
     createdAt: toIso(row.created_at),
     context: toContext(row.context),
     hasScreenshot: row.screenshot_path !== null,
+    clickUpTaskUrl: row.clickup_task_url,
     comments: row.comments.map(toComment).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
   };
 }
@@ -262,6 +274,26 @@ export function createDataService(deps: DataServiceDeps): DataService {
 
   function fail(error: unknown): ErrorResponse {
     return failure(mapDataError(error));
+  }
+
+  async function readJsonBody(response: Response): Promise<unknown> {
+    try {
+      return await response.json();
+    } catch {
+      return null;
+    }
+  }
+
+  async function functionFailure(error: unknown): Promise<ErrorResponse> {
+    if (!(error instanceof FunctionsHttpError)) {
+      return fail(error);
+    }
+    const context: unknown = error.context;
+    const body = context instanceof Response ? await readJsonBody(context) : null;
+    const parsed = z.safeParse(functionErrorSchema, body);
+    return parsed.success && isErrorCode(parsed.data.error.code)
+      ? failure(parsed.data.error.code)
+      : failure("unknown");
   }
 
   async function fetchThread(threadId: string): Promise<MessageResult<ThreadRecord>> {
@@ -389,6 +421,22 @@ export function createDataService(deps: DataServiceDeps): DataService {
           expiresAt: now() + SIGNED_URL_TTL_SECONDS * 1000,
         });
         return success(signed.data.signedUrl);
+      }),
+
+    clickUpStatus: ({ workspaceId }) =>
+      guarded(async () => {
+        const result = await client.rpc("clickup_configured", { p_workspace_id: workspaceId });
+        return result.error === null ? success(result.data) : fail(result.error);
+      }),
+
+    clickUpCreateTask: ({ threadId }) =>
+      guarded(async () => {
+        const result = await client.functions.invoke("clickup-create-task", { body: { threadId } });
+        if (result.error !== null) {
+          return functionFailure(result.error);
+        }
+        const parsed = z.safeParse(clickUpTaskResultSchema, result.data);
+        return parsed.success ? success(parsed.data) : failure("unknown");
       }),
 
     setThreadStatus: ({ threadId, status }) =>

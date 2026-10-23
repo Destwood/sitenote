@@ -53,6 +53,8 @@ const PAGE_SCOPED: ReadonlySet<ExtensionRequest["type"]> = new Set([
   "screenshot.capture",
   "preferences.get",
   "preferences.set",
+  "clickup.status",
+  "clickup.createTask",
 ]);
 
 export function senderOriginOf(sender: RouterSender): string | null {
@@ -198,6 +200,10 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
         return enablement.disable(request.origin);
       case "sites.setErrorCapture":
         return enablement.setErrorCapture(request);
+      case "clickup.status":
+        return data.clickUpStatus(request);
+      case "clickup.createTask":
+        return data.clickUpCreateTask(request);
     }
   };
 }

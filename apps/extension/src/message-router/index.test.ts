@@ -66,6 +66,8 @@ function createFakes() {
     createThread: vi.fn(),
     screenshotUrl: vi.fn(() => Promise.resolve(success(null))),
     setThreadStatus: vi.fn(),
+    clickUpStatus: vi.fn(() => Promise.resolve(success(true))),
+    clickUpCreateTask: vi.fn(),
     createComment: vi.fn(),
     updateComment: vi.fn(),
     deleteComment: vi.fn(),
@@ -381,6 +383,25 @@ describe("createMessageRouter error capture and test messages", () => {
     expect(await route({ type: "__test.failNextUpload" }, POPUP)).toEqual(
       failure("invalid_request"),
     );
+  });
+});
+
+describe("createMessageRouter ClickUp requests", () => {
+  it("routes the ClickUp status and task requests from an enabled page to the data service", async () => {
+    const { route, data } = setup();
+
+    expect(await route({ type: "clickup.status", workspaceId: WORKSPACE_ID }, CONTENT)).toEqual(
+      success(true),
+    );
+    expect(data.clickUpStatus).toHaveBeenCalledExactlyOnceWith({
+      type: "clickup.status",
+      workspaceId: WORKSPACE_ID,
+    });
+    await route({ type: "clickup.createTask", threadId: THREAD_ID }, CONTENT);
+    expect(data.clickUpCreateTask).toHaveBeenCalledExactlyOnceWith({
+      type: "clickup.createTask",
+      threadId: THREAD_ID,
+    });
   });
 });
 
