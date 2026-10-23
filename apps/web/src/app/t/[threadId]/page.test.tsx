@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
+  rpc: vi.fn(() => Promise.resolve({ data: false, error: null })),
   getAuthenticatedUser: vi.fn(),
   notFound: vi.fn(() => {
     throw new Error("NEXT_NOT_FOUND");
@@ -13,8 +14,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation", () => ({ notFound: mocks.notFound, redirect: mocks.redirect }));
+vi.mock("../../../clickup-task-panel", () => ({ ClickUpTaskPanel: () => null }));
 vi.mock("../../../supabase-server", () => ({
-  createSupabaseServerClient: () => Promise.resolve({ from: mocks.from }),
+  createSupabaseServerClient: () => Promise.resolve({ from: mocks.from, rpc: mocks.rpc }),
   getAuthenticatedUser: mocks.getAuthenticatedUser,
 }));
 vi.mock("../../../env", () => ({

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { isClickUpConfigured } from "../../../../../../clickup-api";
+import { ClickUpTaskPanel } from "../../../../../../clickup-task-panel";
 import { CopyLink } from "../../../../../../copy-link";
 import { getPublicEnv } from "../../../../../../env";
 import { LINK_BUTTON_CLASS } from "../../../../../../form-controls";
@@ -45,6 +47,7 @@ export default async function ThreadPage({ params }: ThreadPageProps) {
   if (detail === null) {
     notFound();
   }
+  const canCreateClickUpTask = await isClickUpConfigured(supabase, workspaceId);
   const { webUrl } = getPublicEnv();
 
   return (
@@ -71,6 +74,11 @@ export default async function ThreadPage({ params }: ThreadPageProps) {
             <CopyLink label="Thread link" value={`${webUrl}/t/${threadId}`} />
           </div>
         </div>
+        <ClickUpTaskPanel
+          threadId={threadId}
+          taskUrl={detail.clickUpTaskUrl}
+          canCreate={canCreateClickUpTask}
+        />
       </header>
       <section aria-labelledby="context-heading" className="flex flex-col gap-3">
         <h2 id="context-heading" className="text-lg font-semibold">

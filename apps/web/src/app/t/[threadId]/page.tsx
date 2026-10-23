@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { isClickUpConfigured } from "../../../clickup-api";
+import { ClickUpTaskPanel } from "../../../clickup-task-panel";
 import { getPublicEnv } from "../../../env";
 import { LINK_BUTTON_CLASS } from "../../../form-controls";
 import { OpenOnPage } from "../../../open-on-page";
@@ -48,6 +50,7 @@ export default async function ThreadLinkPage({ params }: ThreadLinkPageProps) {
     notFound();
   }
   const pageHref = safeExternalHref(detail.pageUrl);
+  const canCreateClickUpTask = await isClickUpConfigured(supabase, detail.workspaceId);
   const { extensionId } = getPublicEnv();
 
   return (
@@ -73,6 +76,11 @@ export default async function ThreadLinkPage({ params }: ThreadLinkPageProps) {
           {pageHref === null ? null : (
             <OpenOnPage pageUrl={pageHref} threadId={threadId} extensionId={extensionId} />
           )}
+          <ClickUpTaskPanel
+            threadId={threadId}
+            taskUrl={detail.clickUpTaskUrl}
+            canCreate={canCreateClickUpTask}
+          />
           <Link
             href={threadPath(detail.workspaceId, threadId)}
             className={`${LINK_BUTTON_CLASS} w-fit`}
