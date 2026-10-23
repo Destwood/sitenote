@@ -12,6 +12,7 @@ import {
   PREFERENCE_FAILED_MESSAGE,
   PENDING_ID,
   SCREENSHOT_FAILED_MESSAGE,
+  THREAD_NOT_HERE_MESSAGE,
   UNSUPPORTED_SELECTION_MESSAGE,
   createContentController,
   reconcileResolutions,
@@ -294,6 +295,105 @@ describe("reconcileResolutions", () => {
     const next = reconcileResolutions(previous, [], document);
 
     expect(next.size).toBe(0);
+  });
+});
+
+describe("thread named in the address", () => {
+  it("makes the pin of the thread active and removes the hash, keeping the path and query", async () => {
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    window.history.replaceState({}, "", `/docs/a?x=1#sitenote=${THREAD_ID}`);
+
+    const { state } = await setup([thread()]);
+
+    expect(state().activeThreadId).toBe(THREAD_ID);
+    expect(state().sidebarOpen).toBe(false);
+    expect(scroll).toHaveBeenCalledWith({ block: "center", inline: "nearest", behavior: "smooth" });
+    expect(window.location.pathname).toBe("/docs/a");
+    expect(window.location.search).toBe("?x=1");
+    expect(window.location.hash).toBe("");
+  });
+
+  it("opens the thread of a hidden resolved comment without showing all resolved comments", async () => {
+    window.history.replaceState({}, "", `/#sitenote=${THREAD_ID}`);
+
+    const { state } = await setup([thread({ status: "resolved" })]);
+
+    expect(state().activeThreadId).toBe(THREAD_ID);
+    expect(state().showResolved).toBe(false);
+  });
+
+  it("opens the sidebar with an orphaned thread selected", async () => {
+    element("#cta").remove();
+    window.history.replaceState({}, "", `/#sitenote=${THREAD_ID}`);
+
+    const { state } = await setup([thread()]);
+
+    expect(state().resolutions.get(THREAD_ID)).toBe(ORPHANED);
+    expect(state().activeThreadId).toBe(THREAD_ID);
+    expect(state().sidebarOpen).toBe(true);
+  });
+
+  it("says so when the thread is not on this page and clears the hash", async () => {
+    window.history.replaceState({}, "", `/#sitenote=${SECOND_THREAD_ID}`);
+
+    const { state } = await setup([thread()]);
+
+    expect(state().activeThreadId).toBeNull();
+    expect(state().toasts.map((toast) => toast.message)).toEqual([THREAD_NOT_HERE_MESSAGE]);
+    expect(window.location.hash).toBe("");
+  });
+
+  it("waits for the threads of the page before it opens the thread", async () => {
+    let release: (value: MessageResult<ThreadRecord[]>) => void = () => undefined;
+    const list = new Promise<MessageResult<ThreadRecord[]>>((resolve) => {
+      release = resolve;
+    });
+    window.history.replaceState({}, "", `/#sitenote=${THREAD_ID}`);
+
+    const starting = setup([thread()], { "threads.list": () => list });
+    await vi.waitFor(() => {
+      expect(controller?.store.getState().status).toBe("ready");
+    });
+
+    expect(window.location.hash).toBe(`#sitenote=${THREAD_ID}`);
+    expect(controller?.store.getState().activeThreadId).toBeNull();
+    expect(controller?.store.getState().toasts).toEqual([]);
+
+    release(success([thread()]));
+    await starting;
+
+    expect(controller?.store.getState().activeThreadId).toBe(THREAD_ID);
+    expect(window.location.hash).toBe("");
+  });
+
+  it("opens the thread when the hash changes on the same page", async () => {
+    const { state } = await setup([thread()]);
+
+    window.history.replaceState({}, "", `/#sitenote=${THREAD_ID}`);
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+
+    expect(state().activeThreadId).toBe(THREAD_ID);
+    expect(window.location.hash).toBe("");
+  });
+
+  it("ignores a hash that does not name a thread", async () => {
+    window.history.replaceState({}, "", "/#sitenote=not-a-thread");
+
+    const { state } = await setup([thread()]);
+
+    expect(state().activeThreadId).toBeNull();
+    expect(state().toasts).toEqual([]);
+    expect(window.location.hash).toBe("#sitenote=not-a-thread");
+  });
+
+  it("leaves the hash alone when the site is not enabled", async () => {
+    window.history.replaceState({}, "", `/#sitenote=${THREAD_ID}`);
+
+    const { state } = await setup([], { "sites.forOrigin": () => success(null) });
+
+    expect(state().status).toBe("disabled");
+    expect(state().toasts).toEqual([]);
+    expect(window.location.hash).toBe(`#sitenote=${THREAD_ID}`);
   });
 });
 
@@ -933,7 +1033,7 @@ describe("selecting threads", () => {
 
     api.selectThread(THREAD_ID);
 
-    expect(scroll).toHaveBeenCalledWith({ block: "center", inline: "nearest" });
+    expect(scroll).toHaveBeenCalledWith({ block: "center", inline: "nearest", behavior: "auto" });
   });
 
   it("opens an orphaned thread without scrolling", async () => {

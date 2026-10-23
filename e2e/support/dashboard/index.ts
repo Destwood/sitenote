@@ -31,7 +31,7 @@ export async function createDashboardThread(
   owner: SitenoteClient,
   token: string,
 ): Promise<DashboardThread> {
-  const pagePath = `/dashboard/${token}`;
+  const pagePath = `/p/${token}`;
   const { data, error } = await owner.rpc("create_thread", {
     p_site_id: SEEDED_SITE_ID,
     p_page_url: `${FIXTURE_PAGE_ORIGIN}${pagePath}`,

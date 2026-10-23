@@ -8,6 +8,7 @@ export interface PageSessionState {
   status: PageSessionStatus;
   site: SiteInfo | null;
   threads: ThreadRecord[];
+  loaded: boolean;
   live: boolean;
   error: ErrorCode | null;
 }
@@ -34,6 +35,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     status: "starting",
     site: null,
     threads: [],
+    loaded: false,
     live: false,
     error: null,
   };
@@ -61,7 +63,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     }
     publish(
       result.ok
-        ? { ...state, status: "ready", threads: result.data, error: null }
+        ? { ...state, status: "ready", threads: result.data, loaded: true, error: null }
         : { ...state, status: "error", error: result.error.code },
     );
   }
@@ -113,7 +115,14 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       },
       onEvent: (event) => {
         if (event.type === "site.disabled") {
-          publish({ status: "disabled", site: null, threads: [], live: false, error: null });
+          publish({
+            status: "disabled",
+            site: null,
+            threads: [],
+            loaded: false,
+            live: false,
+            error: null,
+          });
           stop();
           return;
         }
@@ -140,6 +149,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     start,
     refresh,
     navigate: () => {
+      publish({ ...state, loaded: false });
       const pageUrl = deps.readPageUrl();
       if (pageUrl !== null) {
         connection?.update(pageUrl);

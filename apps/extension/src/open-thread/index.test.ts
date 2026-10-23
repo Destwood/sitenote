@@ -36,7 +36,17 @@ describe("openThread", () => {
     });
 
     expect(opened).toBe(true);
-    expect(mocks.create).toHaveBeenCalledExactlyOnceWith({ url: "https://example.test/pricing" });
+    expect(mocks.create).toHaveBeenCalledExactlyOnceWith({
+      url: `https://example.test/pricing#sitenote=${THREAD_ID}`,
+    });
+  });
+
+  it("replaces an existing hash of the page with the thread", async () => {
+    await openThread({ pageUrl: "https://example.test/pricing?plan=pro#top", threadId: THREAD_ID });
+
+    expect(mocks.create).toHaveBeenCalledExactlyOnceWith({
+      url: `https://example.test/pricing?plan=pro#sitenote=${THREAD_ID}`,
+    });
   });
 
   it("refuses an address that is not a web page without opening anything", async () => {

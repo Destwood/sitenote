@@ -34,6 +34,7 @@ const THREAD_ID = "20000000-0000-4000-8000-000000000001";
 const USER = { id: "u-1", email: "owner@sitenote.test", isAnonymous: false };
 
 const THREAD = {
+  workspace_id: WORKSPACE_ID,
   id: THREAD_ID,
   page_url: "https://example.test/pricing",
   status: "open",
