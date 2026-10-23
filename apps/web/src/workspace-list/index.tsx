@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { LINK_BUTTON_CLASS } from "../form-controls";
 import { workspaceInvitesPath } from "../invite-link";
+import { MEMBER_ROLE_LABELS } from "../member-roles";
 import { workspacePath } from "../workspace-paths";
 
 export interface WorkspaceListItem {
@@ -14,12 +15,6 @@ export interface WorkspaceListItem {
 interface WorkspaceListProps {
   workspaces: readonly WorkspaceListItem[];
 }
-
-const ROLE_LABELS: Readonly<Record<Enums<"member_role">, string>> = {
-  owner: "Owner",
-  member: "Member",
-  guest: "Guest",
-};
 
 export function WorkspaceList({ workspaces }: WorkspaceListProps) {
   if (workspaces.length === 0) {
@@ -47,7 +42,7 @@ export function WorkspaceList({ workspaces }: WorkspaceListProps) {
               </Link>
             ) : null}
             <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs font-semibold text-neutral-700">
-              {ROLE_LABELS[workspace.role]}
+              {MEMBER_ROLE_LABELS[workspace.role]}
             </span>
           </span>
         </li>
