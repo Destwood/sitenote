@@ -13,6 +13,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mocks.replace, refresh: mocks.refresh }),
 }));
+vi.mock("../env", () => ({
+  getPublicEnv: () => ({ webUrl: "http://localhost:3000" }),
+}));
 vi.mock("../supabase-browser", () => ({
   getSupabaseBrowserClient: () => ({
     auth: {
@@ -65,9 +68,27 @@ describe("email step", () => {
 
     expect(mocks.signInWithOtp).toHaveBeenCalledWith({
       email: "ada@example.com",
-      options: { shouldCreateUser: true },
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: "http://localhost:3000/auth/callback?next=%2Fapp",
+      },
     });
     expect(screen.getByRole("status").textContent).toContain("ada@example.com");
+    expect(screen.getByRole("status").textContent).toContain("Click the sign-in link");
+  });
+
+  it("sends the magic link back to the callback with the safe next path", async () => {
+    const user = setup({ next: "/app/settings?tab=members" });
+
+    await reachCodeStep(user);
+
+    expect(mocks.signInWithOtp).toHaveBeenCalledWith({
+      email: "ada@example.com",
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: `http://localhost:3000/auth/callback?next=${encodeURIComponent("/app/settings?tab=members")}`,
+      },
+    });
   });
 
   it("stays on the email step and explains a rate limit", async () => {

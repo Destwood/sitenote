@@ -3,11 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   exchangeCodeForSession: vi.fn(),
+  verifyOtp: vi.fn(),
 }));
 
 vi.mock("../../../supabase-server", () => ({
   createSupabaseServerClient: () =>
-    Promise.resolve({ auth: { exchangeCodeForSession: mocks.exchangeCodeForSession } }),
+    Promise.resolve({
+      auth: { exchangeCodeForSession: mocks.exchangeCodeForSession, verifyOtp: mocks.verifyOtp },
+    }),
 }));
 
 import { GET } from "./route";
@@ -24,6 +27,7 @@ function location(response: Response): string | null {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.exchangeCodeForSession.mockResolvedValue({ error: null });
+  mocks.verifyOtp.mockResolvedValue({ error: null });
 });
 
 describe("GET /auth/callback", () => {
@@ -65,6 +69,35 @@ describe("GET /auth/callback", () => {
     expect(location(await call("?code="))).toBe("/sign-in?error=missing_code");
     expect(mocks.exchangeCodeForSession).not.toHaveBeenCalled();
   });
+
+  it.each(["magiclink", "email"])(
+    "verifies a %s token hash and redirects to the requested path",
+    async (type) => {
+      const response = await call(`?token_hash=hash-1&type=${type}&next=%2Fextension%2Fconnect`);
+
+      expect(mocks.verifyOtp).toHaveBeenCalledWith({ token_hash: "hash-1", type });
+      expect(mocks.exchangeCodeForSession).not.toHaveBeenCalled();
+      expect(location(response)).toBe("/extension/connect");
+    },
+  );
+
+  it("redirects to sign-in when the token hash cannot be verified", async () => {
+    mocks.verifyOtp.mockResolvedValue({ error: { message: "Token has expired" } });
+
+    const response = await call("?token_hash=hash-1&type=magiclink&next=%2Fapp");
+
+    expect(location(response)).toBe("/sign-in?error=exchange_failed");
+  });
+
+  it.each(["", "&type=recovery", "&type=signup", "&type=bogus"])(
+    "refuses a token hash with an unsupported type (%s)",
+    async (suffix) => {
+      const response = await call(`?token_hash=hash-1${suffix}`);
+
+      expect(location(response)).toBe("/sign-in?error=exchange_failed");
+      expect(mocks.verifyOtp).not.toHaveBeenCalled();
+    },
+  );
 
   it("maps a provider error to a fixed key and never echoes the description", async () => {
     const response = await call(
