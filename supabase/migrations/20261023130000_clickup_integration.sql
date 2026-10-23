@@ -5,7 +5,7 @@ stable
 security definer
 set search_path = ''
 as $$
-  select private.workspace_role(p_workspace_id) in ('owner', 'member')
+  select coalesce(private.workspace_role(p_workspace_id) in ('owner', 'member'), false)
     and exists (
       select 1
       from public.integrations i
