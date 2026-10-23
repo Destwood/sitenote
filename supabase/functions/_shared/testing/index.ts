@@ -28,7 +28,7 @@ export function fakeBackend(responder: Responder): FakeBackend {
       response ?? new Response(`no responder for ${request.method} ${request.url}`, { status: 599 })
     );
   };
-  return { fetch: fake as typeof fetch, requests };
+  return { fetch: fake, requests };
 }
 
 export function json(body: unknown, status = 200): Response {
