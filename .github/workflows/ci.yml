@@ -70,10 +70,25 @@ jobs:
             exit 1
           fi
 
+  functions:
+    name: Edge Functions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: "2.x"
+      - run: deno check --config supabase/functions/deno.json supabase/functions/*/index.ts supabase/functions/*/handler.ts supabase/functions/*/handler.test.ts
+      - run: deno lint supabase/functions/clickup-create-task supabase/functions/clickup-save-settings supabase/functions/clickup-hierarchy supabase/functions/notify-email supabase/functions/_shared/runtime supabase/functions/_shared/supabase supabase/functions/_shared/testing
+      - run: deno test --config supabase/functions/deno.json supabase/functions/clickup-create-task supabase/functions/clickup-save-settings supabase/functions/clickup-hierarchy supabase/functions/notify-email
+
   e2e:
     name: End-to-end
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    env:
+      CLICKUP_MOCK_HOST: 0.0.0.0
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -92,6 +107,23 @@ jobs:
       - run: pnpm --filter @sitenote/e2e exec playwright install --with-deps chromium
       - run: pnpm exec supabase start -x studio,imgproxy,edge-runtime,logflare,vector,postgres-meta
       - run: pnpm db:env
+      - name: Write Edge Function settings for the mock ClickUp server
+        run: |
+          {
+            echo "SITE_URL=http://localhost:3000"
+            echo "WEBHOOK_SECRET=ci-webhook-secret"
+            echo "CLICKUP_API_BASE=http://host.docker.internal:4411"
+          } > supabase/functions/.env
+      - name: Serve Edge Functions
+        run: |
+          pnpm exec supabase functions serve --env-file supabase/functions/.env > functions.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" -X OPTIONS -H "Origin: http://localhost:3000" http://127.0.0.1:54321/functions/v1/clickup-hierarchy || true)
+            if [ "$code" = "204" ]; then exit 0; fi
+            sleep 2
+          done
+          cat functions.log
+          exit 1
       - run: pnpm e2e
       - uses: actions/upload-artifact@v7
         if: failure()
