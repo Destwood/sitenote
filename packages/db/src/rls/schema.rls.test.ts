@@ -337,6 +337,14 @@ describe("functions and schemas", () => {
         authenticated: true,
         public_exec: false,
       },
+      {
+        proname: "search_threads",
+        prosecdef: false,
+        proconfig: pinned,
+        anon: false,
+        authenticated: true,
+        public_exec: false,
+      },
     ]);
   });
 
