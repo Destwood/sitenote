@@ -1,15 +1,3 @@
-create function private.contains_pattern(p_text text)
-returns text
-language sql
-immutable
-set search_path = ''
-as $$
-  select '%' || replace(replace(replace(p_text, '\', '\\'), '%', '\%'), '_', '\_') || '%'
-$$;
-
-revoke all on function private.contains_pattern(text) from public;
-grant execute on function private.contains_pattern(text) to authenticated;
-
 create function public.search_threads(
   p_workspace_id uuid,
   p_q text default null,
@@ -38,11 +26,17 @@ security invoker
 set search_path = ''
 as $$
 #variable_conflict use_column
+declare
+  v_q_pattern text;
+  v_page_pattern text;
 begin
   if p_limit is null or p_limit not between 1 and 100 or p_offset is null or p_offset < 0 then
     raise exception 'the page size must be 1 to 100 and the offset must not be negative'
       using errcode = '22023';
   end if;
+
+  v_q_pattern := '%' || replace(replace(replace(p_q, '\', '\\'), '%', '\%'), '_', '\_') || '%';
+  v_page_pattern := '%' || replace(replace(replace(p_page, '\', '\\'), '%', '\%'), '_', '\_') || '%';
 
   return query
   with matched as (
@@ -52,7 +46,7 @@ begin
       and (p_site_id is null or t.site_id = p_site_id)
       and (p_status is null or t.status = p_status)
       and (p_author_id is null or t.created_by = p_author_id)
-      and (p_page is null or t.page_url ilike private.contains_pattern(p_page))
+      and (p_page is null or t.page_url ilike v_page_pattern)
       and (
         p_q is null
         or exists (
@@ -60,7 +54,7 @@ begin
           from public.comments c
           where c.thread_id = t.id
             and c.deleted_at is null
-            and c.body ilike private.contains_pattern(p_q)
+            and c.body ilike v_q_pattern
         )
       )
   )
