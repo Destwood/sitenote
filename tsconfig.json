@@ -3,5 +3,6 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["vitest.config.ts", "scripts"]
+  "include": ["vitest.config.ts", "scripts", "supabase/functions/_shared"],
+  "exclude": ["supabase/functions/_shared/supabase"]
 }
