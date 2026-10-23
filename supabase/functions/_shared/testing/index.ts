@@ -39,8 +39,5 @@ export function json(body: unknown, status = 200): Response {
 }
 
 export function single(row: unknown, found = true): Response {
-  if (!found) {
-    return json({ code: "PGRST116", message: "no rows" }, 406);
-  }
-  return json(row);
+  return json(found ? [row] : []);
 }
