@@ -180,7 +180,7 @@ export function PopupApp({ googleEnabled, webUrl }: PopupAppProps) {
         </div>
       ) : null}
       {view.kind === "ready" && view.state.status === "signedOut" ? (
-        <SignInPanel googleEnabled={googleEnabled} onSignedIn={showState} />
+        <SignInPanel googleEnabled={googleEnabled} webUrl={webUrl} onSignedIn={showState} />
       ) : null}
       {view.kind === "ready" && view.state.status === "signedIn" ? (
         <>
