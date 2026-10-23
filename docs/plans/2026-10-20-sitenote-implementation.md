@@ -95,7 +95,7 @@ Done when: every new thread carries context and failures degrade gracefully.
 - [x] Members and invites management
 - [x] `/t/[id]`: authorized thread view, extension ping, "Open on page" to `page_url#sitenote={id}`
 - [x] Content script handles `#sitenote=` by scrolling to and opening the thread
-- [ ] E2E: deep link opens the page and focuses the right pin
+- [x] E2E: deep link opens the page and focuses the right pin
 
 Done when: everything created in the extension is manageable from the dashboard and links round-trip.
 
