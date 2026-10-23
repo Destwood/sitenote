@@ -90,9 +90,9 @@ Done when: every new thread carries context and failures degrade gracefully.
 
 ### Phase 6 — Web dashboard and deep links
 
-- [ ] Dashboard layout: workspace switcher, sites, threads table with filters (site, page, status, author), search
-- [ ] Thread detail page with comments, screenshot, context, status actions
-- [ ] Members and invites management
+- [x] Dashboard layout: workspace switcher, sites, threads table with filters (site, page, status, author), search
+- [x] Thread detail page with comments, screenshot, context, status actions
+- [x] Members and invites management
 - [ ] `/t/[id]`: authorized thread view, extension ping, "Open on page" to `page_url#sitenote={id}`
 - [ ] Content script handles `#sitenote=` by scrolling to and opening the thread
 - [ ] E2E: deep link opens the page and focuses the right pin
