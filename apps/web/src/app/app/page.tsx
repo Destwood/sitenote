@@ -5,7 +5,8 @@ import { AppHeader } from "../../app-header";
 import { CreateWorkspaceForm } from "../../create-workspace-form";
 import { ERROR_CLASS } from "../../form-controls";
 import { createSupabaseServerClient, getAuthenticatedUser } from "../../supabase-server";
-import { WorkspaceList, type WorkspaceListItem } from "../../workspace-list";
+import { readMemberships } from "../../workspace-access";
+import { WorkspaceList } from "../../workspace-list";
 
 export const metadata: Metadata = {
   title: "Workspaces | Sitenote",
@@ -18,18 +19,10 @@ export default async function AppPage() {
     redirect("/sign-in?next=/app");
   }
 
-  const [profile, memberships] = await Promise.all([
+  const [profile, workspaces] = await Promise.all([
     supabase.from("profiles").select("display_name").eq("user_id", user.id).maybeSingle(),
-    supabase
-      .from("members")
-      .select("role, workspaces(id, name)")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: true }),
+    readMemberships(supabase, user.id),
   ]);
-
-  const workspaces: WorkspaceListItem[] = (memberships.data ?? []).map(
-    ({ role, workspaces: workspace }) => ({ id: workspace.id, name: workspace.name, role }),
-  );
   const displayName = profile.data?.display_name ?? user.email ?? "Account";
 
   return (
@@ -40,12 +33,12 @@ export default async function AppPage() {
           <h1 id="workspaces-heading" className="text-2xl font-bold tracking-tight">
             Your workspaces
           </h1>
-          {memberships.error === null ? (
-            <WorkspaceList workspaces={workspaces} />
-          ) : (
+          {workspaces === null ? (
             <p role="alert" className={ERROR_CLASS}>
               We could not load your workspaces. Reload the page to try again.
             </p>
+          ) : (
+            <WorkspaceList workspaces={workspaces} />
           )}
         </section>
         {user.isAnonymous ? (

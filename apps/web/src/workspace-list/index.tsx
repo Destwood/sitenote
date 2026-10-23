@@ -3,6 +3,8 @@ import Link from "next/link";
 
 import { LINK_BUTTON_CLASS } from "../form-controls";
 import { workspaceInvitesPath } from "../invite-link";
+import { MEMBER_ROLE_LABELS } from "../member-roles";
+import { workspacePath } from "../workspace-paths";
 
 export interface WorkspaceListItem {
   id: string;
@@ -13,12 +15,6 @@ export interface WorkspaceListItem {
 interface WorkspaceListProps {
   workspaces: readonly WorkspaceListItem[];
 }
-
-const ROLE_LABELS: Readonly<Record<Enums<"member_role">, string>> = {
-  owner: "Owner",
-  member: "Member",
-  guest: "Guest",
-};
 
 export function WorkspaceList({ workspaces }: WorkspaceListProps) {
   if (workspaces.length === 0) {
@@ -33,7 +29,12 @@ export function WorkspaceList({ workspaces }: WorkspaceListProps) {
     <ul className="flex flex-col divide-y divide-neutral-200 rounded-md border border-neutral-200">
       {workspaces.map((workspace) => (
         <li key={workspace.id} className="flex items-center justify-between gap-4 px-4 py-3">
-          <span className="font-medium">{workspace.name}</span>
+          <Link
+            href={workspacePath(workspace.id)}
+            className="font-medium underline-offset-4 hover:underline"
+          >
+            {workspace.name}
+          </Link>
           <span className="flex items-center gap-3">
             {workspace.role === "owner" ? (
               <Link href={workspaceInvitesPath(workspace.id)} className={LINK_BUTTON_CLASS}>
@@ -41,7 +42,7 @@ export function WorkspaceList({ workspaces }: WorkspaceListProps) {
               </Link>
             ) : null}
             <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs font-semibold text-neutral-700">
-              {ROLE_LABELS[workspace.role]}
+              {MEMBER_ROLE_LABELS[workspace.role]}
             </span>
           </span>
         </li>

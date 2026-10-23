@@ -523,6 +523,30 @@ export type Database = {
           workspace_name: string;
         }[];
       };
+      search_threads: {
+        Args: {
+          p_author_id?: string;
+          p_limit?: number;
+          p_offset?: number;
+          p_page?: string;
+          p_q?: string;
+          p_site_id?: string;
+          p_status?: Database["public"]["Enums"]["thread_status"];
+          p_workspace_id: string;
+        };
+        Returns: {
+          comment_count: number;
+          created_at: string;
+          created_by: string;
+          first_body: string;
+          last_activity: string;
+          page_url: string;
+          site_id: string;
+          status: Database["public"]["Enums"]["thread_status"];
+          thread_id: string;
+          total_count: number;
+        }[];
+      };
     };
     Enums: {
       integration_provider: "clickup";

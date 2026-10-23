@@ -1,3 +1,4 @@
+import { formatUtcDateTime } from "../format-utc";
 import { INVITE_ROLE_LABELS, type InviteRole } from "../invite-options";
 import { InviteRowActions } from "../invite-row-actions";
 import type { InviteStatus } from "../invite-status";
@@ -28,14 +29,8 @@ const STATUS_CLASSES: Readonly<Record<InviteStatus, string>> = {
   revoked: "bg-red-100 text-red-800",
 };
 
-const DATE_FORMAT = new Intl.DateTimeFormat("en-GB", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "UTC",
-});
-
 export function formatInviteDate(iso: string): string {
-  return `${DATE_FORMAT.format(new Date(iso))} UTC`;
+  return formatUtcDateTime(iso);
 }
 
 export function InviteList({ workspaceId, invites }: InviteListProps) {
