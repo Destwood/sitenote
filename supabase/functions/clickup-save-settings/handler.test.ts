@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "node:assert/strict";
+import { assertEquals, assertStringIncludes } from "@std/assert";
 
 import { fakeBackend, json, single, type RecordedRequest } from "../_shared/testing/index.ts";
 
