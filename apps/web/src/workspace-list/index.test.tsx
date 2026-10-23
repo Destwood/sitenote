@@ -34,14 +34,26 @@ describe("WorkspaceList", () => {
     expect(screen.getByText("You are not in any workspace yet.")).toBeTruthy();
   });
 
+  it("opens every workspace from its name", () => {
+    render(<WorkspaceList workspaces={[OWNED, JOINED, GUESTING]} />);
+
+    const rows = screen.getAllByRole("listitem");
+    expect(within(at(rows, 0)).getByRole("link", { name: "Northwind" }).getAttribute("href")).toBe(
+      `/app/w/${OWNED.id}/threads`,
+    );
+    expect(within(at(rows, 2)).getByRole("link", { name: "Client" }).getAttribute("href")).toBe(
+      `/app/w/${GUESTING.id}/threads`,
+    );
+  });
+
   it("links to the invites page only from workspaces the user owns", () => {
     render(<WorkspaceList workspaces={[OWNED, JOINED, GUESTING]} />);
 
     const rows = screen.getAllByRole("listitem");
     const link = within(at(rows, 0)).getByRole("link", { name: "Invites" });
     expect(link.getAttribute("href")).toBe(`/app/w/${OWNED.id}/invites`);
-    expect(within(at(rows, 1)).queryByRole("link")).toBeNull();
-    expect(within(at(rows, 2)).queryByRole("link")).toBeNull();
+    expect(within(at(rows, 1)).queryByRole("link", { name: "Invites" })).toBeNull();
+    expect(within(at(rows, 2)).queryByRole("link", { name: "Invites" })).toBeNull();
     expect(within(at(rows, 0)).getByText("Owner")).toBeTruthy();
     expect(within(at(rows, 2)).getByText("Guest")).toBeTruthy();
   });
