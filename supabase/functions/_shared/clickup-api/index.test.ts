@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createClickUpClient } from ".";
+import { createClickUpClient } from "./index.ts";
 
 function respond(body: unknown, status = 200): Promise<Response> {
   return Promise.resolve(

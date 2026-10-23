@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ApiError, errorResponse, jsonResponse } from ".";
+import { ApiError, errorResponse, jsonResponse } from "./index.ts";
 
 describe("errorResponse", () => {
   it.each([

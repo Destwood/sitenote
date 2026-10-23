@@ -1,6 +1,6 @@
 import * as z from "zod/mini";
 
-import { ApiError } from "../api";
+import { ApiError } from "../api/index.ts";
 
 export const CLICKUP_TIMEOUT_MS = 10_000;
 

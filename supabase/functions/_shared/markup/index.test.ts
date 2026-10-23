@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { escapeHtml, escapeMarkdown, firstCodePoints, safeHttpUrl, singleLine } from ".";
+import { escapeHtml, escapeMarkdown, firstCodePoints, safeHttpUrl, singleLine } from "./index.ts";
 
 describe("escapeHtml", () => {
   it("escapes markup characters and quotes", () => {

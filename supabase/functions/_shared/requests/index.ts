@@ -1,6 +1,6 @@
 import * as z from "zod/mini";
 
-import { ApiError } from "../api";
+import { ApiError } from "../api/index.ts";
 
 const CLICKUP_ID = z.string().check(z.regex(/^\d{1,20}$/));
 const NAME = z.string().check(z.minLength(1), z.maxLength(200));

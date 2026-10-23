@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isValidWebhookSecret } from ".";
+import { isValidWebhookSecret } from "./index.ts";
 
 describe("isValidWebhookSecret", () => {
   it("accepts only the exact configured secret", () => {

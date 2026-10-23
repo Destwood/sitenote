@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { summarizeThreadContext } from ".";
+import { summarizeThreadContext } from "./index.ts";
 
 const context = {
   viewport: { width: 1280, height: 720 },

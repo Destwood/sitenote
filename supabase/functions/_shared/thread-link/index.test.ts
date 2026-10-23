@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { threadLink } from ".";
+import { threadLink } from "./index.ts";
 
 describe("threadLink", () => {
   it("builds the thread page on the site origin", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { renderNotificationEmail } from ".";
+import { renderNotificationEmail } from "./index.ts";
 
 const base = {
   authorName: "Olena Owner",

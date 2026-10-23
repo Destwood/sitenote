@@ -1,5 +1,5 @@
-import { escapeMarkdown, firstCodePoints, singleLine } from "../markup";
-import type { ThreadContextSummary } from "../thread-context";
+import { escapeMarkdown, firstCodePoints, singleLine } from "../markup/index.ts";
+import type { ThreadContextSummary } from "../thread-context/index.ts";
 
 export const TASK_NAME_MAX = 80;
 

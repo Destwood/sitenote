@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildTaskDescription, buildTaskName, decideTaskCreation } from ".";
+import { buildTaskDescription, buildTaskName, decideTaskCreation } from "./index.ts";
 
 const context = {
   viewport: "1280 x 720",

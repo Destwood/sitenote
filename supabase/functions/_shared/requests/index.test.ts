@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ApiError } from "../api";
+import { ApiError } from "../api/index.ts";
 
 import {
   createTaskBody,
@@ -9,7 +9,7 @@ import {
   parseRequest,
   readJsonBody,
   saveSettingsBody,
-} from ".";
+} from "./index.ts";
 
 const WORKSPACE_ID = "10000000-0000-4000-8000-000000000001";
 

@@ -1,4 +1,4 @@
-import { escapeHtml, firstCodePoints, safeHttpUrl } from "../markup";
+import { escapeHtml, firstCodePoints, safeHttpUrl } from "../markup/index.ts";
 
 export const EMAIL_EXCERPT_MAX = 500;
 
