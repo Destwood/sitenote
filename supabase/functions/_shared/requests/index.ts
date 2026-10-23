@@ -10,15 +10,29 @@ export const createTaskBody = z.object({
   threadId: z.uuid(),
 });
 
-export const saveSettingsBody = z.object({
-  workspaceId: z.uuid(),
-  token: z.optional(TOKEN),
+const clickUpSettingsFields = {
   teamId: CLICKUP_ID,
   teamName: NAME,
   spaceId: CLICKUP_ID,
   spaceName: NAME,
   listId: CLICKUP_ID,
   listName: NAME,
+};
+
+export const clickUpSettings = z.object(clickUpSettingsFields);
+
+export function parseStoredSettings(value: unknown): ClickUpSettings {
+  const result = z.safeParse(clickUpSettings, value);
+  if (!result.success) {
+    throw new ApiError("not_configured", "The ClickUp settings of this workspace are incomplete");
+  }
+  return result.data;
+}
+
+export const saveSettingsBody = z.object({
+  workspaceId: z.uuid(),
+  token: z.optional(TOKEN),
+  ...clickUpSettingsFields,
 });
 
 export const hierarchyBody = z.object({
@@ -36,6 +50,7 @@ export const insertWebhookBody = z.object({
   }),
 });
 
+export type ClickUpSettings = z.output<typeof clickUpSettings>;
 export type CreateTaskBody = z.output<typeof createTaskBody>;
 export type SaveSettingsBody = z.output<typeof saveSettingsBody>;
 export type HierarchyBody = z.output<typeof hierarchyBody>;

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "../api/index.ts";
 
 import {
+  clickUpSettings,
   createTaskBody,
   hierarchyBody,
   insertWebhookBody,
@@ -63,6 +64,26 @@ describe("saveSettingsBody", () => {
     expect(() =>
       parseRequest(saveSettingsBody, { ...validSettings, listName: "x".repeat(201) }),
     ).toThrow(ApiError);
+  });
+});
+
+describe("clickUpSettings", () => {
+  it("accepts the settings stored with the integration", () => {
+    const settings = {
+      teamId: "123",
+      teamName: "Team",
+      spaceId: "456",
+      spaceName: "Space",
+      listId: "789",
+      listName: "List",
+    };
+    expect(parseRequest(clickUpSettings, settings)).toEqual(settings);
+  });
+
+  it("rejects settings without a list", () => {
+    expect(() => parseRequest(clickUpSettings, { ...validSettings, listId: undefined })).toThrow(
+      ApiError,
+    );
   });
 });
 
