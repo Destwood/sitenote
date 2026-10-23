@@ -3,6 +3,7 @@ import {
   createElementAnchor,
   createTextAnchor,
   parsePageUrl,
+  parseThreadHash,
   type Anchor,
   type ThreadContext,
 } from "@sitenote/core";
@@ -38,6 +39,7 @@ export const MAX_TOASTS = 3;
 export const UNSUPPORTED_SELECTION_MESSAGE = "That selection cannot be commented on.";
 export const PREFERENCE_FAILED_MESSAGE = "Could not remember this setting for the next visit.";
 export const SCREENSHOT_FAILED_MESSAGE = "Screenshot could not be saved";
+export const THREAD_NOT_HERE_MESSAGE = "This comment is on another page or you do not have access.";
 export const COMMENT_CURSOR_CSS = `html, html * { cursor: crosshair !important; } ${SITENOTE_ROOT_TAG} { cursor: auto !important; }`;
 
 export interface PendingThread {
@@ -122,8 +124,8 @@ export function reconcileResolutions(
   return changed ? next : previous;
 }
 
-function scrollTargetIntoView(target: AnchorTarget): void {
-  observableElement(target)?.scrollIntoView({ block: "center", inline: "nearest" });
+function scrollTargetIntoView(target: AnchorTarget, behavior: ScrollBehavior = "auto"): void {
+  observableElement(target)?.scrollIntoView({ block: "center", inline: "nearest", behavior });
 }
 
 export function createContentController(deps: ContentControllerDeps): ContentController {
@@ -158,6 +160,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
   let toastCounter = 0;
   let creating = false;
   let capturing = false;
+  let pageLoaded = false;
   let deactivate: (() => void) | null = null;
 
   const tracker = createPinTracker({
@@ -394,6 +397,41 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     }));
   }
 
+  function prefersReducedMotion(): boolean {
+    return win.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function clearThreadHash(): void {
+    const url = new URL(win.location.href);
+    url.hash = "";
+    win.history.replaceState(win.history.state, "", url.href);
+  }
+
+  function openThreadFromHash(): void {
+    const threadId = parseThreadHash(win.location.hash);
+    const state = store.getState();
+    if (threadId === null || !pageLoaded || state.status !== "ready") {
+      return;
+    }
+    clearThreadHash();
+    if (!state.threads.some((thread) => thread.id === threadId)) {
+      pushToast({ message: THREAD_NOT_HERE_MESSAGE, variant: "info" });
+      return;
+    }
+    const resolution = state.resolutions.get(threadId);
+    if (resolution?.status === "resolved") {
+      scrollTargetIntoView(resolution.target, prefersReducedMotion() ? "auto" : "smooth");
+    }
+    void loadMembers();
+    store.setState((current) => ({
+      ...current,
+      activeThreadId: threadId,
+      pending: null,
+      panelError: undefined,
+      sidebarOpen: current.sidebarOpen || resolution?.status !== "resolved",
+    }));
+  }
+
   function handleKeyDown(event: KeyboardEvent): void {
     if (
       event.key !== "Escape" ||
@@ -454,9 +492,11 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       }
     });
     win.addEventListener("keydown", handleKeyDown, true);
+    win.addEventListener("hashchange", openThreadFromHash);
     syncTargets(seen);
     deactivate = () => {
       win.removeEventListener("keydown", handleKeyDown, true);
+      win.removeEventListener("hashchange", openThreadFromHash);
       unsubscribe();
       stopSelection();
       stopDom();
@@ -483,8 +523,10 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       void loadMembers();
       void loadShowResolved(next.site.siteId);
     }
+    pageLoaded = next.loaded;
     if (next.status === "ready") {
       activate();
+      openThreadFromHash();
     } else if (next.status === "disabled") {
       shutdown();
     }
