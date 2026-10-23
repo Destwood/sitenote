@@ -105,6 +105,7 @@ describe("start", () => {
       status: "ready",
       site: SITE,
       threads: [THREAD_A, THREAD_B],
+      loaded: true,
       live: false,
       error: null,
     });
@@ -259,6 +260,7 @@ describe("live updates", () => {
       status: "disabled",
       site: null,
       threads: [],
+      loaded: false,
       live: false,
       error: null,
     });
@@ -284,6 +286,24 @@ describe("navigate", () => {
       type: "threads.list",
       siteId: SITE.siteId,
       pageUrl: OTHER_PAGE,
+    });
+  });
+
+  it("is not loaded while the threads of the new page are on their way", async () => {
+    const slow = deferred<MessageResult<ThreadRecord[]>>();
+    const { session, last, setPage } = setup({
+      lists: [() => Promise.resolve(success([THREAD_A])), () => slow.promise],
+    });
+    await session.start();
+    expect(last()?.loaded).toBe(true);
+
+    setPage(OTHER_PAGE);
+    session.navigate();
+
+    expect(last()).toMatchObject({ loaded: false, threads: [THREAD_A] });
+    slow.resolve(success([]));
+    await vi.waitFor(() => {
+      expect(last()).toMatchObject({ loaded: true, threads: [] });
     });
   });
 
