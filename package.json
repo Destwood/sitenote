@@ -11,7 +11,7 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test",
+    "test": "turbo run test && vitest run --project scripts",
     "e2e": "node scripts/require-supabase.ts && turbo run e2e",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -23,6 +23,7 @@
     "db:reset": "supabase db reset",
     "db:status": "supabase status",
     "db:env": "node scripts/supabase-env.ts",
+    "db:env:cloud": "node scripts/supabase-env.ts --cloud",
     "db:types": "node scripts/db-types.ts",
     "db:lint": "supabase db lint --level warning --fail-on warning",
     "test:rls": "turbo run test:rls"

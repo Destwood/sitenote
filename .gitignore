@@ -25,6 +25,7 @@ playwright/.cache/
 .env
 .env.*
 !.env.example
+!.env.cloud.example
 
 # Supabase local
 supabase/.branches/
