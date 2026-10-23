@@ -2,6 +2,8 @@ export { CommentModeBanner } from "./comment-mode-banner";
 export type { CommentModeBannerProps } from "./comment-mode-banner";
 export { COMMENT_MAX_LENGTH, Composer } from "./composer";
 export type { ComposerProps, ComposerSubmission } from "./composer";
+export { CONTEXT_UNAVAILABLE_TEXT, ContextSection } from "./context-section";
+export type { ContextSectionProps } from "./context-section";
 export { HighlightBox } from "./highlight-box";
 export type { HighlightBoxProps } from "./highlight-box";
 export { Launcher } from "./launcher";
