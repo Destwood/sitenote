@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
-import { createSupabaseServerClient } from "../../../../../supabase-server";
+import { createSupabaseServerClient, getAuthenticatedUser } from "../../../../../supabase-server";
 import { Pager } from "../../../../../pager";
 import { pageCount } from "../../../../../pagination";
 import { ThreadFilterForm } from "../../../../../thread-filter-form";
@@ -34,6 +34,10 @@ export default async function ThreadsPage({ params, searchParams }: ThreadsPageP
   const { filters, pageNumber } = parseThreadQuery(await searchParams);
 
   const supabase = await createSupabaseServerClient();
+  const user = await getAuthenticatedUser(supabase);
+  if (user === null) {
+    redirect(`/sign-in?next=${encodeURIComponent(threadsHref(workspaceId, filters, pageNumber))}`);
+  }
   const [members, sites, search] = await Promise.all([
     readWorkspaceMembers(supabase, workspaceId),
     supabase

@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { AppHeader } from "../../../../app-header";
@@ -6,7 +6,6 @@ import { createSupabaseServerClient, getAuthenticatedUser } from "../../../../su
 import { parseUuid } from "../../../../uuid";
 import { readMemberships } from "../../../../workspace-access";
 import { WorkspaceNav } from "../../../../workspace-nav";
-import { workspacePath } from "../../../../workspace-paths";
 import { WorkspaceSwitcher } from "../../../../workspace-switcher";
 
 interface WorkspaceLayoutProps {
@@ -23,7 +22,7 @@ export default async function WorkspaceLayout({ children, params }: WorkspaceLay
   const supabase = await createSupabaseServerClient();
   const user = await getAuthenticatedUser(supabase);
   if (user === null) {
-    redirect(`/sign-in?next=${encodeURIComponent(workspacePath(workspaceId))}`);
+    return <>{children}</>;
   }
 
   const [profile, memberships] = await Promise.all([

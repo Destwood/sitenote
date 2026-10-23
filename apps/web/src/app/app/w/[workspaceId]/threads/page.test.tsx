@@ -3,15 +3,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
+  getAuthenticatedUser: vi.fn(),
   searchThreads: vi.fn(),
   notFound: vi.fn(() => {
     throw new Error("NEXT_NOT_FOUND");
   }),
+  redirect: vi.fn((url: string) => {
+    throw new Error(`NEXT_REDIRECT ${url}`);
+  }),
 }));
 
-vi.mock("next/navigation", () => ({ notFound: mocks.notFound }));
+vi.mock("next/navigation", () => ({ notFound: mocks.notFound, redirect: mocks.redirect }));
 vi.mock("../../../../../supabase-server", () => ({
   createSupabaseServerClient: () => Promise.resolve({ from: mocks.from }),
+  getAuthenticatedUser: mocks.getAuthenticatedUser,
 }));
 vi.mock("../../../../../thread-search", () => ({ searchThreads: mocks.searchThreads }));
 
@@ -44,6 +49,11 @@ async function renderPage(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.getAuthenticatedUser.mockResolvedValue({
+    id: "u-1",
+    email: "owner@sitenote.test",
+    isAnonymous: false,
+  });
   mocks.from.mockImplementation((table: string) => ({
     select: () => ({
       eq: () => ({
@@ -76,6 +86,17 @@ beforeEach(() => {
 describe("ThreadsPage", () => {
   it("answers 404 for a malformed workspace id", async () => {
     await expect(renderPage({}, "nope")).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(mocks.searchThreads).not.toHaveBeenCalled();
+  });
+
+  it("sends a visitor without a session to sign-in and back to the same filters", async () => {
+    mocks.getAuthenticatedUser.mockResolvedValue(null);
+
+    await expect(renderPage({ q: "contrast", pg: "2" })).rejects.toThrow(
+      `NEXT_REDIRECT /sign-in?next=${encodeURIComponent(
+        `/app/w/${WORKSPACE_ID}/threads?q=contrast&pg=2`,
+      )}`,
+    );
     expect(mocks.searchThreads).not.toHaveBeenCalled();
   });
 

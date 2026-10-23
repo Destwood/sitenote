@@ -59,12 +59,15 @@ describe("access", () => {
     expect(mocks.readMemberships).not.toHaveBeenCalled();
   });
 
-  it("sends a visitor without a session to sign-in and back", async () => {
+  it("leaves the sign-in redirect to the page, so it keeps the requested path", async () => {
     mocks.getAuthenticatedUser.mockResolvedValue(null);
 
-    await expect(renderLayout()).rejects.toThrow(
-      `NEXT_REDIRECT /sign-in?next=${encodeURIComponent(`/app/w/${WORKSPACE_ID}/threads`)}`,
-    );
+    await renderLayout();
+
+    expect(screen.getByText("Workspace body")).toBeTruthy();
+    expect(screen.queryByTestId("switcher")).toBeNull();
+    expect(mocks.readMemberships).not.toHaveBeenCalled();
+    expect(mocks.redirect).not.toHaveBeenCalled();
   });
 
   it("answers 404 for a user who is not in the workspace", async () => {
