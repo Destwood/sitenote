@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type BrowserContext, type Page } from "@playwright/test";
 
 import { clearMailbox, waitForOtpCode } from "../mailpit";
 
@@ -17,4 +17,9 @@ export async function signInOnWeb(page: Page, email: string, path = "/sign-in"):
   const code = await requestWebCode(page, email);
   await page.getByLabel("6-digit code").fill(code);
   await page.getByRole("button", { name: "Verify code" }).click();
+}
+
+export async function webAuthCookies(context: BrowserContext): Promise<string[]> {
+  const cookies = await context.cookies(WEB_ORIGIN);
+  return cookies.filter((cookie) => cookie.name.startsWith("sb-")).map((cookie) => cookie.name);
 }
