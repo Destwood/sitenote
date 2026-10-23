@@ -34,7 +34,7 @@ export default async function AppPage() {
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-8 px-6 py-8">
-      <AppHeader displayName={displayName} />
+      <AppHeader displayName={displayName} canConnectExtension={!user.isAnonymous} />
       <main className="flex flex-col gap-8">
         <section aria-labelledby="workspaces-heading" className="flex flex-col gap-4">
           <h1 id="workspaces-heading" className="text-2xl font-bold tracking-tight">
