@@ -8,6 +8,7 @@ import {
   loadClickUpHierarchy,
   saveClickUpSettings,
   type ClickUpConnection,
+  type ClickUpFailure,
   type ClickUpItem,
 } from "../clickup-api";
 import {
@@ -40,7 +41,7 @@ export function ClickUpIntegrationForm({ workspaceId, connection }: ClickUpInteg
   const [teamId, setTeamId] = useState("");
   const [spaceId, setSpaceId] = useState("");
   const [listId, setListId] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ClickUpFailure | null>(null);
   const [pending, setPending] = useState(false);
 
   const tokenOrUndefined = token.length > 0 ? token : undefined;
@@ -66,7 +67,7 @@ export function ClickUpIntegrationForm({ workspaceId, connection }: ClickUpInteg
         token: tokenOrUndefined,
       });
       if (!outcome.ok) {
-        setError(outcome.message);
+        setError(outcome);
         return;
       }
       setTeams(outcome.data.teams);
@@ -95,7 +96,7 @@ export function ClickUpIntegrationForm({ workspaceId, connection }: ClickUpInteg
         teamId: nextTeamId,
       });
       if (!outcome.ok) {
-        setError(outcome.message);
+        setError(outcome);
         return;
       }
       setSpaces(outcome.data.spaces ?? []);
@@ -118,7 +119,7 @@ export function ClickUpIntegrationForm({ workspaceId, connection }: ClickUpInteg
         spaceId: nextSpaceId,
       });
       if (!outcome.ok) {
-        setError(outcome.message);
+        setError(outcome);
         return;
       }
       setLists(outcome.data.lists ?? []);
@@ -142,7 +143,7 @@ export function ClickUpIntegrationForm({ workspaceId, connection }: ClickUpInteg
         listName: selectedList.name,
       });
       if (!outcome.ok) {
-        setError(outcome.message);
+        setError(outcome);
         return;
       }
       setToken("");
@@ -158,7 +159,7 @@ export function ClickUpIntegrationForm({ workspaceId, connection }: ClickUpInteg
     void run(async () => {
       const outcome = await disconnectClickUp(getSupabaseBrowserClient(), workspaceId);
       if (!outcome.ok) {
-        setError(outcome.message);
+        setError(outcome);
         return;
       }
       router.refresh();
@@ -285,8 +286,8 @@ export function ClickUpIntegrationForm({ workspaceId, connection }: ClickUpInteg
       )}
 
       {error === null ? null : (
-        <p role="alert" className={ERROR_CLASS}>
-          {error}
+        <p role="alert" data-error-code={error.code} className={ERROR_CLASS}>
+          {error.message}
         </p>
       )}
     </div>

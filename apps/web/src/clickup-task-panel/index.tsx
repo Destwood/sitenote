@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { createClickUpTask } from "../clickup-api";
+import { createClickUpTask, type ClickUpFailure } from "../clickup-api";
 import { ERROR_CLASS, PRIMARY_BUTTON_CLASS } from "../form-controls";
 import { safeExternalHref } from "../safe-external-link";
 import { getSupabaseBrowserClient } from "../supabase-browser";
@@ -20,7 +20,7 @@ export function ClickUpTaskPanel({ threadId, taskUrl, canCreate }: ClickUpTaskPa
   const router = useRouter();
   const [createdUrl, setCreatedUrl] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ClickUpFailure | null>(null);
   const [pending, setPending] = useState(false);
 
   const linkUrl = createdUrl ?? taskUrl;
@@ -35,7 +35,7 @@ export function ClickUpTaskPanel({ threadId, taskUrl, canCreate }: ClickUpTaskPa
     const outcome = await createClickUpTask(getSupabaseBrowserClient(), threadId);
     setPending(false);
     if (!outcome.ok) {
-      setError(outcome.message);
+      setError(outcome);
       return;
     }
     setCreatedUrl(outcome.data.taskUrl);
@@ -75,8 +75,8 @@ export function ClickUpTaskPanel({ threadId, taskUrl, canCreate }: ClickUpTaskPa
         </button>
       )}
       {error === null ? null : (
-        <p role="alert" className={ERROR_CLASS}>
-          {error}
+        <p role="alert" data-error-code={error.code} className={ERROR_CLASS}>
+          {error.message}
         </p>
       )}
       {notice === null ? null : <p className="text-sm text-neutral-600">{notice}</p>}

@@ -2,7 +2,13 @@ import type { SitenoteClient } from "@sitenote/db";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import * as z from "zod/mini";
 
-export type ClickUpOutcome<T> = { ok: true; data: T } | { ok: false; message: string };
+export interface ClickUpFailure {
+  ok: false;
+  message: string;
+  code?: string | undefined;
+}
+
+export type ClickUpOutcome<T> = { ok: true; data: T } | ClickUpFailure;
 
 export interface ClickUpItem {
   id: string;
@@ -54,26 +60,30 @@ const taskSchema = z.object({
   created: z.boolean(),
   screenshotAttached: z.boolean(),
 });
-const errorEnvelopeSchema = z.object({ error: z.object({ message: z.string() }) });
+const errorEnvelopeSchema = z.object({
+  error: z.object({ code: z.string(), message: z.string() }),
+});
 const connectionSchema = z.object({
   teamName: z.string(),
   spaceName: z.string(),
   listName: z.string(),
 });
 
-async function readFailure(error: unknown): Promise<string> {
+const GENERIC_FAILURE: ClickUpFailure = { ok: false, message: CLICKUP_FAILURE_MESSAGE };
+
+async function readFailure(error: unknown): Promise<ClickUpFailure> {
   if (error instanceof FunctionsHttpError) {
     try {
       const body: unknown = await (error.context as Response).json();
       const parsed = z.safeParse(errorEnvelopeSchema, body);
       if (parsed.success) {
-        return parsed.data.error.message;
+        return { ok: false, message: parsed.data.error.message, code: parsed.data.error.code };
       }
     } catch {
-      return CLICKUP_FAILURE_MESSAGE;
+      return GENERIC_FAILURE;
     }
   }
-  return CLICKUP_FAILURE_MESSAGE;
+  return GENERIC_FAILURE;
 }
 
 async function invoke<T extends z.ZodMiniType>(
@@ -85,12 +95,10 @@ async function invoke<T extends z.ZodMiniType>(
   const result: { data: unknown; error: unknown } = await supabase.functions.invoke(name, { body });
   const { data, error } = result;
   if (error !== null) {
-    return { ok: false, message: await readFailure(error) };
+    return readFailure(error);
   }
   const parsed = z.safeParse(schema, data);
-  return parsed.success
-    ? { ok: true, data: parsed.data }
-    : { ok: false, message: CLICKUP_FAILURE_MESSAGE };
+  return parsed.success ? { ok: true, data: parsed.data } : GENERIC_FAILURE;
 }
 
 export function loadClickUpHierarchy(

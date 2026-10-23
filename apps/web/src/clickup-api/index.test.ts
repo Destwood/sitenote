@@ -58,6 +58,7 @@ describe("loadClickUpHierarchy", () => {
     expect(await loadClickUpHierarchy(fakeClient(invoke), { workspaceId: WORKSPACE_ID })).toEqual({
       ok: false,
       message: "ClickUp rejected this token",
+      code: "validation",
     });
   });
 

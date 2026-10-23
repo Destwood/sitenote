@@ -75,12 +75,15 @@ describe("ClickUpIntegrationForm when not connected", () => {
     mocks.loadClickUpHierarchy.mockResolvedValueOnce({
       ok: false,
       message: "ClickUp rejected this token",
+      code: "upstream",
     });
     render(<ClickUpIntegrationForm workspaceId={WORKSPACE_ID} connection={null} />);
     typeToken("pk_bad");
     fireEvent.click(screen.getByRole("button", { name: "Load teams" }));
 
-    expect((await screen.findByRole("alert")).textContent).toBe("ClickUp rejected this token");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe("ClickUp rejected this token");
+    expect(alert.getAttribute("data-error-code")).toBe("upstream");
     expect(screen.queryByRole("combobox", { name: "Team" })).toBeNull();
   });
 
