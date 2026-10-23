@@ -6,6 +6,10 @@ export function workspacePath(workspaceId: string, section: WorkspaceSection = "
   return `/app/w/${workspaceId}/${section}`;
 }
 
+export function threadPath(workspaceId: string, threadId: string): string {
+  return `${workspacePath(workspaceId, "threads")}/${threadId}`;
+}
+
 export function isWorkspaceSection(value: string | undefined): value is WorkspaceSection {
   return WORKSPACE_SECTIONS.some((section) => section === value);
 }

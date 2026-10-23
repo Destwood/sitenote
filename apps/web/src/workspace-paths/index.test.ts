@@ -1,14 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { isWorkspaceSection, workspacePath, workspaceSwitchPath } from ".";
+import { isWorkspaceSection, threadPath, workspacePath, workspaceSwitchPath } from ".";
 
 const FROM = "10000000-0000-4000-8000-000000000001";
 const TO = "10000000-0000-4000-8000-000000000002";
+const THREAD = "20000000-0000-4000-8000-000000000001";
 
 describe("workspacePath", () => {
   it("points at the threads section by default", () => {
     expect(workspacePath(FROM)).toBe(`/app/w/${FROM}/threads`);
     expect(workspacePath(FROM, "invites")).toBe(`/app/w/${FROM}/invites`);
+  });
+});
+
+describe("threadPath", () => {
+  it("points at one thread of the workspace", () => {
+    expect(threadPath(FROM, THREAD)).toBe(`/app/w/${FROM}/threads/${THREAD}`);
   });
 });
 
