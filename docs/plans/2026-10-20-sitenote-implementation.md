@@ -101,10 +101,10 @@ Done when: everything created in the extension is manageable from the dashboard 
 
 ### Phase 7 — ClickUp and email
 
-- [ ] Integrations page: save ClickUp token (Vault), choose team, space, list
-- [ ] Edge Function `clickup-create-task`: task with description, context, deep link and screenshot attachment
-- [ ] Thread chip with the task link; retry on failure
-- [ ] Database webhook + Edge Function `notify-email` via Resend for replies and mentions
+- [x] Integrations page: save ClickUp token (Vault), choose team, space, list
+- [x] Edge Function `clickup-create-task`: task with description, context, deep link and screenshot attachment
+- [x] Thread chip with the task link; retry on failure
+- [x] Database webhook + Edge Function `notify-email` via Resend for replies and mentions
 - [ ] Tests with mocked ClickUp and Resend HTTP; one manual smoke test against real services
 
 Done when: a thread becomes a ClickUp task and a mention produces an email in the smoke test.
