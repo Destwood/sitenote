@@ -6,9 +6,9 @@ import { createSessionHandoff } from ".";
 
 const TOKENS = { accessToken: "access-token", refreshToken: "refresh-token" };
 
-function user(isAnonymous: boolean | undefined): User {
+function user(isAnonymous: boolean | undefined, id = "user-1"): User {
   return {
-    id: "user-1",
+    id,
     aud: "authenticated",
     app_metadata: {},
     user_metadata: {},
@@ -17,14 +17,14 @@ function user(isAnonymous: boolean | undefined): User {
   };
 }
 
-function storedSession(isAnonymous: boolean): Session {
+function storedSession(isAnonymous: boolean, id = "user-1"): Session {
   return {
     access_token: "old",
     refresh_token: "old-refresh",
     token_type: "bearer",
     expires_in: 3600,
     expires_at: 1_900_000_000,
-    user: user(isAnonymous),
+    user: user(isAnonymous, id),
   };
 }
 
@@ -86,28 +86,51 @@ describe("accept", () => {
     expect(setSession).toHaveBeenCalledOnce();
   });
 
-  it("refuses when a registered user is signed in and keeps the stored session", async () => {
-    const { handoff, setSession, createProbe } = setup({ current: storedSession(false) });
+  it("refuses when another registered user is signed in and keeps the stored session", async () => {
+    const { handoff, setSession } = setup({
+      current: storedSession(false, "user-1"),
+      identity: { data: { user: user(false, "user-2") }, error: null },
+    });
 
     const result = await handoff.accept(TOKENS);
 
     expect(result).toMatchObject({ ok: false, error: { code: "already_signed_in" } });
-    expect(createProbe).not.toHaveBeenCalled();
     expect(setSession).not.toHaveBeenCalled();
   });
 
+  it("replaces the tokens of the same registered user", async () => {
+    const { handoff, setSession } = setup({
+      current: storedSession(false),
+      identity: { data: { user: user(false) }, error: null },
+    });
+
+    expect(await handoff.accept(TOKENS)).toEqual({ ok: true, data: null });
+    expect(setSession).toHaveBeenCalledWith({
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+    });
+  });
+
+  it("replaces a guest session of another user", async () => {
+    const { handoff, setSession } = setup({
+      current: storedSession(true, "guest-1"),
+    });
+
+    expect(await handoff.accept(TOKENS)).toEqual({ ok: true, data: null });
+    expect(setSession).toHaveBeenCalledOnce();
+  });
+
   it.each([false, undefined])(
-    "refuses a session whose user is not anonymous (is_anonymous %s)",
+    "stores a registered member without requiring a workspace (is_anonymous %s)",
     async (flag) => {
-      const { handoff, setSession } = setup({
+      const { handoff, setSession, from } = setup({
         identity: { data: { user: user(flag) }, error: null },
+        memberships: { data: [], error: null },
       });
 
-      expect(await handoff.accept(TOKENS)).toMatchObject({
-        ok: false,
-        error: { code: "session_rejected" },
-      });
-      expect(setSession).not.toHaveBeenCalled();
+      expect(await handoff.accept(TOKENS)).toEqual({ ok: true, data: null });
+      expect(from).not.toHaveBeenCalled();
+      expect(setSession).toHaveBeenCalledOnce();
     },
   );
 

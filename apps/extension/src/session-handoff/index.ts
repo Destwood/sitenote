@@ -25,27 +25,32 @@ export function createSessionHandoff(deps: SessionHandoffDeps): SessionHandoff {
     refreshToken,
   }: HandoffTokens): Promise<MessageResult<null>> {
     try {
-      const current = await client.auth.getSession();
-      if (current.data.session !== null && current.data.session.user.is_anonymous !== true) {
-        return failure("already_signed_in");
-      }
-
       const probe = deps.createProbe(accessToken);
       const identity = await probe.auth.getUser(accessToken);
       if (identity.error !== null) {
         return failure(isAuthRetryableFetchError(identity.error) ? "network" : "session_rejected");
       }
-      if (identity.data.user.is_anonymous !== true) {
-        return failure("session_rejected");
+      const user = identity.data.user;
+
+      const current = await client.auth.getSession();
+      const signedIn = current.data.session;
+      if (
+        signedIn !== null &&
+        signedIn.user.is_anonymous !== true &&
+        signedIn.user.id !== user.id
+      ) {
+        return failure("already_signed_in");
       }
 
-      const memberships = await probe
-        .from("members")
-        .select("workspace_id")
-        .eq("user_id", identity.data.user.id)
-        .limit(1);
-      if (memberships.error !== null || memberships.data.length === 0) {
-        return failure("session_rejected");
+      if (user.is_anonymous === true) {
+        const memberships = await probe
+          .from("members")
+          .select("workspace_id")
+          .eq("user_id", user.id)
+          .limit(1);
+        if (memberships.error !== null || memberships.data.length === 0) {
+          return failure("session_rejected");
+        }
       }
 
       const stored = await client.auth.setSession({
