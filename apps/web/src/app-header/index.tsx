@@ -1,12 +1,13 @@
 import Link from "next/link";
 
-import { SECONDARY_BUTTON_CLASS } from "../form-controls";
+import { LINK_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
 
 interface AppHeaderProps {
   displayName: string;
+  canConnectExtension: boolean;
 }
 
-export function AppHeader({ displayName }: AppHeaderProps) {
+export function AppHeader({ displayName, canConnectExtension }: AppHeaderProps) {
   return (
     <header className="flex items-center justify-between gap-4 border-b border-neutral-200 pb-4">
       <Link href="/" className="text-lg font-bold tracking-tight">
@@ -16,6 +17,11 @@ export function AppHeader({ displayName }: AppHeaderProps) {
         <span className="text-sm text-neutral-700" data-testid="display-name">
           {displayName}
         </span>
+        {canConnectExtension ? (
+          <Link href="/extension/connect" className={LINK_BUTTON_CLASS}>
+            Connect the extension
+          </Link>
+        ) : null}
         <form method="post" action="/auth/sign-out">
           <button type="submit" className={SECONDARY_BUTTON_CLASS}>
             Sign out

@@ -77,7 +77,7 @@ export default async function InvitesPage({ params }: InvitesPageProps) {
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-8 px-6 py-8">
-      <AppHeader displayName={displayName} />
+      <AppHeader displayName={displayName} canConnectExtension={!user.isAnonymous} />
       <main className="flex flex-col gap-8">
         <header className="flex flex-col gap-2">
           <Link href="/app" className={`${LINK_BUTTON_CLASS} w-fit`}>

@@ -55,6 +55,21 @@ pnpm db:stop
 
 Seeded local users (`owner@`, `member@`, `guest@`, `outsider@sitenote.test`) sign in with the password `sitenote-dev-password`.
 
+## Develop against a cloud Supabase project
+
+Use a cloud project instead of the local stack when Docker is not available. The free tier allows custom email templates only with custom SMTP, so its sign-in e-mail contains a link, not a code. The web app accepts that link, and the connect page hands the session to the extension.
+
+```
+supabase login
+supabase link --project-ref <your-project-ref>
+supabase db push
+supabase config push          # without the email template sections on the free tier
+cp .env.cloud.example .env.cloud   # fill in SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY
+pnpm db:env:cloud             # writes the same .env.local files as pnpm db:env
+```
+
+Start the web app with `pnpm --filter @sitenote/web dev`, sign in with the link from your e-mail, open "Connect the extension" in the header, then build the extension with `pnpm --filter @sitenote/extension build`. The popup's "Sign in on the website" button opens the same page. `.env.cloud` holds secrets and stays out of git.
+
 ## Web sign-in
 
 The web app signs in with a 6-digit e-mail code. Locally the e-mail lands in Mailpit at http://127.0.0.1:54324. Any address works; the seeded users above have a workspace. The "Continue with Google" button appears only when `NEXT_PUBLIC_AUTH_GOOGLE_ENABLED=true` and the Google provider is configured in Supabase.

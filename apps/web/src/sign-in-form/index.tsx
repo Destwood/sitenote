@@ -15,6 +15,7 @@ import {
   describeVerifyCodeError,
   type AuthFailure,
 } from "../auth-error";
+import { getPublicEnv } from "../env";
 import {
   ERROR_CLASS,
   INPUT_CLASS,
@@ -78,10 +79,11 @@ export function SignInForm({ next, googleEnabled, initialError }: SignInFormProp
   async function requestCode(): Promise<boolean> {
     setBusy(true);
     setError(null);
+    const emailRedirectTo = `${getPublicEnv().webUrl}/auth/callback?next=${encodeURIComponent(next)}`;
     const failure = await attempt(() =>
       getSupabaseBrowserClient().auth.signInWithOtp({
         email,
-        options: { shouldCreateUser: true },
+        options: { shouldCreateUser: true, emailRedirectTo },
       }),
     );
     setBusy(false);
@@ -204,7 +206,8 @@ export function SignInForm({ next, googleEnabled, initialError }: SignInFormProp
       ) : (
         <form onSubmit={(event) => void handleCodeSubmit(event)} className="flex flex-col gap-4">
           <p role="status" className="text-sm text-neutral-600">
-            We sent a {OTP_LENGTH}-digit code to <strong>{email}</strong>. It expires in 10 minutes.
+            Check your email. Click the sign-in link, or enter the {OTP_LENGTH}-digit code if the
+            email has one. The message was sent to <strong>{email}</strong>.
             {resent ? " A new code was sent." : null}
           </p>
           <div className="flex flex-col gap-1.5">

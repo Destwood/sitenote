@@ -6,9 +6,12 @@ import { failure, success, type AuthState } from "../messages";
 import { readPendingSignIn, savePendingSignIn } from "../pending-sign-in";
 import { RESEND_DELAY_SECONDS, SignInPanel } from ".";
 
-const mocks = vi.hoisted(() => ({ sendMessage: vi.fn() }));
+const mocks = vi.hoisted(() => ({ sendMessage: vi.fn(), tabsCreate: vi.fn() }));
 
 vi.mock("../message-client", () => ({ sendMessage: mocks.sendMessage }));
+vi.mock("wxt/browser", () => ({ browser: { tabs: { create: mocks.tabsCreate } } }));
+
+const WEB_URL = "https://app.sitenote.test";
 
 const SIGNED_IN: AuthState = {
   status: "signedIn",
@@ -17,7 +20,13 @@ const SIGNED_IN: AuthState = {
 
 function renderPanel(options: { googleEnabled?: boolean } = {}) {
   const onSignedIn = vi.fn();
-  render(<SignInPanel googleEnabled={options.googleEnabled ?? false} onSignedIn={onSignedIn} />);
+  render(
+    <SignInPanel
+      googleEnabled={options.googleEnabled ?? false}
+      webUrl={WEB_URL}
+      onSignedIn={onSignedIn}
+    />,
+  );
   return { onSignedIn };
 }
 
@@ -30,6 +39,7 @@ async function reachCodeStep(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   mocks.sendMessage.mockReset();
+  mocks.tabsCreate.mockReset();
   localStorage.clear();
 });
 
@@ -47,6 +57,26 @@ describe("SignInPanel", () => {
     expect(mocks.sendMessage).toHaveBeenCalledWith({ type: "auth.sendCode", email: "a@b.test" });
     expect(screen.getByRole("status").textContent).toContain("a@b.test");
     expect(readPendingSignIn(Date.now())?.email).toBe("a@b.test");
+  });
+
+  it("opens the connect page on the website in a new tab", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "Sign in on the website" }));
+
+    expect(mocks.tabsCreate).toHaveBeenCalledWith({
+      url: "https://app.sitenote.test/extension/connect",
+    });
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps the website button out of the code step", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await reachCodeStep(user);
+
+    expect(screen.queryByRole("button", { name: "Sign in on the website" })).toBeNull();
   });
 
   it("shows a fixed message when the code cannot be sent and stays on the email step", async () => {

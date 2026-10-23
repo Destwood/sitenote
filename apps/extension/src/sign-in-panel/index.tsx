@@ -1,4 +1,5 @@
 import { useEffect, useState, type ChangeEvent, type SubmitEvent as FormSubmitEvent } from "react";
+import { browser } from "wxt/browser";
 
 import {
   ERROR_CLASS,
@@ -22,6 +23,7 @@ type Step = "email" | "code";
 
 interface SignInPanelProps {
   googleEnabled: boolean;
+  webUrl: string;
   onSignedIn: (state: AuthState) => void;
 }
 
@@ -33,7 +35,7 @@ function remainingSeconds(pending: PendingSignIn | null): number {
   return Math.max(0, RESEND_DELAY_SECONDS - elapsed);
 }
 
-export function SignInPanel({ googleEnabled, onSignedIn }: SignInPanelProps) {
+export function SignInPanel({ googleEnabled, webUrl, onSignedIn }: SignInPanelProps) {
   const [pending] = useState(() => readPendingSignIn(Date.now()));
   const [step, setStep] = useState<Step>(pending === null ? "email" : "code");
   const [email, setEmail] = useState(pending?.email ?? "");
@@ -126,6 +128,10 @@ export function SignInPanel({ googleEnabled, onSignedIn }: SignInPanelProps) {
     onSignedIn(result.data);
   }
 
+  async function openWebsite() {
+    await browser.tabs.create({ url: `${webUrl}/extension/connect` });
+  }
+
   function handleChangeEmail() {
     clearPendingSignIn();
     setStep("email");
@@ -149,6 +155,11 @@ export function SignInPanel({ googleEnabled, onSignedIn }: SignInPanelProps) {
 
   return (
     <div className="flex flex-col gap-4">
+      {step === "email" ? (
+        <button type="button" onClick={() => void openWebsite()} className={PRIMARY_BUTTON_CLASS}>
+          Sign in on the website
+        </button>
+      ) : null}
       {step === "email" ? (
         <form onSubmit={(event) => void handleEmailSubmit(event)} className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">

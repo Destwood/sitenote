@@ -3,7 +3,8 @@
 import { useState, useSyncExternalStore, type SubmitEvent as FormSubmitEvent } from "react";
 
 import { DISPLAY_NAME_MAX_LENGTH, parseDisplayName } from "../display-name";
-import { sendSessionToExtension } from "../extension-bridge";
+import { connectExtension, type ExtensionConnection } from "../extension-connection";
+import { InstallInstructions } from "../extension-install";
 import {
   ERROR_CLASS,
   INPUT_CLASS,
@@ -13,21 +14,14 @@ import {
 import { describeInviteError } from "../invite-error";
 import { toOpenableOrigin } from "../origin-link";
 import { getSupabaseBrowserClient } from "../supabase-browser";
-import { forgetWebSession } from "../web-session";
 
 const subscribeToNothing = () => () => undefined;
 const isClient = () => true;
 const isServer = () => false;
 
 const SESSION_ERROR = "We could not start a guest session. Try again.";
-const ALREADY_SIGNED_IN_CODE = "already_signed_in";
 
-type Connection =
-  | { status: "connecting" }
-  | { status: "connected"; webCopyCleared: boolean }
-  | { status: "missing" }
-  | { status: "alreadySignedIn" }
-  | { status: "failed" };
+type Connection = { status: "connecting" } | ExtensionConnection;
 
 interface Joined {
   origins: readonly string[];
@@ -77,50 +71,6 @@ async function joinWorkspace(token: string, displayName: string): Promise<JoinOu
   }
 }
 
-async function connectExtension(extensionId: string): Promise<Connection> {
-  try {
-    const { data } = await getSupabaseBrowserClient().auth.getSession();
-    if (data.session === null) {
-      return { status: "failed" };
-    }
-    const result = await sendSessionToExtension(extensionId, {
-      accessToken: data.session.access_token,
-      refreshToken: data.session.refresh_token,
-    });
-    if (result.status === "unavailable") {
-      return { status: "missing" };
-    }
-    if (result.status === "rejected") {
-      return result.code === ALREADY_SIGNED_IN_CODE
-        ? { status: "alreadySignedIn" }
-        : { status: "failed" };
-    }
-    return { status: "connected", webCopyCleared: await forgetWebSession() };
-  } catch {
-    return { status: "failed" };
-  }
-}
-
-function InstallInstructions() {
-  return (
-    <div className="flex flex-col gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-700">
-      <h2 className="font-semibold text-neutral-900">Install the Sitenote extension</h2>
-      <p>
-        You joined the workspace, but the Sitenote extension was not found in this browser. Install
-        it to comment on the workspace sites.
-      </p>
-      <ol className="list-decimal pl-5">
-        <li>
-          While Sitenote is in development, open the extensions page of your browser and turn on
-          developer mode.
-        </li>
-        <li>Choose Load unpacked and select the built extension folder.</li>
-        <li>The Chrome Web Store listing will be available here once Sitenote is published.</li>
-      </ol>
-    </div>
-  );
-}
-
 function ConnectionPanel({
   connection,
   onConnect,
@@ -152,7 +102,7 @@ function ConnectionPanel({
     case "missing":
       return (
         <div className="flex flex-col gap-3">
-          <InstallInstructions />
+          <InstallInstructions lead="You joined the workspace, but the Sitenote extension was not found in this browser. Install it to comment on the workspace sites." />
           <button type="button" onClick={onConnect} className={`${PRIMARY_BUTTON_CLASS} w-fit`}>
             I installed it — connect
           </button>

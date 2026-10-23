@@ -5,8 +5,18 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WEB_URL = "http://localhost:3000";
+const CLOUD_FLAG = "--cloud";
+const CLOUD_ENV_FILE = ".env.cloud";
+const CLOUD_EXAMPLE_FILE = ".env.cloud.example";
+const CLOUD_KEY_MAP: Readonly<Record<string, string>> = {
+  SUPABASE_URL: "API_URL",
+  SUPABASE_PUBLISHABLE_KEY: "PUBLISHABLE_KEY",
+  SUPABASE_SECRET_KEY: "SECRET_KEY",
+};
 const STATUS_LINE = /^([A-Z0-9_]+)="(.*)"$/;
 const ENV_ASSIGNMENT = /^\s*([A-Z0-9_]+)\s*=/;
+const ENV_LINE = /^\s*([A-Z0-9_]+)\s*=(.*)$/;
+const QUOTED = /^(["'])(.*)\1$/;
 
 interface EnvTarget {
   file: string;
@@ -32,6 +42,36 @@ function readStatus(): Map<string, string> {
     }
   }
   return status;
+}
+
+function parseEnvFile(content: string): Map<string, string> {
+  const values = new Map<string, string>();
+  for (const line of content.split(/\r?\n/)) {
+    const match = ENV_LINE.exec(line);
+    if (match?.[1] !== undefined && match[2] !== undefined) {
+      values.set(match[1], match[2].trim().replace(QUOTED, "$2"));
+    }
+  }
+  return values;
+}
+
+export function readCloudStatus(path: string): Map<string, string> {
+  if (!existsSync(path)) {
+    throw new Error(
+      `${CLOUD_ENV_FILE} not found. Copy ${CLOUD_EXAMPLE_FILE} and fill in the values.`,
+    );
+  }
+  const values = parseEnvFile(readFileSync(path, "utf8"));
+  const missing = Object.keys(CLOUD_KEY_MAP).filter((key) => (values.get(key) ?? "") === "");
+  if (missing.length > 0) {
+    throw new Error(`${CLOUD_ENV_FILE} needs a value for ${missing.join(", ")}.`);
+  }
+  return new Map(
+    Object.entries(CLOUD_KEY_MAP).map(([envKey, statusKey]) => [
+      statusKey,
+      values.get(envKey) ?? "",
+    ]),
+  );
 }
 
 function required(status: Map<string, string>, key: string): string {
@@ -60,12 +100,12 @@ function mergeEnv(existing: string, variables: Record<string, string>): string {
   return `${merged.join("\n")}\n`;
 }
 
-function main(): void {
-  const status = readStatus();
+function main(cloud: boolean): void {
+  const status = cloud ? readCloudStatus(resolve(ROOT, CLOUD_ENV_FILE)) : readStatus();
   const url = required(status, "API_URL");
   const publishableKey = required(status, "PUBLISHABLE_KEY");
   const secretKey = required(status, "SECRET_KEY");
-  const dbUrl = required(status, "DB_URL");
+  const dbUrl = cloud ? undefined : required(status, "DB_URL");
 
   const targets: EnvTarget[] = [
     {
@@ -91,7 +131,7 @@ function main(): void {
         SUPABASE_URL: url,
         SUPABASE_PUBLISHABLE_KEY: publishableKey,
         SUPABASE_SECRET_KEY: secretKey,
-        SUPABASE_DB_URL: dbUrl,
+        ...(dbUrl === undefined ? {} : { SUPABASE_DB_URL: dbUrl }),
       },
     },
   ];
@@ -104,4 +144,6 @@ function main(): void {
   }
 }
 
-main();
+if (resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {
+  main(process.argv.includes(CLOUD_FLAG));
+}

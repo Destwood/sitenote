@@ -29,7 +29,7 @@ import {
 } from "../../support/invites";
 import { signInSeededUser } from "../../support/seeded-user";
 import { readSupabaseEnv } from "../../support/supabase-env";
-import { WEB_ORIGIN } from "../../support/web-auth";
+import { WEB_ORIGIN, webAuthCookies } from "../../support/web-auth";
 
 const GUEST_NAME = "Gina Client";
 const STORAGE_PREFIX = "sitenote.auth.";
@@ -104,11 +104,6 @@ async function storedAccessToken(popup: Page): Promise<string> {
     throw new Error("The extension holds no session");
   }
   return parsed.access_token;
-}
-
-async function webAuthCookies(context: BrowserContext): Promise<string[]> {
-  const cookies = await context.cookies(WEB_ORIGIN);
-  return cookies.filter((cookie) => cookie.name.startsWith("sb-")).map((cookie) => cookie.name);
 }
 
 test("a guest joins from the invite link, the extension takes over the session and the guest comments", async ({
