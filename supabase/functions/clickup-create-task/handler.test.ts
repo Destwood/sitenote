@@ -59,7 +59,7 @@ function backendFor(scenario: Scenario) {
       return single({ role: scenario.role ?? "owner" });
     }
     if (path === "/rest/v1/comments") {
-      return json([{ body: "Button is misaligned" }]);
+      return single({ body: "Button is misaligned" });
     }
     if (path === "/rest/v1/integrations") {
       if (scenario.integration === false) {
