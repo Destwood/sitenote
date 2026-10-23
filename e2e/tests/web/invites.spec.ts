@@ -43,7 +43,7 @@ async function openInvites(page: Page, workspaceName: string): Promise<void> {
   await page
     .getByRole("listitem")
     .filter({ hasText: workspaceName })
-    .getByRole("link", { name: "Invites" })
+    .getByRole("link", { name: "Invites", exact: true })
     .click();
   await expect(page.getByRole("heading", { name: `Invites for ${workspaceName}` })).toBeVisible();
 }
@@ -136,6 +136,7 @@ test("a member invite asks the visitor to sign in and then joins them as a membe
     await expect(
       visitor.page.getByRole("listitem").filter({ hasText: workspaceName }).getByRole("link", {
         name: "Invites",
+        exact: true,
       }),
     ).toHaveCount(0);
   } finally {
@@ -223,7 +224,7 @@ test("a guest joins on the web without the extension, keeps the web session and 
   await expect(page).toHaveURL(`${WEB_ORIGIN}/app`);
   const row = page.getByRole("listitem").filter({ hasText: SEEDED_WORKSPACE_NAME });
   await expect(row).toContainText("Guest");
-  await expect(row.getByRole("link", { name: "Invites" })).toHaveCount(0);
+  await expect(row.getByRole("link", { name: "Invites", exact: true })).toHaveCount(0);
   await expect(page.getByTestId("display-name")).toHaveText(GUEST_NAME);
 
   const response = await page.goto(`${WEB_ORIGIN}/app/w/${SEEDED_WORKSPACE_ID}/invites`);
