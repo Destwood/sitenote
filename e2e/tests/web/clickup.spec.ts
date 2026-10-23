@@ -2,6 +2,7 @@ import type { SitenoteClient } from "@sitenote/db";
 import { expect, test } from "@playwright/test";
 
 import { createDashboardThread, deleteDashboardThread, uniqueToken } from "../../support/dashboard";
+import { traceFunctionCalls } from "../../support/function-trace";
 import { SEEDED_WORKSPACE_ID } from "../../support/invites";
 import { signInSeededUser } from "../../support/seeded-user";
 import { WEB_ORIGIN, signInOnWeb } from "../../support/web-auth";
@@ -28,7 +29,8 @@ async function disconnectClickUp(owner: SitenoteClient): Promise<void> {
 
 test("the owner connects ClickUp and a thread becomes a task with a link back", async ({
   page,
-}) => {
+}, testInfo) => {
+  traceFunctionCalls(page, testInfo);
   const owner = await signInSeededUser(OWNER);
   await disconnectClickUp(owner);
   cleanup.push(() => disconnectClickUp(owner));
