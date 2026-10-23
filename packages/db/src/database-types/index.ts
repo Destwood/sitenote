@@ -455,14 +455,8 @@ export type Database = {
           workspace_id: string;
         }[];
       };
-      clickup_configured: {
-        Args: { p_workspace_id: string };
-        Returns: boolean;
-      };
-      clickup_disconnect: {
-        Args: { p_workspace_id: string };
-        Returns: undefined;
-      };
+      clickup_configured: { Args: { p_workspace_id: string }; Returns: boolean };
+      clickup_disconnect: { Args: { p_workspace_id: string }; Returns: undefined };
       create_invite: {
         Args: {
           p_expires_in?: string;
@@ -522,10 +516,7 @@ export type Database = {
           isSetofReturn: false;
         };
       };
-      integration_secret_read: {
-        Args: { p_secret_id: string };
-        Returns: string;
-      };
+      integration_secret_read: { Args: { p_secret_id: string }; Returns: string };
       integration_secret_upsert: {
         Args: {
           p_provider: Database["public"]["Enums"]["integration_provider"];
