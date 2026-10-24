@@ -42,9 +42,12 @@ export default function HomePage() {
             ))}
           </ul>
         </section>
-        <p className="w-fit rounded-md border border-neutral-200 bg-neutral-50 px-4 py-2 text-sm text-neutral-500">
-          Demo coming soon
-        </p>
+        <Link
+          href="/demo"
+          className="w-fit rounded-md bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
+        >
+          Try the demo
+        </Link>
       </main>
     </div>
   );
