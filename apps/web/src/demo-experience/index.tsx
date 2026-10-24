@@ -33,6 +33,14 @@ const BANNER_BUTTON_CLASS =
   "inline-flex items-center justify-center rounded-md bg-white px-4 py-2 text-sm font-semibold text-neutral-900 hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-60";
 const NAME_ERROR = `Enter a name of 1 to ${String(DEMO_NAME_MAX_LENGTH)} characters.`;
 
+async function readSavedVisit(): Promise<string | null> {
+  try {
+    return await readVisitorName(getDemoSupabaseClient());
+  } catch {
+    return null;
+  }
+}
+
 async function connectVisit(host: HTMLElement, name: string): Promise<WidgetHandle> {
   const client = getDemoSupabaseClient();
   await startVisit(client, name);
@@ -73,7 +81,7 @@ export function DemoExperience({ children }: DemoExperienceProps) {
       if (host === null) {
         return;
       }
-      const saved = await readVisitorName(getDemoSupabaseClient());
+      const saved = await readSavedVisit();
       if (!isMounted()) {
         return;
       }

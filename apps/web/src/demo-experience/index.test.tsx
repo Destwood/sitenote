@@ -136,6 +136,17 @@ describe("DemoExperience", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("treats an unreadable saved session as a new visitor", async () => {
+    mocks.readVisitorName.mockRejectedValue(new Error("unavailable"));
+    renderDemo();
+    await waitFor(() => {
+      expect(startButton().hasAttribute("disabled")).toBe(false);
+    });
+    await userEvent.click(startButton());
+    expect(dialog()).toBeTruthy();
+    expect(mocks.mountWidget).not.toHaveBeenCalled();
+  });
+
   it("closes the name step with Escape", async () => {
     renderDemo();
     await waitFor(() => {
