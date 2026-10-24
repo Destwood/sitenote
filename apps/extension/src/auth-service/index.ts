@@ -1,14 +1,8 @@
 import { isAuthRetryableFetchError, type Session } from "@supabase/supabase-js";
 import type { SitenoteClient } from "@sitenote/db";
 
-import {
-  failure,
-  success,
-  type AuthDataByType,
-  type ErrorResponse,
-  type MessageResult,
-  type AuthState,
-} from "../messages";
+import { type AuthDataByType, type AuthState } from "../messages";
+import { failure, success, type ErrorResponse, type MessageResult } from "@sitenote/widget";
 import { parseOAuthRedirect } from "../oauth-redirect";
 import type { RefreshOutcome } from "../refresh-schedule";
 import type { SessionStorage } from "../session-storage";

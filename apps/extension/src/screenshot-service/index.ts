@@ -1,7 +1,7 @@
 import type { CaptureStore } from "../capture-store";
-import { failure, success, type MessageResult } from "../messages";
+import { failure, success, type MessageResult } from "@sitenote/widget";
 import type { ImageCropper } from "../screenshot-crop";
-import type { CaptureRect, CapturedScreenshot } from "../transport";
+import type { CaptureRect, CapturedScreenshot } from "@sitenote/widget";
 
 export const CAPTURE_MIN_INTERVAL_MS = 550;
 export const CAPTURE_QUEUE_LIMIT = 4;

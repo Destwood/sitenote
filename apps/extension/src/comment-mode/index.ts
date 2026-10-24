@@ -1,4 +1,5 @@
-import { commentModeToggleSchema, type CommentModeState, type MessageResult } from "../messages";
+import { commentModeToggleSchema, type CommentModeState } from "../messages";
+import { type MessageResult } from "@sitenote/widget";
 
 export interface ToggleSender {
   id?: string | undefined;

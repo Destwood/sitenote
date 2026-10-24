@@ -72,6 +72,19 @@ export default tseslint.config(
     },
   },
   {
+    files: ["packages/widget/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: ["wxt"],
+          patterns: ["wxt/*", "@wxt-dev/*"],
+        },
+      ],
+      "no-restricted-globals": ["error", "chrome", "browser"],
+    },
+  },
+  {
     files: ["**/*.{js,mjs,cjs}"],
     extends: [tseslint.configs.disableTypeChecked],
     languageOptions: {

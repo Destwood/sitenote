@@ -2,8 +2,8 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { failure, success } from "../messages";
-import type { NotificationList, NotificationRecord } from "../transport";
+import { failure, success } from "@sitenote/widget";
+import type { NotificationList, NotificationRecord } from "@sitenote/widget";
 import {
   EMPTY_NOTIFICATIONS_MESSAGE,
   NOTIFICATIONS_PAGE_SIZE,

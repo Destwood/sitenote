@@ -5,15 +5,14 @@ import {
   RESPONSE_SCHEMAS,
   authStateChangedSchema,
   commentModeResponseSchema,
-  failure,
   notificationsChangedSchema,
   type AuthState,
   type CommentModeState,
   type DataByRequestType,
   type ExtensionRequest,
   type ExtensionRequestType,
-  type MessageResult,
 } from "../messages";
+import { failure, type MessageResult } from "@sitenote/widget";
 
 function schemaFor<Type extends ExtensionRequestType>(
   type: Type,

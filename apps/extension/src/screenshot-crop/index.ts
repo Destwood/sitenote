@@ -1,5 +1,5 @@
 import type { CapturedImage } from "../capture-store";
-import type { CaptureRect } from "../transport";
+import type { CaptureRect } from "@sitenote/widget";
 
 export const CROP_PADDING = 16;
 export const WEBP_QUALITY = 0.85;

@@ -1,8 +1,8 @@
 import type { Badge } from "../badge";
 import type { DataService } from "../data-service";
-import type { MessageResult } from "../messages";
+import type { MessageResult } from "@sitenote/widget";
 import type { NotificationChannelFactory } from "../realtime-channels";
-import type { NotificationList } from "../transport";
+import type { NotificationList } from "@sitenote/widget";
 
 export type NotificationData = Pick<
   DataService,

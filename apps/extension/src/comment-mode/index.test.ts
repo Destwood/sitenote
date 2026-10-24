@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { failure, success } from "../messages";
+import { failure, success } from "@sitenote/widget";
 import { createToggleListener } from ".";
 
 const EXTENSION_ID = "anefihllkbkenhjbjggfndgemgkfaeoa";

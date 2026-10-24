@@ -9,7 +9,8 @@ import {
   SECONDARY_BUTTON_CLASS,
 } from "../form-controls";
 import { sendMessage } from "../message-client";
-import { ERROR_MESSAGES, OTP_LENGTH, type ErrorCode, type AuthState } from "../messages";
+import { OTP_LENGTH, type AuthState } from "../messages";
+import { ERROR_MESSAGES, type ErrorCode } from "@sitenote/widget";
 import {
   clearPendingSignIn,
   readPendingSignIn,

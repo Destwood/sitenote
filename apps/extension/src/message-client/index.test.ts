@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { failure, success } from "../messages";
+import { failure, success } from "@sitenote/widget";
 import { onAuthStateChanged, onNotificationsChanged, sendMessage, toggleCommentMode } from ".";
 
 type Listener = (message: unknown, sender: { id?: string | undefined }) => undefined;

@@ -3,9 +3,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ERROR_CLASS, LINK_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
 import { onNotificationsChanged, sendMessage } from "../message-client";
-import { ERROR_MESSAGES, type ErrorCode } from "../messages";
+import { ERROR_MESSAGES, type ErrorCode } from "@sitenote/widget";
 import { openThread } from "../open-thread";
-import type { NotificationRecord } from "../transport";
+import type { NotificationRecord } from "@sitenote/widget";
 
 export const NOTIFICATIONS_PAGE_SIZE = 30;
 export const OPEN_FAILED_MESSAGE = "That page could not be opened.";

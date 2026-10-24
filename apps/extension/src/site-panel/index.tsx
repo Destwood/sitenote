@@ -7,7 +7,7 @@ import {
   INPUT_CLASS,
 } from "../form-controls";
 import { sendMessage, toggleCommentMode } from "../message-client";
-import { ERROR_MESSAGES, type ErrorCode } from "../messages";
+import { ERROR_MESSAGES, type ErrorCode } from "@sitenote/widget";
 import {
   getTargetTab,
   hasOriginAccess,
@@ -15,7 +15,7 @@ import {
   requestOriginAccess,
   type TargetTab,
 } from "../tab-access";
-import type { SiteInfo, WorkspaceInfo } from "../transport";
+import type { SiteInfo, WorkspaceInfo } from "@sitenote/widget";
 
 export const LAST_WORKSPACE_KEY = "sitenote.lastWorkspace";
 const PERMISSION_DENIED_MESSAGE = "Sitenote needs access to this site to show comments on it.";

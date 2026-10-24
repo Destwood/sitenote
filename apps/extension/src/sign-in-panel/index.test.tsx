@@ -2,7 +2,8 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { failure, success, type AuthState } from "../messages";
+import { type AuthState } from "../messages";
+import { failure, success } from "@sitenote/widget";
 import { readPendingSignIn, savePendingSignIn } from "../pending-sign-in";
 import { RESEND_DELAY_SECONDS, SignInPanel } from ".";
 

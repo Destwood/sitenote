@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { failure, success } from "../messages";
+import { failure, success } from "@sitenote/widget";
 import type { RouterSender } from "../message-router";
 import type { SessionHandoff } from "../session-handoff";
 import { createExternalRouter } from ".";

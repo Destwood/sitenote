@@ -2,7 +2,8 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { failure, success, type AuthState } from "../messages";
+import { type AuthState } from "../messages";
+import { failure, success } from "@sitenote/widget";
 import { PopupApp, notificationsTabLabel } from ".";
 
 const mocks = vi.hoisted(() => ({

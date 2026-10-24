@@ -3,7 +3,8 @@ import type { SitenoteClient } from "@sitenote/db";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 
-import { failure, success, type DataRequest } from "../messages";
+import { type DataRequest } from "../messages";
+import { failure, success } from "@sitenote/widget";
 import type { ThreadScreenshots } from "../screenshot-upload";
 import {
   SIGNED_URL_REFRESH_MARGIN_MS,

@@ -1,5 +1,5 @@
-import type { ErrorCode, ExtensionRequest, MessageResult, DataByRequestType } from "../messages";
-import type { PageConnection, PageConnectionOptions } from "../page-connection";
+import type { WidgetBackend, WidgetSubscriptionHandle } from "../backend";
+import type { ErrorCode } from "../result";
 import type { SiteInfo, ThreadRecord } from "../transport";
 
 export type PageSessionStatus = "starting" | "signedOut" | "disabled" | "ready" | "error";
@@ -16,10 +16,7 @@ export interface PageSessionState {
 export interface PageSessionDeps {
   origin: string;
   readPageUrl: () => string | null;
-  send: <Request extends ExtensionRequest>(
-    request: Request,
-  ) => Promise<MessageResult<DataByRequestType[Request["type"]]>>;
-  openConnection: (options: Omit<PageConnectionOptions, "connect">) => PageConnection;
+  backend: Pick<WidgetBackend, "getSiteInfo" | "listThreads" | "subscribe">;
   onState: (state: PageSessionState) => void;
 }
 
@@ -39,7 +36,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     live: false,
     error: null,
   };
-  let connection: PageConnection | null = null;
+  let connection: WidgetSubscriptionHandle | null = null;
   let stopped = false;
   let inFlight: Promise<void> | null = null;
   let requested = 0;
@@ -57,7 +54,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     if (site === null || pageUrl === null) {
       return;
     }
-    const result = await deps.send({ type: "threads.list", siteId: site.siteId, pageUrl });
+    const result = await deps.backend.listThreads(site.siteId, pageUrl);
     if (stopped || deps.readPageUrl() !== pageUrl) {
       return;
     }
@@ -89,7 +86,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
 
   async function start(): Promise<void> {
     publish(state);
-    const result = await deps.send({ type: "sites.forOrigin", origin: deps.origin });
+    const result = await deps.backend.getSiteInfo(deps.origin);
     if (stopped) {
       return;
     }
@@ -107,35 +104,37 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       return;
     }
     publish({ ...state, status: "ready", site });
-    connection = deps.openConnection({
-      subscription: {
+    connection = deps.backend.subscribe(
+      {
         siteId: site.siteId,
         workspaceId: site.workspaceId,
         getPageUrl: () => deps.readPageUrl() ?? deps.origin,
       },
-      onEvent: (event) => {
-        if (event.type === "site.disabled") {
-          publish({
-            status: "disabled",
-            site: null,
-            threads: [],
-            loaded: false,
-            live: false,
-            error: null,
-          });
-          stop();
-          return;
-        }
-        void refresh();
+      {
+        onEvent: (event) => {
+          if (event.type === "site.disabled") {
+            publish({
+              status: "disabled",
+              site: null,
+              threads: [],
+              loaded: false,
+              live: false,
+              error: null,
+            });
+            stop();
+            return;
+          }
+          void refresh();
+        },
+        onSubscribed: () => {
+          publish({ ...state, live: true });
+          void refresh();
+        },
+        onDisconnected: () => {
+          publish({ ...state, live: false });
+        },
       },
-      onSubscribed: () => {
-        publish({ ...state, live: true });
-        void refresh();
-      },
-      onDisconnected: () => {
-        publish({ ...state, live: false });
-      },
-    });
+    );
     await refresh();
   }
 
