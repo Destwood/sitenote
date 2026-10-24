@@ -516,6 +516,7 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      demo_site: { Args: { p_origin: string }; Returns: { site_id: string }[] };
       integration_secret_read: { Args: { p_secret_id: string }; Returns: string };
       integration_secret_upsert: {
         Args: {
@@ -535,6 +536,8 @@ export type Database = {
           workspace_name: string;
         }[];
       };
+      join_demo: { Args: { p_display_name: string }; Returns: { workspace_id: string }[] };
+      reset_demo: { Args: never; Returns: undefined };
       search_threads: {
         Args: {
           p_author_id?: string;
