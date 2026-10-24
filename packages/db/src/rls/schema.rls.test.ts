@@ -346,6 +346,14 @@ describe("functions and schemas", () => {
         public_exec: false,
       },
       {
+        proname: "demo_site",
+        prosecdef: true,
+        proconfig: pinned,
+        anon: false,
+        authenticated: true,
+        public_exec: false,
+      },
+      {
         proname: "integration_secret_read",
         prosecdef: true,
         proconfig: pinned,
@@ -367,6 +375,22 @@ describe("functions and schemas", () => {
         proconfig: pinned,
         anon: true,
         authenticated: true,
+        public_exec: false,
+      },
+      {
+        proname: "join_demo",
+        prosecdef: true,
+        proconfig: pinned,
+        anon: false,
+        authenticated: true,
+        public_exec: false,
+      },
+      {
+        proname: "reset_demo",
+        prosecdef: true,
+        proconfig: pinned,
+        anon: false,
+        authenticated: false,
         public_exec: false,
       },
       {

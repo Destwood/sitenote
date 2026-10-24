@@ -24,6 +24,7 @@ export const ERROR_CODES = [
   "unknown",
   "page_unavailable",
   "capture_failed",
+  "demo_limited",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -58,6 +59,7 @@ export const ERROR_MESSAGES: Readonly<Record<ErrorCode, string>> = {
   unknown: "Something went wrong. Try again.",
   page_unavailable: "Sitenote is not available on this page.",
   capture_failed: "The screenshot could not be taken.",
+  demo_limited: "Demo limit reached — try again later.",
 };
 
 export interface SuccessResponse<Data> {
