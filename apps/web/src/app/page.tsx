@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
 
+import { githubUrlFrom } from "../landing-config";
+import { LandingFaq } from "../landing-faq";
+import { LandingFeatures } from "../landing-features";
+import { LandingFooter } from "../landing-footer";
+import { LandingHeader } from "../landing-header";
 import { LandingHero } from "../landing-hero";
+import { LandingInstall } from "../landing-install";
+import { LandingSteps } from "../landing-steps";
 
 const TITLE = "Sitenote | Figma-style comments on any live website";
 const DESCRIPTION =
@@ -15,8 +22,16 @@ export const metadata: Metadata = {
 
 export default function HomePage() {
   return (
-    <main id="main">
-      <LandingHero />
-    </main>
+    <>
+      <LandingHeader githubUrl={githubUrlFrom(process.env.NEXT_PUBLIC_GITHUB_URL)} />
+      <main id="main">
+        <LandingHero />
+        <LandingFeatures />
+        <LandingSteps />
+        <LandingInstall />
+        <LandingFaq />
+      </main>
+      <LandingFooter />
+    </>
   );
 }
