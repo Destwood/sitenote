@@ -113,7 +113,7 @@ Done when: a thread becomes a ClickUp task and a mention produces an email in th
 
 - [x] Embed adapter for `packages/ui` with DOM-to-canvas screenshots
 - [x] `/demo`: sample page with seeded threads, anonymous guest session, rate limits, `demo-reset` scheduled function
-- [ ] Landing: hero with a product video or GIF, features, demo CTA, install instructions, GitHub link
+- [x] Landing: hero with a product video or GIF, features, demo CTA, install instructions, GitHub link
 - [ ] Production Supabase project: migrations, secrets, auth providers
 - [ ] Deploy web to Vercel; extension build pointed at production
 - [x] README: GIF, live demo link, architecture diagram, local setup, test commands (poster image linking to `/demo` instead of a GIF, see D-129; the live link stays a placeholder until the deploy item)
