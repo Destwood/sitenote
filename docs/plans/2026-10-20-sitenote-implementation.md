@@ -116,7 +116,7 @@ Done when: a thread becomes a ClickUp task and a mention produces an email in th
 - [ ] Landing: hero with a product video or GIF, features, demo CTA, install instructions, GitHub link
 - [ ] Production Supabase project: migrations, secrets, auth providers
 - [ ] Deploy web to Vercel; extension build pointed at production
-- [ ] README: GIF, live demo link, architecture diagram, local setup, test commands
+- [x] README: GIF, live demo link, architecture diagram, local setup, test commands (poster image linking to `/demo` instead of a GIF, see D-129; the live link stays a placeholder until the deploy item)
 - [ ] Final QA pass: Lighthouse on landing, e2e against production web, keyboard and screen reader checks on the UI
 - [ ] Owner decides distribution (Chrome Web Store or GitHub Release) and when to make the repo public
 

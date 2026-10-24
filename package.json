@@ -13,6 +13,7 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test && vitest run --project scripts --project functions",
     "e2e": "node scripts/require-supabase.ts && turbo run e2e",
+    "media:record": "pnpm --filter @sitenote/e2e exec playwright test --config scripts/media.config.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint:root": "eslint eslint.config.js vitest.config.ts scripts supabase/functions/_shared",
