@@ -5,10 +5,10 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 
 import {
+  NAME_DIALOG,
   SEEDED_PIN_COUNT,
   commentOn,
   demoAdminClient,
-  joinDemo,
   openDemo,
   resetDemo,
   threadPins,
@@ -37,9 +37,14 @@ test("records the product video, the poster and the Open Graph image from the de
     recordVideo: { dir: test.info().outputPath("video"), size: FRAME },
   });
   const page = await recording.newPage();
-  await joinDemo(page, "Alex");
+  await openDemo(page);
+  await page.getByRole("button", { name: "Start commenting", exact: true }).first().click();
+  const nameDialog = page.getByRole("dialog", { name: NAME_DIALOG });
+  await nameDialog.getByLabel("Your name").fill("Alex");
+  await nameDialog.getByRole("button", { name: "Start commenting", exact: true }).click();
+  await expect(nameDialog).toBeHidden();
+  await expect(threadPins(page).first()).toBeVisible();
   await commentOn(page, "demo-feature-pins", COMMENT);
-  await expect(threadPins(page)).toHaveCount(NEW_THREAD_NUMBER);
   const thread = page.getByRole("dialog", { name: `Thread ${String(NEW_THREAD_NUMBER)}` });
   await expect(thread).toContainText(COMMENT);
   await page.screenshot({ path: POSTER_PATH });
