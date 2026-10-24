@@ -145,11 +145,11 @@ begin
           'Is this headline too strong for the pricing audience?'
         ),
         (
-          private.demo_element_anchor('demo-feature-pins', 'article', 'Pin to elements', 320, 180),
+          private.demo_element_anchor('demo-feature-pins', 'article', 'Pin to elementsAttach a comment to a button, a card or a sentence and it stays there as the page changes.', 267, 150),
           'Could we show the pin count next to each feature?'
         ),
         (
-          private.demo_element_anchor('demo-pricing-team', 'article', 'Team plan', 320, 420),
+          private.demo_element_anchor('demo-pricing-team', 'article', 'Team plan$24 per seatSave 20% on annual billing.', 412, 150),
           'The team price looks right. Please confirm the annual discount is visible.'
         ),
         (
