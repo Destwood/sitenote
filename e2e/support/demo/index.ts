@@ -8,6 +8,7 @@ export const DEMO_WORKSPACE_ID = "00000000-0000-4000-8000-00000000d3e0";
 export const DEMO_PATH = "/demo";
 export const DEMO_URL = `${WEB_ORIGIN}${DEMO_PATH}`;
 export const SEEDED_PIN_COUNT = 4;
+export const DEMO_VIEWPORT = { width: 1280, height: 1800 };
 export const RATE_LIMIT_MESSAGE = "Demo limit reached — try again later.";
 export const NAME_DIALOG = "Choose the name your comments show";
 const DEMO_STORAGE_KEY = "sitenote-demo";

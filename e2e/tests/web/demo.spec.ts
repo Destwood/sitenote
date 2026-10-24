@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import {
   DEMO_URL,
+  DEMO_VIEWPORT,
   DEMO_WORKSPACE_ID,
   RATE_LIMIT_MESSAGE,
   SEEDED_PIN_COUNT,
@@ -23,11 +24,18 @@ const ELEMENT_ANCHOR = {
     css: '[data-testid="demo-feature-clickup"]',
     nthPath: "main > article",
   },
-  fingerprint: { tag: "article", text: "ClickUp tasks", classes: [], width: 320, height: 180 },
+  fingerprint: {
+    tag: "article",
+    text: "ClickUp tasksTurn a comment into a task with the page context and screenshot attached.",
+    classes: [],
+    width: 267,
+    height: 150,
+  },
   offset: { x: 0.5, y: 0.5 },
 };
 
 test.describe.configure({ mode: "serial" });
+test.use({ viewport: DEMO_VIEWPORT });
 
 async function enableCommenting(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Start commenting", exact: true }).first().click();
@@ -38,8 +46,8 @@ test("a visitor without the extension comments, and another visitor sees and ans
 }) => {
   const admin = demoAdminClient();
   await resetDemo(admin);
-  const dana = await browser.newContext();
-  const eli = await browser.newContext();
+  const dana = await browser.newContext({ viewport: DEMO_VIEWPORT });
+  const eli = await browser.newContext({ viewport: DEMO_VIEWPORT });
   try {
     const danaPage = await dana.newPage();
     const eliPage = await eli.newPage();
