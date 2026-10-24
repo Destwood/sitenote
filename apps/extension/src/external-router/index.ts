@@ -1,7 +1,7 @@
 import * as z from "zod/mini";
 
 import { senderOriginOf, type RouterSender } from "../message-router";
-import { failure, success, type MessageResult } from "../messages";
+import { failure, success, type MessageResult } from "@sitenote/widget";
 import type { SessionHandoff } from "../session-handoff";
 
 const MAX_TOKEN_LENGTH = 8192;

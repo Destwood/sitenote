@@ -1,6 +1,7 @@
-import type { ErrorCode, ExtensionRequest, MessageResult, DataByRequestType } from "../messages";
+import type { ExtensionRequest, DataByRequestType } from "../messages";
+import type { ErrorCode, MessageResult } from "@sitenote/widget";
 import type { PageConnection, PageConnectionOptions } from "../page-connection";
-import type { SiteInfo, ThreadRecord } from "../transport";
+import type { SiteInfo, ThreadRecord } from "@sitenote/widget";
 
 export type PageSessionStatus = "starting" | "signedOut" | "disabled" | "ready" | "error";
 

@@ -6,7 +6,8 @@ import type { DataService } from "../data-service";
 import type { NotificationCenter } from "../notification-center";
 import type { ResolvedPreference } from "../resolved-preference";
 import type { ScreenshotService } from "../screenshot-service";
-import { failure, success, type AuthState } from "../messages";
+import { type AuthState } from "../messages";
+import { failure, success } from "@sitenote/widget";
 import type { SiteEnablement } from "../site-enablement";
 import { createMessageRouter, senderOriginOf, type RouterSender } from ".";
 

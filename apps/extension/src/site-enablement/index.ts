@@ -1,4 +1,4 @@
-import { failure, success, type MessageResult } from "../messages";
+import { failure, success, type MessageResult } from "@sitenote/widget";
 import type { DataService } from "../data-service";
 import type { EnablementStore } from "../enablement-store";
 

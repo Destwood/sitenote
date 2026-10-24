@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { failure, success, type MessageResult } from "../messages";
+import { failure, success, type MessageResult } from "@sitenote/widget";
 import type { PageConnection, PageConnectionOptions } from "../page-connection";
-import type { SiteInfo, ThreadRecord } from "../transport";
+import type { SiteInfo, ThreadRecord } from "@sitenote/widget";
 import { createPageSession, type PageSessionDeps, type PageSessionState } from ".";
 
 const SITE: SiteInfo = {

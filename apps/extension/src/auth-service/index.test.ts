@@ -7,7 +7,7 @@ import {
 import type { SitenoteClient } from "@sitenote/db";
 import { describe, expect, it, vi } from "vitest";
 
-import { failure, success } from "../messages";
+import { failure, success } from "@sitenote/widget";
 import type { SessionStorage } from "../session-storage";
 import { createAuthService } from ".";
 

@@ -1,8 +1,7 @@
+import { ERROR_CODES, ERROR_MESSAGES, failure, success } from "@sitenote/widget";
 import { describe, expect, it } from "vitest";
 
 import {
-  ERROR_CODES,
-  ERROR_MESSAGES,
   RESPONSE_SCHEMAS,
   authRequestSchema,
   authStateChangedSchema,
@@ -10,12 +9,10 @@ import {
   commentModeResponseSchema,
   commentModeToggleSchema,
   dataRequestSchema,
-  failure,
   notificationsChangedSchema,
   pageClientMessageSchema,
   pageEventSchema,
   requestSchema,
-  success,
 } from ".";
 
 const SIGNED_IN = {

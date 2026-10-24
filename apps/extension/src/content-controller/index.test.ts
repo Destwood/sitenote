@@ -2,11 +2,11 @@ import { createTextAnchor, type Anchor, type ThreadContext } from "@sitenote/cor
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import { ORPHANED, type Resolution } from "../anchor-target";
-import { failure, success, type MessageResult } from "../messages";
+import { failure, success, type MessageResult } from "@sitenote/widget";
 import type { PageConnectionOptions } from "../page-connection";
 import type { ResolvedPreference } from "../resolved-preference";
 import type { ScreenshotTaker } from "../screenshot-taker";
-import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "../transport";
+import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "@sitenote/widget";
 import {
   COMMENT_CURSOR_CSS,
   PREFERENCE_FAILED_MESSAGE,

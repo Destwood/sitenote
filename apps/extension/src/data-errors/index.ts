@@ -1,6 +1,6 @@
 import { isAuthError, isAuthRetryableFetchError } from "@supabase/supabase-js";
 
-import type { ErrorCode } from "../messages";
+import type { ErrorCode } from "@sitenote/widget";
 
 const RATE_LIMIT_STATUS = 429;
 const UNAUTHORIZED_STATUS = 401;

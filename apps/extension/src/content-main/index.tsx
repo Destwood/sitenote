@@ -12,7 +12,7 @@ import { ContentApp } from "../content-app";
 import { createContentController, type ContentState } from "../content-controller";
 import { isolateEvents } from "../event-isolation";
 import { sendMessage } from "../message-client";
-import { failure, success } from "../messages";
+import { failure, success } from "@sitenote/widget";
 import { openPageConnection } from "../page-connection";
 import { requestConsoleErrors } from "../errors-bridge";
 import { createPreferenceClient } from "../preference-client";

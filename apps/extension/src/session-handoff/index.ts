@@ -1,7 +1,7 @@
 import type { SitenoteClient } from "@sitenote/db";
 import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 
-import { failure, success, type MessageResult } from "../messages";
+import { failure, success, type MessageResult } from "@sitenote/widget";
 
 export interface HandoffTokens {
   accessToken: string;

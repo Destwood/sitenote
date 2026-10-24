@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "re
 import { AccountPanel } from "../account-panel";
 import { ERROR_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
 import { onAuthStateChanged, sendMessage } from "../message-client";
-import { ERROR_MESSAGES, type ErrorCode, type AuthState } from "../messages";
+import { type AuthState } from "../messages";
+import { ERROR_MESSAGES, type ErrorCode } from "@sitenote/widget";
 import { NotificationsPanel } from "../notifications-panel";
 import { SignInPanel } from "../sign-in-panel";
 import { SitePanel } from "../site-panel";

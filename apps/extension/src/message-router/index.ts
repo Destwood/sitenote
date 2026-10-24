@@ -3,14 +3,8 @@ import { parsePageUrl } from "@sitenote/core";
 import type { AuthService } from "../auth-service";
 import type { DataService } from "../data-service";
 import type { EnabledEntry } from "../enablement-store";
-import {
-  failure,
-  requestSchema,
-  success,
-  type DataByRequestType,
-  type ExtensionRequest,
-  type MessageResult,
-} from "../messages";
+import { requestSchema, type DataByRequestType, type ExtensionRequest } from "../messages";
+import { failure, success, type MessageResult } from "@sitenote/widget";
 import type { NotificationCenter } from "../notification-center";
 import type { ResolvedPreference } from "../resolved-preference";
 import type { ScreenshotService } from "../screenshot-service";

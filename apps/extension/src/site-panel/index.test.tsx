@@ -2,8 +2,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { failure, success } from "../messages";
-import type { SiteInfo, WorkspaceInfo } from "../transport";
+import { failure, success } from "@sitenote/widget";
+import type { SiteInfo, WorkspaceInfo } from "@sitenote/widget";
 import { LAST_WORKSPACE_KEY, SitePanel } from ".";
 
 const mocks = vi.hoisted(() => ({

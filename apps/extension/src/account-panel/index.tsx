@@ -2,7 +2,8 @@ import { useState } from "react";
 
 import { ERROR_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
 import { sendMessage } from "../message-client";
-import { ERROR_MESSAGES, type ErrorCode, type AuthState } from "../messages";
+import { type AuthState } from "../messages";
+import { ERROR_MESSAGES, type ErrorCode } from "@sitenote/widget";
 
 type SignedInState = Extract<AuthState, { status: "signedIn" }>;
 

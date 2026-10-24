@@ -1,4 +1,4 @@
-import { ERROR_MESSAGES } from "../messages";
+import { ERROR_MESSAGES } from "@sitenote/widget";
 import type { PageSessionDeps } from "../page-session";
 import type { ResolvedPreference } from "../resolved-preference";
 

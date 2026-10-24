@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { failure, success, type MessageResult } from "../messages";
+import { failure, success, type MessageResult } from "@sitenote/widget";
 import type { NotificationHandlers } from "../realtime-channels";
-import type { NotificationList } from "../transport";
+import type { NotificationList } from "@sitenote/widget";
 import { createNotificationCenter, type NotificationData } from ".";
 
 const USER_ID = "00000000-0000-4000-8000-000000000001";

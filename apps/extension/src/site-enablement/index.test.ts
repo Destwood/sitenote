@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { EnabledEntry } from "../enablement-store";
-import { failure, success } from "../messages";
+import { failure, success } from "@sitenote/widget";
 import {
   CONTENT_SCRIPT_FILE,
   ERRORS_SCRIPT_FILE,

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createCaptureStore } from "../capture-store";
-import { failure } from "../messages";
+import { failure } from "@sitenote/widget";
 import {
   CAPTURE_MIN_INTERVAL_MS,
   CAPTURE_QUEUE_LIMIT,

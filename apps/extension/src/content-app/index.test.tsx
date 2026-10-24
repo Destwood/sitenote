@@ -11,7 +11,7 @@ import {
 } from "../content-controller";
 import type { PinMeasurement } from "../pin-tracker";
 import { createStore, type Store } from "../store";
-import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "../transport";
+import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "@sitenote/widget";
 import { ContentApp } from ".";
 
 const ME = "00000000-0000-4000-8000-000000000002";

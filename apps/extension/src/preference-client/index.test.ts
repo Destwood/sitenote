@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { failure, success, type MessageResult } from "../messages";
+import { failure, success, type MessageResult } from "@sitenote/widget";
 import type { PageSessionDeps } from "../page-session";
 import { createPreferenceClient } from ".";
 
