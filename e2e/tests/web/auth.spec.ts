@@ -37,7 +37,7 @@ test("a new user signs in with an email code, creates a workspace and signs out"
   const email = newEmail();
 
   await page.goto("/");
-  await page.getByRole("link", { name: "Sign in" }).click();
+  await page.getByRole("banner").getByRole("link", { name: "Sign in" }).click();
   await expect(page).toHaveURL("/sign-in");
 
   const code = await requestCode(page, email);
