@@ -42,9 +42,9 @@ test("the owner connects ClickUp and a thread becomes a task with a link back", 
   await page.goto(INTEGRATIONS_URL);
   await page.getByLabel("Personal token").fill("pk_e2e_token");
   await page.getByRole("button", { name: "Load teams" }).click();
-  await page.getByRole("combobox", { name: "Team" }).selectOption({ label: "Northwind ClickUp" });
-  await page.getByRole("combobox", { name: "Space" }).selectOption({ label: "Web" });
-  await page.getByRole("combobox", { name: "List" }).selectOption({ label: "Website feedback" });
+  await page.getByRole("combobox", { name: /^Team/ }).selectOption({ label: "Northwind ClickUp" });
+  await page.getByRole("combobox", { name: /^Space/ }).selectOption({ label: "Web" });
+  await page.getByRole("combobox", { name: /^List/ }).selectOption({ label: "Website feedback" });
   await page.getByRole("button", { name: "Save ClickUp list" }).click();
   await expect(
     page.getByText("Tasks go to Website feedback in Web (Northwind ClickUp)."),
