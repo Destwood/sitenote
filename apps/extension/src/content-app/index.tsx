@@ -156,6 +156,14 @@ export function ContentApp({ controller }: ContentAppProps) {
         error={state.panelError}
         mentionCandidates={mentionCandidates}
         screenshot={state.screenshots.get(activeView.id)}
+        clickUp={{
+          taskUrl: activeRecord.clickUpTaskUrl ?? null,
+          canCreate: state.clickUpConfigured,
+          pending: state.clickUpPending.has(activeView.id),
+          onCreate: () => {
+            void controller.createClickUpTask(activeView.id);
+          },
+        }}
         onSubmit={(submission) => controller.reply(activeView.id, submission)}
         onEditComment={controller.editComment}
         onDeleteComment={controller.deleteComment}

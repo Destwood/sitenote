@@ -18,6 +18,7 @@ export interface ThreadDetail {
   context: ThreadContext | null;
   hasScreenshot: boolean;
   screenshot: ScreenshotState | undefined;
+  clickUpTaskUrl: string | null;
   comments: CommentView[];
 }
 
@@ -29,7 +30,7 @@ export async function readThreadDetail(
   const query = supabase
     .from("threads")
     .select(
-      "id, workspace_id, page_url, status, created_at, created_by, resolved_at, screenshot_path, context",
+      "id, workspace_id, page_url, status, created_at, created_by, resolved_at, screenshot_path, context, clickup_task_url",
     )
     .eq("id", threadId);
   const thread = await (
@@ -72,6 +73,7 @@ export async function readThreadDetail(
     context: parseThreadContext(data.context),
     hasScreenshot: data.screenshot_path !== null,
     screenshot,
+    clickUpTaskUrl: data.clickup_task_url,
     comments: toCommentViews(commentRows.data, members),
   };
 }

@@ -30,6 +30,7 @@ export default tseslint.config(
       "packages/db/src/database-types/index.ts",
       "supabase/.branches/**",
       "supabase/.temp/**",
+      "supabase/functions/_shared/supabase/**",
     ],
   },
   js.configs.recommended,

@@ -14,7 +14,7 @@ describe("WorkspaceNav", () => {
       within(nav)
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual(["Threads", "Sites", "Members", "Invites"]);
+    ).toEqual(["Threads", "Sites", "Members", "Invites", "Integrations"]);
     expect(screen.getByRole("link", { name: "Invites" }).getAttribute("href")).toBe(
       `/app/w/${WORKSPACE_ID}/invites`,
     );
@@ -24,6 +24,7 @@ describe("WorkspaceNav", () => {
     render(<WorkspaceNav workspaceId={WORKSPACE_ID} role={role} />);
 
     expect(screen.queryByRole("link", { name: "Invites" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Integrations" })).toBeNull();
     expect(screen.getByRole("link", { name: "Members" }).getAttribute("href")).toBe(
       `/app/w/${WORKSPACE_ID}/members`,
     );

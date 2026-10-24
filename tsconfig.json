@@ -1,7 +1,9 @@
 {
   "extends": "@sitenote/tsconfig/base.json",
   "compilerOptions": {
-    "types": ["node"]
+    "types": ["node"],
+    "allowImportingTsExtensions": true
   },
-  "include": ["vitest.config.ts", "scripts"]
+  "include": ["vitest.config.ts", "scripts", "supabase/functions/_shared"],
+  "exclude": ["supabase/functions/_shared/supabase"]
 }

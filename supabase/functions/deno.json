@@ -1,0 +1,7 @@
+{
+  "imports": {
+    "@std/assert": "jsr:@std/assert@1.0.19",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.118.0",
+    "zod/mini": "npm:zod@4.6.7/mini"
+  }
+}

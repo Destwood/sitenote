@@ -21,6 +21,8 @@ export { SIDEBAR_WIDTH, Sidebar } from "./sidebar";
 export type { SidebarProps } from "./sidebar";
 export { PANEL_WIDTH, ThreadPanel } from "./thread-panel";
 export type { ThreadPanelProps } from "./thread-panel";
+export { ClickUpTask } from "./clickup-task";
+export type { ClickUpTaskState } from "./clickup-task";
 export { Toast, ToastRegion } from "./toast";
 export type { ToastProps, ToastRegionProps, ToastVariant, ToastView } from "./toast";
 export type { CommentView, PersonView, ScreenshotState, ThreadStatus, ThreadView } from "./types";

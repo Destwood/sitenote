@@ -1,4 +1,10 @@
-export const WORKSPACE_SECTIONS = ["threads", "sites", "members", "invites"] as const;
+export const WORKSPACE_SECTIONS = [
+  "threads",
+  "sites",
+  "members",
+  "invites",
+  "integrations",
+] as const;
 
 export type WorkspaceSection = (typeof WORKSPACE_SECTIONS)[number];
 

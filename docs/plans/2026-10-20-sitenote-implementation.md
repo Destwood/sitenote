@@ -95,16 +95,16 @@ Done when: every new thread carries context and failures degrade gracefully.
 - [x] Members and invites management
 - [x] `/t/[id]`: authorized thread view, extension ping, "Open on page" to `page_url#sitenote={id}`
 - [x] Content script handles `#sitenote=` by scrolling to and opening the thread
-- [ ] E2E: deep link opens the page and focuses the right pin
+- [x] E2E: deep link opens the page and focuses the right pin
 
 Done when: everything created in the extension is manageable from the dashboard and links round-trip.
 
 ### Phase 7 — ClickUp and email
 
-- [ ] Integrations page: save ClickUp token (Vault), choose team, space, list
-- [ ] Edge Function `clickup-create-task`: task with description, context, deep link and screenshot attachment
-- [ ] Thread chip with the task link; retry on failure
-- [ ] Database webhook + Edge Function `notify-email` via Resend for replies and mentions
+- [x] Integrations page: save ClickUp token (Vault), choose team, space, list
+- [x] Edge Function `clickup-create-task`: task with description, context, deep link and screenshot attachment
+- [x] Thread chip with the task link; retry on failure
+- [x] Database webhook + Edge Function `notify-email` via Resend for replies and mentions
 - [ ] Tests with mocked ClickUp and Resend HTTP; one manual smoke test against real services
 
 Done when: a thread becomes a ClickUp task and a mention produces an email in the smoke test.

@@ -57,6 +57,7 @@ export const threadRecordSchema = z.object({
   createdAt: z.iso.datetime(),
   context: z.nullable(threadContextSchema),
   hasScreenshot: z.boolean(),
+  clickUpTaskUrl: z.optional(z.nullable(z.string())),
   comments: z.array(commentRecordSchema),
 });
 

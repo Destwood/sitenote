@@ -14,6 +14,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { section: "sites", label: "Sites", ownerOnly: false },
   { section: "members", label: "Members", ownerOnly: false },
   { section: "invites", label: "Invites", ownerOnly: true },
+  { section: "integrations", label: "Integrations", ownerOnly: true },
 ];
 
 interface WorkspaceNavProps {

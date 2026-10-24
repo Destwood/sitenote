@@ -11,11 +11,11 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test && vitest run --project scripts",
+    "test": "turbo run test && vitest run --project scripts --project functions",
     "e2e": "node scripts/require-supabase.ts && turbo run e2e",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint:root": "eslint eslint.config.js vitest.config.ts scripts",
+    "lint:root": "eslint eslint.config.js vitest.config.ts scripts supabase/functions/_shared",
     "typecheck:root": "tsc --noEmit -p tsconfig.json",
     "check:manifest": "node scripts/assert-production-manifest.ts",
     "db:start": "supabase start",
@@ -42,6 +42,7 @@
     "turbo": "2.11.9",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.0",
-    "vitest": "5.0.5"
+    "vitest": "5.0.5",
+    "zod": "4.6.7"
   }
 }
