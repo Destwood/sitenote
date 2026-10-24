@@ -71,9 +71,6 @@ test("a visitor without the extension comments, and another visitor sees and ans
       )
       .toBe(true);
 
-    await danaPage
-      .getByRole("button", { name: `Thread ${String(NEW_THREAD_NUMBER)}, open`, exact: true })
-      .click();
     const danaThread = danaPage.getByRole("dialog", {
       name: `Thread ${String(NEW_THREAD_NUMBER)}`,
     });
