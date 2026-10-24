@@ -2,14 +2,11 @@ import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createStore, ORPHANED, type Resolution, type Store } from "@sitenote/widget";
-import type {
-  CommentRecord,
-  MemberRecord,
-  PinMeasurement,
-  SiteInfo,
-  ThreadRecord,
-} from "@sitenote/widget";
+import { createStore, type Store } from "../store";
+import { ORPHANED, type Resolution } from "../anchor-target";
+import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "../transport";
+import type { PinMeasurement } from "../pin-tracker";
+
 import {
   PENDING_ID,
   SELECTION_ID,

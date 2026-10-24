@@ -2,7 +2,7 @@ import type { Anchor } from "@sitenote/core";
 import type { CommentView, PersonView, ThreadView } from "@sitenote/ui";
 
 import type { Resolution } from "../anchor-target";
-import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "@sitenote/widget";
+import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "../transport";
 
 export const ANCHOR_LABEL_LIMIT = 80;
 export const UNKNOWN_ANCHOR_LABEL = "Unknown location";

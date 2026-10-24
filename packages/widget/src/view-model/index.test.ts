@@ -2,7 +2,7 @@ import type { Anchor } from "@sitenote/core";
 import { describe, expect, it } from "vitest";
 
 import { ORPHANED, type Resolution } from "../anchor-target";
-import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "@sitenote/widget";
+import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "../transport";
 import {
   ANCHOR_LABEL_LIMIT,
   UNKNOWN_ANCHOR_LABEL,

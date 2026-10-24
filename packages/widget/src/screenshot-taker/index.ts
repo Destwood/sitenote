@@ -1,5 +1,5 @@
-import { type AnchorTarget, measureTarget, observableElement } from "@sitenote/widget";
-import type { PageSessionDeps } from "../page-session";
+import { type AnchorTarget, measureTarget, observableElement } from "../anchor-target";
+import type { WidgetBackend } from "../backend";
 
 export const FRAME_TIMEOUT_MS = 100;
 export const SCROLL_QUIET_MS = 100;
@@ -8,7 +8,7 @@ export const SCROLL_MAX_MS = 1000;
 export interface ScreenshotTakerDeps {
   win: Window;
   setHostHidden: (hidden: boolean) => void;
-  send: PageSessionDeps["send"];
+  backend: Pick<WidgetBackend, "captureScreenshot">;
 }
 
 export interface ScreenshotTaker {
@@ -102,11 +102,7 @@ export function createScreenshotTaker(deps: ScreenshotTakerDeps): ScreenshotTake
             return null;
           }
         }
-        const result = await deps.send({
-          type: "screenshot.capture",
-          rect,
-          devicePixelRatio: win.devicePixelRatio,
-        });
+        const result = await deps.backend.captureScreenshot(rect, win.devicePixelRatio);
         return result.ok ? result.data.captureId : null;
       } catch {
         return null;

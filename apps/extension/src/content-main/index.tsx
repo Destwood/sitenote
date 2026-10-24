@@ -1,5 +1,5 @@
 import { SITENOTE_ROOT_TAG } from "@sitenote/core";
-import { createRoot, type Root } from "react-dom/client";
+import { createWidget, failure, success, type ContentState } from "@sitenote/widget";
 import { browser } from "wxt/browser";
 import type { ContentScriptContext } from "wxt/utils/content-script-context";
 import {
@@ -8,53 +8,13 @@ import {
 } from "wxt/utils/content-script-ui/shadow-root";
 
 import { createToggleListener } from "../comment-mode";
-import { ContentApp } from "../content-app";
-import { createContentController, type ContentState } from "../content-controller";
-import { createContextCollector, failure, isolateEvents, success } from "@sitenote/widget";
-import { sendMessage } from "../message-client";
-import { openPageConnection } from "../page-connection";
-import { requestConsoleErrors } from "../errors-bridge";
-import { createPreferenceClient } from "../preference-client";
-import { createScreenshotTaker } from "../screenshot-taker";
+import { createExtensionBackend } from "../extension-backend";
+
 export async function startContentScript(ctx: ContentScriptContext, css: string): Promise<void> {
-  let ui: ShadowRootContentScriptUi<Root> | null = null;
+  let ui: ShadowRootContentScriptUi<() => void> | null = null;
   let mounting = false;
 
-  function isOwn(node: Node | null): boolean {
-    const host = ui?.shadowHost;
-    return host !== undefined && node !== null && (node === host || host.contains(node));
-  }
-
-  const controller = createContentController({
-    win: window,
-    doc: document,
-    origin: location.origin,
-    isOwn,
-    send: sendMessage,
-    preference: createPreferenceClient(sendMessage),
-    screenshot: createScreenshotTaker({
-      win: window,
-      send: sendMessage,
-      setHostHidden: (hidden) => {
-        const host = ui?.shadowHost;
-        if (host === undefined) {
-          return;
-        }
-        if (hidden) {
-          host.style.setProperty("visibility", "hidden", "important");
-        } else {
-          host.style.removeProperty("visibility");
-        }
-      },
-    }),
-    collectContext: createContextCollector({
-      win: window,
-      doc: document,
-      requestErrors: () => requestConsoleErrors({ win: window }),
-    }),
-    openConnection: (options) =>
-      openPageConnection({ ...options, connect: (name) => browser.runtime.connect({ name }) }),
-  });
+  const widget = createWidget({ backend: createExtensionBackend(), document, window });
 
   function syncHost(state: ContentState): void {
     if (ui === null) {
@@ -86,19 +46,14 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
         position: "inline",
         anchor: "body",
         css,
-        onMount(container) {
-          isolateEvents(container);
-          const root = createRoot(container);
-          root.render(<ContentApp controller={controller} />);
-          return root;
-        },
-        onRemove(root) {
-          root?.unmount();
+        onMount: (container) => widget.render(container),
+        onRemove: (unmount) => {
+          unmount?.();
         },
       });
       created.mount();
       ui = created;
-      syncHost(controller.store.getState());
+      syncHost(widget.store.getState());
     } finally {
       mounting = false;
     }
@@ -109,8 +64,8 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
     ui = null;
   }
 
-  controller.store.subscribe(() => {
-    const state = controller.store.getState();
+  widget.store.subscribe(() => {
+    const state = widget.store.getState();
     if (state.status === "ready") {
       void mountUi();
     } else if (state.status === "disabled") {
@@ -122,19 +77,19 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
   const toggleListener = createToggleListener({
     extensionId: browser.runtime.id,
     toggle: () => {
-      const { status } = controller.store.getState();
+      const { status } = widget.store.getState();
       if (status !== "ready") {
         return failure(status === "signedOut" ? "unauthorized" : "page_unavailable");
       }
-      return success({ active: controller.toggleCommentMode() });
+      return success({ active: widget.toggleCommentMode() });
     },
   });
   browser.runtime.onMessage.addListener(toggleListener);
   ctx.onInvalidated(() => {
     browser.runtime.onMessage.removeListener(toggleListener);
-    controller.stop();
+    widget.stop();
     unmountUi();
   });
 
-  await controller.start();
+  await widget.start();
 }

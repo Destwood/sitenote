@@ -5,36 +5,32 @@ import {
   parsePageUrl,
   parseThreadHash,
   type Anchor,
-  type ThreadContext,
 } from "@sitenote/core";
 import type { AnchorRect, ComposerSubmission, ScreenshotState, ToastView } from "@sitenote/ui";
 
 import {
   type AnchorTarget,
-  createDocumentStyle,
-  createPicker,
-  createPinTracker,
-  createStore,
-  createTextHighlighter,
-  ERROR_MESSAGES,
   isTargetAlive,
-  type Measurements,
   observableElement,
   ORPHANED,
   type Resolution,
   resolveAnchor,
-  type Store,
-  type TrackedTarget,
-  upsertComment,
-  upsertThread,
-  watchDom,
-  watchPageUrl,
-  watchSelection,
-} from "@sitenote/widget";
-import type { MemberRecord, SiteInfo, ThreadRecord } from "@sitenote/widget";
-import { createPageSession, type PageSessionDeps, type PageSessionState } from "../page-session";
-import type { PageSessionStatus } from "../page-session";
-import type { ResolvedPreference } from "../resolved-preference";
+} from "../anchor-target";
+import { createDocumentStyle } from "../document-style";
+import { createPicker } from "../comment-picker";
+import { createPinTracker, type Measurements, type TrackedTarget } from "../pin-tracker";
+import { createStore, type Store } from "../store";
+import { createTextHighlighter } from "../text-highlighter";
+import { ERROR_MESSAGES } from "../result";
+import { upsertComment, upsertThread } from "../view-model";
+import { watchDom } from "../dom-watcher";
+import { watchPageUrl } from "../url-watcher";
+import { watchSelection } from "../selection-watcher";
+import type { MemberRecord, SiteInfo, ThreadRecord } from "../transport";
+
+import type { WidgetBackend } from "../backend";
+import { createPageSession, type PageSessionState, type PageSessionStatus } from "../page-session";
+import type { PreferenceClient } from "../preference-client";
 import type { ScreenshotTaker } from "../screenshot-taker";
 export const PENDING_ID = "pending";
 export const SELECTION_ID = "selection";
@@ -81,11 +77,9 @@ export interface ContentControllerDeps {
   doc: Document;
   origin: string;
   isOwn: (node: Node | null) => boolean;
-  send: PageSessionDeps["send"];
-  openConnection: PageSessionDeps["openConnection"];
-  preference: ResolvedPreference;
+  backend: WidgetBackend;
+  preference: PreferenceClient;
   screenshot: ScreenshotTaker;
-  collectContext: () => Promise<ThreadContext>;
 }
 
 export interface ContentController {
@@ -295,7 +289,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     if (site === null) {
       return;
     }
-    const result = await deps.send({ type: "members.list", workspaceId: site.workspaceId });
+    const result = await deps.backend.listMembers(site.workspaceId);
     if (!result.ok) {
       return;
     }
@@ -310,7 +304,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     if (site === null) {
       return;
     }
-    const result = await deps.send({ type: "clickup.status", workspaceId: site.workspaceId });
+    const result = await deps.backend.getClickUpStatus(site.workspaceId);
     if (!result.ok) {
       return;
     }
@@ -328,7 +322,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       ...state,
       clickUpPending: new Set(state.clickUpPending).add(threadId),
     }));
-    const result = await deps.send({ type: "clickup.createTask", threadId });
+    const result = await deps.backend.createClickUpTask(threadId);
     store.setState((state) => {
       const pending = new Set(state.clickUpPending);
       pending.delete(threadId);
@@ -411,7 +405,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     if (!store.getState().screenshots.has(threadId)) {
       setScreenshot({ status: "loading" });
     }
-    const result = await deps.send({ type: "threads.screenshotUrl", threadId });
+    const result = await deps.backend.getScreenshotUrl(threadId);
     setScreenshot(
       result.ok && result.data !== null
         ? { status: "ready", url: result.data }
@@ -604,8 +598,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
   const session = createPageSession({
     origin: deps.origin,
     readPageUrl,
-    send: deps.send,
-    openConnection: deps.openConnection,
+    backend: deps.backend,
     onState: handleSession,
   });
 
@@ -618,9 +611,8 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     creating = true;
     store.setState((state) => ({ ...state, panelError: undefined }));
     try {
-      const context = await deps.collectContext();
-      const result = await deps.send({
-        type: "threads.create",
+      const context = await deps.backend.collectContext();
+      const result = await deps.backend.createThread({
         siteId: site.siteId,
         pageUrl,
         anchor: pending.anchor,
@@ -668,8 +660,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
 
   async function reply(threadId: string, submission: ComposerSubmission): Promise<void> {
     store.setState((state) => ({ ...state, panelError: undefined }));
-    const result = await deps.send({
-      type: "comments.create",
+    const result = await deps.backend.createComment({
       threadId,
       body: submission.body,
       mentions: submission.mentions,
@@ -684,7 +675,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
   }
 
   async function editComment(commentId: string, body: string): Promise<void> {
-    const result = await deps.send({ type: "comments.update", commentId, body });
+    const result = await deps.backend.updateComment({ commentId, body });
     if (!result.ok) {
       throw new Error(result.error.message);
     }
@@ -693,7 +684,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
   }
 
   async function deleteComment(commentId: string): Promise<void> {
-    const result = await deps.send({ type: "comments.delete", commentId });
+    const result = await deps.backend.deleteComment(commentId);
     if (!result.ok) {
       throw new Error(result.error.message);
     }
@@ -706,11 +697,10 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     if (thread === undefined) {
       return;
     }
-    const result = await deps.send({
-      type: "threads.setStatus",
+    const result = await deps.backend.setStatus(
       threadId,
-      status: thread.status === "open" ? "resolved" : "open",
-    });
+      thread.status === "open" ? "resolved" : "open",
+    );
     if (!result.ok) {
       pushToast({
         message: result.error.message,

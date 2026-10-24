@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { failure, success, type MessageResult } from "@sitenote/widget";
-import type { PageConnection, PageConnectionOptions } from "../page-connection";
-import type { SiteInfo, ThreadRecord } from "@sitenote/widget";
-import { createPageSession, type PageSessionDeps, type PageSessionState } from ".";
+import type {
+  WidgetBackend,
+  WidgetSubscription,
+  WidgetSubscriptionHandle,
+  WidgetSubscriptionHandlers,
+} from "../backend";
+import { failure, success, type MessageResult } from "../result";
+import type { SiteInfo, ThreadRecord } from "../transport";
+
+import { createPageSession, type PageSessionState } from ".";
 
 const SITE: SiteInfo = {
   siteId: "20000000-0000-4000-8000-000000000001",
@@ -35,6 +41,8 @@ function thread(id: string): ThreadRecord {
 const THREAD_A = thread("30000000-0000-4000-8000-000000000001");
 const THREAD_B = thread("30000000-0000-4000-8000-000000000002");
 
+type SubscribeCall = WidgetSubscriptionHandlers & { subscription: WidgetSubscription };
+
 interface Deferred<Value> {
   promise: Promise<Value>;
   resolve: (value: Value) => void;
@@ -55,25 +63,28 @@ function setup(responses: {
   const states: PageSessionState[] = [];
   const requests: unknown[] = [];
   const lists = [...(responses.lists ?? [])];
-  const connectionOptions: Omit<PageConnectionOptions, "connect">[] = [];
-  const connection: PageConnection = { update: vi.fn(), close: vi.fn() };
+  const connectionOptions: SubscribeCall[] = [];
+  const connection: WidgetSubscriptionHandle = { update: vi.fn(), close: vi.fn() };
   let pageUrl: string | null = PAGE;
-  const send = ((request: { type: string }) => {
-    requests.push(request);
-    if (request.type === "sites.forOrigin") {
+  const backend: Pick<WidgetBackend, "getSiteInfo" | "listThreads" | "subscribe"> = {
+    getSiteInfo: (origin) => {
+      requests.push({ method: "getSiteInfo", origin });
       return Promise.resolve(responses.site ?? success(SITE));
-    }
-    const next = lists.shift();
-    return next === undefined ? Promise.resolve(success([])) : next();
-  }) as PageSessionDeps["send"];
+    },
+    listThreads: (siteId, url) => {
+      requests.push({ method: "listThreads", siteId, pageUrl: url });
+      const next = lists.shift();
+      return next === undefined ? Promise.resolve(success([])) : next();
+    },
+    subscribe: (subscription, handlers) => {
+      connectionOptions.push({ subscription, ...handlers });
+      return connection;
+    },
+  };
   const session = createPageSession({
     origin: ORIGIN,
     readPageUrl: () => pageUrl,
-    send,
-    openConnection: (options) => {
-      connectionOptions.push(options);
-      return connection;
-    },
+    backend,
     onState: (state) => states.push(state),
   });
   return {
@@ -98,8 +109,8 @@ describe("start", () => {
     await session.start();
 
     expect(requests).toEqual([
-      { type: "sites.forOrigin", origin: ORIGIN },
-      { type: "threads.list", siteId: SITE.siteId, pageUrl: PAGE },
+      { method: "getSiteInfo", origin: ORIGIN },
+      { method: "listThreads", siteId: SITE.siteId, pageUrl: PAGE },
     ]);
     expect(last()).toEqual({
       status: "ready",
@@ -189,7 +200,7 @@ describe("live updates", () => {
 
     expect(last()?.live).toBe(true);
     expect(
-      requests.filter((request) => (request as { type: string }).type === "threads.list"),
+      requests.filter((request) => (request as { method: string }).method === "listThreads"),
     ).toHaveLength(2);
   });
 
@@ -236,7 +247,7 @@ describe("live updates", () => {
     first.resolve(success([]));
     await vi.waitFor(() => {
       expect(
-        requests.filter((request) => (request as { type: string }).type === "threads.list"),
+        requests.filter((request) => (request as { method: string }).method === "listThreads"),
       ).toHaveLength(2);
     });
     second.resolve(success([THREAD_B]));
@@ -244,7 +255,7 @@ describe("live updates", () => {
 
     expect(last()?.threads).toEqual([THREAD_B]);
     expect(
-      requests.filter((request) => (request as { type: string }).type === "threads.list"),
+      requests.filter((request) => (request as { method: string }).method === "listThreads"),
     ).toHaveLength(2);
   });
 
@@ -283,7 +294,7 @@ describe("navigate", () => {
 
     expect(connection.update).toHaveBeenCalledWith(OTHER_PAGE);
     expect(requests.at(-1)).toEqual({
-      type: "threads.list",
+      method: "listThreads",
       siteId: SITE.siteId,
       pageUrl: OTHER_PAGE,
     });
@@ -327,7 +338,7 @@ describe("navigate", () => {
 
     expect(states.some((state) => state.threads.includes(THREAD_A))).toBe(false);
     expect(requests.at(-1)).toEqual({
-      type: "threads.list",
+      method: "listThreads",
       siteId: SITE.siteId,
       pageUrl: OTHER_PAGE,
     });

@@ -1,11 +1,12 @@
 import { createTextAnchor, type Anchor, type ThreadContext } from "@sitenote/core";
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { failure, type MessageResult, ORPHANED, type Resolution, success } from "@sitenote/widget";
-import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "@sitenote/widget";
-import type { PageConnectionOptions } from "../page-connection";
-import type { ResolvedPreference } from "../resolved-preference";
+import { ORPHANED, type Resolution } from "../anchor-target";
+import type { WidgetBackend, WidgetSubscription, WidgetSubscriptionHandlers } from "../backend";
+import type { PreferenceClient } from "../preference-client";
+import { failure, type MessageResult, success } from "../result";
 import type { ScreenshotTaker } from "../screenshot-taker";
+import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "../transport";
 import {
   COMMENT_CURSOR_CSS,
   PREFERENCE_FAILED_MESSAGE,
@@ -53,8 +54,8 @@ const MEMBERS: MemberRecord[] = [
 
 function memoryPreference(initial = false) {
   return {
-    load: vi.fn<ResolvedPreference["load"]>().mockResolvedValue(initial),
-    save: vi.fn<ResolvedPreference["save"]>().mockResolvedValue(undefined),
+    load: vi.fn<PreferenceClient["load"]>().mockResolvedValue(initial),
+    save: vi.fn<PreferenceClient["save"]>().mockResolvedValue(undefined),
   };
 }
 
@@ -140,59 +141,101 @@ function thread(overrides: Partial<ThreadRecord> = {}): ThreadRecord {
   };
 }
 
-type Handler = (request: never) => MessageResult<unknown> | Promise<MessageResult<unknown>>;
+type Method = keyof WidgetBackend;
+type Handler = (...args: never[]) => unknown;
+type Handlers = Partial<Record<Method, Handler>>;
+
+interface Call {
+  method: Method;
+  args: unknown[];
+}
 
 interface Harness {
   controller: ContentController;
-  send: Mock<(request: { type: string }) => Promise<MessageResult<unknown>>>;
-  requests: () => { type: string }[];
-  connection: { options: Omit<PageConnectionOptions, "connect"> | null; update: () => void };
+  calls: () => Call[];
+  connection: {
+    options: ({ subscription: WidgetSubscription } & WidgetSubscriptionHandlers) | null;
+    update: () => void;
+  };
   state: () => ReturnType<ContentController["store"]["getState"]>;
+}
+
+function defaultResult(method: Method, threads: ThreadRecord[]): unknown {
+  switch (method) {
+    case "getSiteInfo":
+      return success(SITE);
+    case "listThreads":
+      return success(threads);
+    case "listMembers":
+      return success(MEMBERS);
+    case "collectContext":
+      return CONTEXT;
+    default:
+      return failure("unknown");
+  }
+}
+
+function fakeBackend(
+  handlers: Handlers,
+  threads: ThreadRecord[],
+  calls: Call[],
+  connection: Harness["connection"],
+): WidgetBackend {
+  function respond<Value>(method: Method, args: unknown[]): Promise<Value> {
+    calls.push({ method, args });
+    const handler = handlers[method];
+    const value: unknown =
+      handler === undefined
+        ? defaultResult(method, threads)
+        : Reflect.apply(handler, undefined, args);
+    return Promise.resolve(value as Value);
+  }
+  return {
+    getSiteInfo: (origin) => respond("getSiteInfo", [origin]),
+    listThreads: (siteId, pageUrl) => respond("listThreads", [siteId, pageUrl]),
+    createThread: (input) => respond("createThread", [input]),
+    setStatus: (threadId, status) => respond("setStatus", [threadId, status]),
+    createComment: (input) => respond("createComment", [input]),
+    updateComment: (input) => respond("updateComment", [input]),
+    deleteComment: (commentId) => respond("deleteComment", [commentId]),
+    listMembers: (workspaceId) => respond("listMembers", [workspaceId]),
+    subscribe: (subscription, subscribed) => {
+      connection.options = { subscription, ...subscribed };
+      return { update: connection.update, close: vi.fn() };
+    },
+    captureScreenshot: (rect, devicePixelRatio) =>
+      respond("captureScreenshot", [rect, devicePixelRatio]),
+    getScreenshotUrl: (threadId) => respond("getScreenshotUrl", [threadId]),
+    collectContext: () => respond("collectContext", []),
+    getPreference: (siteId) => respond("getPreference", [siteId]),
+    setPreference: (siteId, showResolved) => respond("setPreference", [siteId, showResolved]),
+    getClickUpStatus: (workspaceId) => respond("getClickUpStatus", [workspaceId]),
+    createClickUpTask: (threadId) => respond("createClickUpTask", [threadId]),
+  };
 }
 
 async function setup(
   threads: ThreadRecord[] = [],
-  handlers: Record<string, Handler> = {},
+  handlers: Handlers = {},
   deps: Partial<ContentControllerDeps> = {},
 ): Promise<Harness> {
   const connection: Harness["connection"] = { options: null, update: vi.fn() };
-  const send = vi.fn((request: { type: string }) => {
-    const handler = handlers[request.type];
-    if (handler !== undefined) {
-      return Promise.resolve(handler(request as never));
-    }
-    if (request.type === "sites.forOrigin") {
-      return Promise.resolve(success(SITE));
-    }
-    if (request.type === "threads.list") {
-      return Promise.resolve(success(threads));
-    }
-    if (request.type === "members.list") {
-      return Promise.resolve(success(MEMBERS));
-    }
-    return Promise.resolve(failure("unknown"));
-  });
+  const calls: Call[] = [];
   const created = createContentController({
     win: window,
     doc: document,
     origin: "http://localhost:3000",
     isOwn: (node) => node !== null && (node === host || host.contains(node)),
-    send: send as unknown as ContentControllerDeps["send"],
+    backend: fakeBackend(handlers, threads, calls, connection),
     preference: memoryPreference(),
     screenshot: { take: vi.fn<ScreenshotTaker["take"]>().mockResolvedValue(CAPTURE_ID) },
-    collectContext: vi.fn(() => Promise.resolve(CONTEXT)),
-    openConnection: (options) => {
-      connection.options = options;
-      return { update: connection.update, close: vi.fn() };
-    },
     ...deps,
   });
   controller = created;
   await created.start();
   return {
     controller: created,
-    send,
-    requests: () => send.mock.calls.map((call) => call[0]),
+    calls: () => calls,
     connection,
     state: () => created.store.getState(),
   };
@@ -349,7 +392,7 @@ describe("thread named in the address", () => {
     });
     window.history.replaceState({}, "", `/#sitenote=${THREAD_ID}`);
 
-    const starting = setup([thread()], { "threads.list": () => list });
+    const starting = setup([thread()], { listThreads: () => list });
     await vi.waitFor(() => {
       expect(controller?.store.getState().status).toBe("ready");
     });
@@ -388,7 +431,7 @@ describe("thread named in the address", () => {
   it("leaves the hash alone when the site is not enabled", async () => {
     window.history.replaceState({}, "", `/#sitenote=${THREAD_ID}`);
 
-    const { state } = await setup([], { "sites.forOrigin": () => success(null) });
+    const { state } = await setup([], { getSiteInfo: () => success(null) });
 
     expect(state().status).toBe("disabled");
     expect(state().toasts).toEqual([]);
@@ -415,10 +458,10 @@ describe("loading", () => {
   });
 
   it("does nothing else when the site is not enabled", async () => {
-    const { state, requests } = await setup([], { "sites.forOrigin": () => success(null) });
+    const { state, calls } = await setup([], { getSiteInfo: () => success(null) });
 
     expect(state().status).toBe("disabled");
-    expect(requests().map((request) => request.type)).toEqual(["sites.forOrigin"]);
+    expect(calls().map((call) => call.method)).toEqual(["getSiteInfo"]);
   });
 
   it("starts a realtime connection with the site and workspace", async () => {
@@ -431,7 +474,7 @@ describe("loading", () => {
   it("loads the threads again when a live event arrives", async () => {
     const lists = [[], [thread()]];
     const { connection, state } = await setup([], {
-      "threads.list": () => success(lists.shift() ?? []),
+      listThreads: () => success(lists.shift() ?? []),
     });
     expect(state().threads).toHaveLength(0);
 
@@ -672,16 +715,15 @@ describe("creating a thread", () => {
     const {
       controller: api,
       state,
-      send,
+      calls,
     } = await pendingHarness({
-      "threads.create": () => success(created),
+      createThread: () => success(created),
     });
 
     await api.submitNewThread({ body: "  Looks off  ", mentions: [] });
 
-    const request = send.mock.calls.find((call) => call[0].type === "threads.create")?.[0];
+    const request = calls().find((call) => call.method === "createThread")?.args[0];
     expect(request).toMatchObject({
-      type: "threads.create",
       siteId: SITE.siteId,
       pageUrl: PAGE,
       context: CONTEXT,
@@ -699,7 +741,7 @@ describe("creating a thread", () => {
 
   it("tells the user when the created thread has no screenshot", async () => {
     const { controller: api, state } = await pendingHarness({
-      "threads.create": () => success(thread({ hasScreenshot: false })),
+      createThread: () => success(thread({ hasScreenshot: false })),
     });
 
     await api.submitNewThread({ body: "Looks off", mentions: [] });
@@ -713,14 +755,14 @@ describe("creating a thread", () => {
   it("creates the thread without a capture id when the screenshot failed", async () => {
     const take = vi.fn<ScreenshotTaker["take"]>().mockResolvedValue(null);
     const created = thread();
-    const { controller: api, send } = await pendingHarness(
-      { "threads.create": () => success(created) },
+    const { controller: api, calls } = await pendingHarness(
+      { createThread: () => success(created) },
       { screenshot: { take } },
     );
 
     await api.submitNewThread({ body: "Looks off", mentions: [] });
 
-    const request = send.mock.calls.find((call) => call[0].type === "threads.create")?.[0];
+    const request = calls().find((call) => call.method === "createThread")?.args[0];
     expect(request).not.toHaveProperty("captureId");
   });
 
@@ -782,7 +824,7 @@ describe("creating a thread", () => {
     let fail = true;
     const created = thread();
     const { controller: api, state } = await pendingHarness({
-      "threads.create": () => (fail ? failure("network") : success(created)),
+      createThread: () => (fail ? failure("network") : success(created)),
     });
 
     await expect(api.submitNewThread({ body: "Looks off", mentions: [] })).rejects.toThrow(
@@ -805,7 +847,7 @@ describe("creating a thread", () => {
   it("refuses a second submission while one is in flight", async () => {
     let release: (value: MessageResult<ThreadRecord>) => void = () => undefined;
     const { controller: api } = await pendingHarness({
-      "threads.create": () =>
+      createThread: () =>
         new Promise<MessageResult<ThreadRecord>>((resolve) => {
           release = resolve;
         }),
@@ -823,9 +865,9 @@ describe("creating a thread", () => {
     const {
       controller: api,
       state,
-      requests,
+      calls,
     } = await pendingHarness({
-      "threads.create": () =>
+      createThread: () =>
         new Promise<MessageResult<ThreadRecord>>((resolve) => {
           release = resolve;
         }),
@@ -833,7 +875,7 @@ describe("creating a thread", () => {
 
     const submitted = api.submitNewThread({ body: "One", mentions: [] });
     await vi.waitFor(() => {
-      expect(requests().some((request) => request.type === "threads.create")).toBe(true);
+      expect(calls().some((call) => call.method === "createThread")).toBe(true);
     });
     window.history.pushState({}, "", "/elsewhere");
     release(success(thread()));
@@ -849,12 +891,12 @@ describe("creating a thread", () => {
   });
 
   it("closes the pending thread without sending anything", async () => {
-    const { controller: api, state, requests } = await pendingHarness();
+    const { controller: api, state, calls } = await pendingHarness();
 
     api.closePanel();
 
     expect(state().pending).toBeNull();
-    expect(requests().some((request) => request.type === "threads.create")).toBe(false);
+    expect(calls().some((call) => call.method === "createThread")).toBe(false);
   });
 });
 
@@ -866,25 +908,23 @@ describe("comments and status", () => {
     const {
       controller: api,
       state,
-      send,
+      calls,
     } = await setup([existing], {
-      "comments.create": () => success(reply),
+      createComment: () => success(reply),
     });
 
     await api.reply(THREAD_ID, { body: "Reply", mentions: [] });
 
-    expect(send).toHaveBeenCalledWith({
-      type: "comments.create",
-      threadId: THREAD_ID,
-      body: "Reply",
-      mentions: [],
+    expect(calls()).toContainEqual({
+      method: "createComment",
+      args: [{ threadId: THREAD_ID, body: "Reply", mentions: [] }],
     });
     expect(state().threads[0]?.comments.map((item) => item.body)).toEqual(["Hello", "Reply"]);
   });
 
   it("keeps the text and reports the error when a reply fails", async () => {
     const { controller: api, state } = await setup([existing], {
-      "comments.create": () => failure("forbidden"),
+      createComment: () => failure("forbidden"),
     });
 
     await expect(api.reply(THREAD_ID, { body: "Reply", mentions: [] })).rejects.toThrow(
@@ -898,7 +938,7 @@ describe("comments and status", () => {
   it("replaces an edited comment", async () => {
     const edited = comment({ body: "Edited", editedAt: "2026-10-21T11:00:00.000Z" });
     const { controller: api, state } = await setup([existing], {
-      "comments.update": () => success(edited),
+      updateComment: () => success(edited),
     });
 
     await api.editComment(COMMENT_ID, "Edited");
@@ -909,7 +949,7 @@ describe("comments and status", () => {
   it("shows a deleted comment as deleted", async () => {
     const removed = comment({ body: "", deleted: true });
     const { controller: api, state } = await setup([existing], {
-      "comments.delete": () => success(removed),
+      deleteComment: () => success(removed),
     });
 
     await api.deleteComment(COMMENT_ID);
@@ -919,8 +959,8 @@ describe("comments and status", () => {
 
   it("rejects an edit and a delete that fail", async () => {
     const { controller: api } = await setup([existing], {
-      "comments.update": () => failure("network"),
-      "comments.delete": () => failure("not_found"),
+      updateComment: () => failure("network"),
+      deleteComment: () => failure("not_found"),
     });
 
     await expect(api.editComment(COMMENT_ID, "x")).rejects.toThrow();
@@ -930,9 +970,9 @@ describe("comments and status", () => {
   it("resolves an open thread and reopens a resolved one", async () => {
     const statuses: string[] = [];
     const { controller: api, state } = await setup([existing], {
-      "threads.setStatus": (request: { status: "open" | "resolved" }) => {
-        statuses.push(request.status);
-        return success({ ...existing, status: request.status });
+      setStatus: (_threadId: string, status: "open" | "resolved") => {
+        statuses.push(status);
+        return success({ ...existing, status });
       },
     });
 
@@ -947,7 +987,7 @@ describe("comments and status", () => {
   it("shows an error toast with a retry when the status change fails", async () => {
     let fail = true;
     const { controller: api, state } = await setup([existing], {
-      "threads.setStatus": () =>
+      setStatus: () =>
         fail ? failure("network") : success({ ...existing, status: "resolved" as const }),
     });
 
@@ -964,16 +1004,16 @@ describe("comments and status", () => {
   });
 
   it("ignores a status change for an unknown thread", async () => {
-    const { controller: api, requests } = await setup([existing]);
+    const { controller: api, calls } = await setup([existing]);
 
     await api.toggleStatus(SECOND_THREAD_ID);
 
-    expect(requests().some((request) => request.type === "threads.setStatus")).toBe(false);
+    expect(calls().some((call) => call.method === "setStatus")).toBe(false);
   });
 
   it("keeps at most three toasts and dismisses them by id", async () => {
     const { controller: api, state } = await setup([existing], {
-      "threads.setStatus": () => failure("network"),
+      setStatus: () => failure("network"),
     });
 
     for (let count = 0; count < 5; count += 1) {
@@ -1051,7 +1091,7 @@ describe("selecting threads", () => {
       state,
       connection,
     } = await setup([], {
-      "threads.list": () => success(list),
+      listThreads: () => success(list),
     });
     connection.options?.onEvent({ type: "threads.changed", threadId: THREAD_ID });
     await vi.waitFor(() => {
@@ -1118,9 +1158,9 @@ describe("the page changes under the overlay", () => {
 
   it("loads the threads of the new page when the URL changes", async () => {
     const other = thread({ id: SECOND_THREAD_ID, pageUrl: `${PAGE}/other` });
-    const { state, requests, connection } = await setup([thread()], {
-      "threads.list": (request: { pageUrl: string }) =>
-        success(request.pageUrl === PAGE ? [thread()] : [other]),
+    const { state, calls, connection } = await setup([thread()], {
+      listThreads: (_siteId: string, pageUrl: string) =>
+        success(pageUrl === PAGE ? [thread()] : [other]),
     });
     expect(state().threads).toHaveLength(1);
 
@@ -1133,7 +1173,10 @@ describe("the page changes under the overlay", () => {
     await vi.waitFor(() => {
       expect(state().threads).toEqual([other]);
     });
-    expect(requests().at(-1)).toMatchObject({ type: "threads.list", pageUrl: `${PAGE}/other` });
+    expect(calls().at(-1)).toMatchObject({
+      method: "listThreads",
+      args: [expect.any(String), `${PAGE}/other`],
+    });
   });
 
   it("closes a pending thread when the page changes", async () => {
@@ -1184,23 +1227,23 @@ describe("stop", () => {
 
 describe("members and mentions", () => {
   it("loads the members of the workspace once the site is known", async () => {
-    const { state, requests } = await setup([thread()]);
+    const { state, calls } = await setup([thread()]);
 
     await vi.waitFor(() => {
       expect(state().members).toEqual(MEMBERS);
     });
-    expect(requests()).toContainEqual({ type: "members.list", workspaceId: SITE.workspaceId });
+    expect(calls()).toContainEqual({ method: "listMembers", args: [SITE.workspaceId] });
   });
 
   it("does not ask for members when the site is not enabled", async () => {
-    const { requests } = await setup([], { "sites.forOrigin": () => success(null) });
+    const { calls } = await setup([], { getSiteInfo: () => success(null) });
 
-    expect(requests().map((request) => request.type)).not.toContain("members.list");
+    expect(calls().map((call) => call.method)).not.toContain("listMembers");
   });
 
   it("keeps working without members when the request fails", async () => {
     const { state, controller: api } = await setup([thread()], {
-      "members.list": () => failure("network"),
+      listMembers: () => failure("network"),
     });
 
     api.selectThread(THREAD_ID);
@@ -1227,9 +1270,9 @@ describe("members and mentions", () => {
     const {
       controller: api,
       state,
-      requests,
+      calls,
     } = await setup([thread()], {
-      "members.list": () => success(lists.shift() ?? MEMBERS),
+      listMembers: () => success(lists.shift() ?? MEMBERS),
     });
     expect(state().members).toEqual([]);
 
@@ -1238,16 +1281,16 @@ describe("members and mentions", () => {
     await vi.waitFor(() => {
       expect(state().members).toEqual(MEMBERS);
     });
-    expect(requests().filter((request) => request.type === "members.list")).toHaveLength(2);
+    expect(calls().filter((call) => call.method === "listMembers")).toHaveLength(2);
   });
 
   it("sends the picked mentions with a new thread", async () => {
     const created = thread({ comments: [comment({ body: "@Olena Owner hi", mentions: [OLENA] })] });
     const {
       controller: api,
-      send,
+      calls,
       state,
-    } = await setup([], { "threads.create": () => success(created) });
+    } = await setup([], { createThread: () => success(created) });
     api.toggleCommentMode();
     under = element("#cta");
     element("#cta").dispatchEvent(
@@ -1259,13 +1302,10 @@ describe("members and mentions", () => {
 
     await api.submitNewThread({ body: "@Olena Owner hi", mentions: [OLENA] });
 
-    expect(send).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "threads.create",
-        body: "@Olena Owner hi",
-        mentions: [OLENA],
-      }),
-    );
+    expect(calls()).toContainEqual({
+      method: "createThread",
+      args: [expect.objectContaining({ body: "@Olena Owner hi", mentions: [OLENA] })],
+    });
   });
 
   it("sends the picked mentions with a reply", async () => {
@@ -1276,19 +1316,17 @@ describe("members and mentions", () => {
     });
     const {
       controller: api,
-      send,
+      calls,
       state,
     } = await setup([thread()], {
-      "comments.create": () => success(reply),
+      createComment: () => success(reply),
     });
 
     await api.reply(THREAD_ID, { body: "@Olena Owner ping", mentions: [OLENA] });
 
-    expect(send).toHaveBeenCalledWith({
-      type: "comments.create",
-      threadId: THREAD_ID,
-      body: "@Olena Owner ping",
-      mentions: [OLENA],
+    expect(calls()).toContainEqual({
+      method: "createComment",
+      args: [{ threadId: THREAD_ID, body: "@Olena Owner ping", mentions: [OLENA] }],
     });
     expect(state().threads[0]?.comments.at(-1)?.mentions).toEqual([OLENA]);
   });
@@ -1427,13 +1465,13 @@ describe("showing resolved threads", () => {
 describe("screenshots of existing threads", () => {
   const withScreenshot = thread({ hasScreenshot: true });
 
-  it("requests the signed url when a thread with a screenshot is opened", async () => {
+  it("calls the signed url when a thread with a screenshot is opened", async () => {
     const {
       controller: api,
       state,
-      send,
+      calls,
     } = await setup([withScreenshot], {
-      "threads.screenshotUrl": () => success("https://storage.test/s.webp?token=1"),
+      getScreenshotUrl: () => success("https://storage.test/s.webp?token=1"),
     });
 
     api.selectThread(THREAD_ID);
@@ -1445,12 +1483,12 @@ describe("screenshots of existing threads", () => {
         url: "https://storage.test/s.webp?token=1",
       });
     });
-    expect(send).toHaveBeenCalledWith({ type: "threads.screenshotUrl", threadId: THREAD_ID });
+    expect(calls()).toContainEqual({ method: "getScreenshotUrl", args: [THREAD_ID] });
   });
 
   it("marks the screenshot unavailable when the url cannot be fetched or is empty", async () => {
     const failed = await setup([withScreenshot], {
-      "threads.screenshotUrl": () => failure("network"),
+      getScreenshotUrl: () => failure("network"),
     });
     failed.controller.selectThread(THREAD_ID);
     await vi.waitFor(() => {
@@ -1459,7 +1497,7 @@ describe("screenshots of existing threads", () => {
     failed.controller.stop();
 
     const empty = await setup([withScreenshot], {
-      "threads.screenshotUrl": () => success(null),
+      getScreenshotUrl: () => success(null),
     });
     empty.controller.selectThread(THREAD_ID);
     await vi.waitFor(() => {
@@ -1468,19 +1506,18 @@ describe("screenshots of existing threads", () => {
   });
 
   it("does not ask for a screenshot when the thread has none", async () => {
-    const { controller: api, requests } = await setup([thread()]);
+    const { controller: api, calls } = await setup([thread()]);
 
     api.selectThread(THREAD_ID);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(requests().some((request) => request.type === "threads.screenshotUrl")).toBe(false);
+    expect(calls().some((call) => call.method === "getScreenshotUrl")).toBe(false);
   });
 
   it("keeps the shown screenshot while it is refreshed on the next opening", async () => {
     let calls = 0;
     const { controller: api, state } = await setup([withScreenshot], {
-      "threads.screenshotUrl": () =>
-        success(`https://storage.test/s.webp?token=${String((calls += 1))}`),
+      getScreenshotUrl: () => success(`https://storage.test/s.webp?token=${String((calls += 1))}`),
     });
     api.selectThread(THREAD_ID);
     await vi.waitFor(() => {

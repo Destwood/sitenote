@@ -12,15 +12,16 @@ import { FunctionsHttpError } from "@supabase/supabase-js";
 import * as z from "zod/mini";
 
 import { mapDataError } from "../data-errors";
-import { clickUpTaskResultSchema, type ClickUpTaskResult, type DataRequest } from "../messages";
+import { type DataRequest } from "../messages";
 import {
+  type ClickUpTaskResult,
+  clickUpTaskResultSchema,
+  type ErrorResponse,
   failure,
   isErrorCode,
-  success,
-  type ErrorResponse,
   type MessageResult,
+  success,
 } from "@sitenote/widget";
-import { SCREENSHOT_BUCKET, type ThreadScreenshots } from "../screenshot-upload";
 import type {
   CommentRecord,
   MemberRecord,
@@ -31,7 +32,7 @@ import type {
   ThreadRecord,
   WorkspaceInfo,
 } from "@sitenote/widget";
-
+import { SCREENSHOT_BUCKET, type ThreadScreenshots } from "../screenshot-upload";
 const PROFILE_COLUMNS = "user_id, display_name, avatar_url" as const;
 const COMMENT_COLUMNS =
   `id, thread_id, author_id, body, mentions, edited_at, deleted_at, created_at, author:profiles!comments_author_id_fkey(${PROFILE_COLUMNS})` as const;

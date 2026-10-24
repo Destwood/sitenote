@@ -2,6 +2,8 @@ import { anchorSchema, parsePageUrl, threadContextSchema } from "@sitenote/core"
 import {
   ERROR_CODES,
   THREAD_STATUSES,
+  clickUpTaskResultSchema,
+  httpUrlSchema,
   captureRectSchema,
   capturedScreenshotSchema,
   commentRecordSchema,
@@ -12,6 +14,7 @@ import {
   workspaceInfoSchema,
   siteInfoSchema,
   type CapturedScreenshot,
+  type ClickUpTaskResult,
   type CommentRecord,
   type MemberRecord,
   type MessageResult,
@@ -51,13 +54,7 @@ function isBareOrigin(value: string): boolean {
   );
 }
 
-function isHttpUrl(value: string): boolean {
-  const url = URL.parse(value);
-  return url !== null && (url.protocol === "http:" || url.protocol === "https:");
-}
-
 const idSchema = z.guid();
-const httpUrlSchema = z.string().check(z.refine(isHttpUrl));
 const originSchema = z.string().check(z.refine(isBareOrigin));
 const pageUrlSchema = z.string().check(z.refine((value) => parsePageUrl(value)?.page === value));
 const bodySchema = z.string().check(z.trim(), z.minLength(1), z.maxLength(COMMENT_MAX_LENGTH));
@@ -208,15 +205,6 @@ export type DataByRequestType = AuthDataByType & DataByType;
 export function resultSchema<Data>(data: z.ZodMiniType<Data>): z.ZodMiniType<MessageResult<Data>> {
   return z.union([z.object({ ok: z.literal(true), data }), errorResponseSchema]);
 }
-
-export const clickUpTaskResultSchema = z.object({
-  taskId: z.string(),
-  taskUrl: httpUrlSchema,
-  created: z.boolean(),
-  screenshotAttached: z.boolean(),
-});
-
-export type ClickUpTaskResult = z.infer<typeof clickUpTaskResultSchema>;
 
 export const RESPONSE_SCHEMAS: {
   [Type in ExtensionRequestType]: z.ZodMiniType<MessageResult<DataByRequestType[Type]>>;

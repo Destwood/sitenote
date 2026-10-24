@@ -21,13 +21,10 @@ import {
   type ContentController,
   type ContentState,
 } from "../content-controller";
-import {
-  buildMentionCandidates,
-  buildThreadViews,
-  canChangeStatus,
-  useStore,
-} from "@sitenote/widget";
-import type { PinMeasurement } from "@sitenote/widget";
+import { buildMentionCandidates, buildThreadViews, canChangeStatus } from "../view-model";
+import { useStore } from "../store";
+import type { PinMeasurement } from "../pin-tracker";
+
 export const PANEL_FALLBACK_MARGIN = 16;
 export const PANEL_FALLBACK_TOP = 72;
 

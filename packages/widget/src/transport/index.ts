@@ -3,9 +3,17 @@ import * as z from "zod/mini";
 
 export const MEMBER_ROLES = ["owner", "member", "guest"] as const;
 export const THREAD_STATUSES = ["open", "resolved"] as const;
+export type ThreadStatus = (typeof THREAD_STATUSES)[number];
 export const NOTIFICATION_KINDS = ["reply", "mention"] as const;
 
 const idSchema = z.guid();
+
+function isHttpUrl(value: string): boolean {
+  const url = URL.parse(value);
+  return url !== null && (url.protocol === "http:" || url.protocol === "https:");
+}
+
+export const httpUrlSchema = z.string().check(z.refine(isHttpUrl));
 
 export const siteInfoSchema = z.object({
   siteId: idSchema,
@@ -113,3 +121,12 @@ export type CapturedScreenshot = z.infer<typeof capturedScreenshotSchema>;
 export const preferencesSchema = z.object({ showResolved: z.boolean() });
 
 export type Preferences = z.infer<typeof preferencesSchema>;
+
+export const clickUpTaskResultSchema = z.object({
+  taskId: z.string(),
+  taskUrl: httpUrlSchema,
+  created: z.boolean(),
+  screenshotAttached: z.boolean(),
+});
+
+export type ClickUpTaskResult = z.infer<typeof clickUpTaskResultSchema>;
