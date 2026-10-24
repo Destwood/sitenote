@@ -10,15 +10,12 @@ import {
 import { createToggleListener } from "../comment-mode";
 import { ContentApp } from "../content-app";
 import { createContentController, type ContentState } from "../content-controller";
-import { isolateEvents } from "../event-isolation";
+import { createContextCollector, failure, isolateEvents, success } from "@sitenote/widget";
 import { sendMessage } from "../message-client";
-import { failure, success } from "@sitenote/widget";
 import { openPageConnection } from "../page-connection";
 import { requestConsoleErrors } from "../errors-bridge";
 import { createPreferenceClient } from "../preference-client";
 import { createScreenshotTaker } from "../screenshot-taker";
-import { createContextCollector } from "../thread-context";
-
 export async function startContentScript(ctx: ContentScriptContext, css: string): Promise<void> {
   let ui: ShadowRootContentScriptUi<Root> | null = null;
   let mounting = false;

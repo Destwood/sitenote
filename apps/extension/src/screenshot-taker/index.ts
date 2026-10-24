@@ -1,4 +1,4 @@
-import { measureTarget, observableElement, type AnchorTarget } from "../anchor-target";
+import { type AnchorTarget, measureTarget, observableElement } from "@sitenote/widget";
 import type { PageSessionDeps } from "../page-session";
 
 export const FRAME_TIMEOUT_MS = 100;

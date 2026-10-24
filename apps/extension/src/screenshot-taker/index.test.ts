@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AnchorTarget } from "../anchor-target";
 import { failure, success } from "@sitenote/widget";
+import type { AnchorTarget } from "@sitenote/widget";
 import type { PageSessionDeps } from "../page-session";
 import { SCROLL_MAX_MS, SCROLL_QUIET_MS, createScreenshotTaker } from ".";
 

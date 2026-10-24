@@ -10,29 +10,32 @@ import {
 import type { AnchorRect, ComposerSubmission, ScreenshotState, ToastView } from "@sitenote/ui";
 
 import {
-  ORPHANED,
-  isTargetAlive,
-  observableElement,
-  resolveAnchor,
   type AnchorTarget,
+  createDocumentStyle,
+  createPicker,
+  createPinTracker,
+  createStore,
+  createTextHighlighter,
+  ERROR_MESSAGES,
+  isTargetAlive,
+  type Measurements,
+  observableElement,
+  ORPHANED,
   type Resolution,
-} from "../anchor-target";
-import { createPicker } from "../comment-picker";
-import { createDocumentStyle } from "../document-style";
-import { watchDom } from "../dom-watcher";
-import { ERROR_MESSAGES } from "@sitenote/widget";
+  resolveAnchor,
+  type Store,
+  type TrackedTarget,
+  upsertComment,
+  upsertThread,
+  watchDom,
+  watchPageUrl,
+  watchSelection,
+} from "@sitenote/widget";
+import type { MemberRecord, SiteInfo, ThreadRecord } from "@sitenote/widget";
 import { createPageSession, type PageSessionDeps, type PageSessionState } from "../page-session";
 import type { PageSessionStatus } from "../page-session";
-import { createPinTracker, type Measurements, type TrackedTarget } from "../pin-tracker";
 import type { ResolvedPreference } from "../resolved-preference";
 import type { ScreenshotTaker } from "../screenshot-taker";
-import { watchSelection } from "../selection-watcher";
-import { createStore, type Store } from "../store";
-import { createTextHighlighter } from "../text-highlighter";
-import type { MemberRecord, SiteInfo, ThreadRecord } from "@sitenote/widget";
-import { watchPageUrl } from "../url-watcher";
-import { upsertComment, upsertThread } from "../view-model";
-
 export const PENDING_ID = "pending";
 export const SELECTION_ID = "selection";
 export const MAX_TOASTS = 3;

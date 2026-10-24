@@ -2,16 +2,20 @@ import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ORPHANED, type Resolution } from "../anchor-target";
+import { createStore, ORPHANED, type Resolution, type Store } from "@sitenote/widget";
+import type {
+  CommentRecord,
+  MemberRecord,
+  PinMeasurement,
+  SiteInfo,
+  ThreadRecord,
+} from "@sitenote/widget";
 import {
   PENDING_ID,
   SELECTION_ID,
   type ContentController,
   type ContentState,
 } from "../content-controller";
-import type { PinMeasurement } from "../pin-tracker";
-import { createStore, type Store } from "../store";
-import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "@sitenote/widget";
 import { ContentApp } from ".";
 
 const ME = "00000000-0000-4000-8000-000000000002";
