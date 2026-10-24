@@ -143,7 +143,7 @@ test("the eleventh thread in an hour is refused with the demo limit message", as
   await enableCommenting(page);
   await commentOn(page, "demo-feature-clickup", "One more");
 
-  await expect(page.getByText(RATE_LIMIT_MESSAGE)).toBeVisible();
+  await expect(page.getByText(RATE_LIMIT_MESSAGE, { exact: true })).toBeVisible();
   await expect(threadPins(page)).toHaveCount(SEEDED_PIN_COUNT + 10);
 });
 
