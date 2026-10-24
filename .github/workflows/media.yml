@@ -1,0 +1,58 @@
+name: Media
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TURBO_TELEMETRY_DISABLED: "1"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  record:
+    name: Record the demo video
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Read Playwright version
+        id: playwright
+        run: echo "version=$(pnpm --silent --filter @sitenote/e2e exec playwright --version | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - run: pnpm --filter @sitenote/e2e exec playwright install --with-deps chromium
+      - run: pnpm exec supabase start -x studio,imgproxy,edge-runtime,logflare,vector,postgres-meta
+      - run: pnpm db:env
+      - run: pnpm --filter @sitenote/web build
+      - name: Start the web app
+        run: |
+          nohup pnpm --filter @sitenote/web start > web.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -sf http://localhost:3000/demo > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat web.log
+          exit 1
+      - run: pnpm media:record
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sitenote-media
+          path: |
+            apps/web/public/media/sitenote-demo.webm
+            apps/web/public/media/sitenote-demo-poster.png
+            apps/web/src/app/opengraph-image.png
+          retention-days: 14
+          if-no-files-found: error
+      - name: Show the web log on failure
+        if: failure()
+        run: cat web.log
