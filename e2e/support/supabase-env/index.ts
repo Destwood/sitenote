@@ -27,3 +27,8 @@ export function readSupabaseEnv(): SupabaseEnv {
     publishableKey: requireValue("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", fromFile),
   };
 }
+
+export function readSupabaseSecret(): string {
+  const fromFile = existsSync(WEB_ENV_FILE) ? parseEnv(readFileSync(WEB_ENV_FILE, "utf8")) : {};
+  return requireValue("SUPABASE_SECRET_KEY", fromFile);
+}
