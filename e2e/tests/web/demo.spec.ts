@@ -49,6 +49,19 @@ test("a visitor without the extension comments, and another visitor sees and ans
     await commentOn(danaPage, "demo-feature-guests", "Guests need no account, which helps.");
     await expect(threadPins(danaPage)).toHaveCount(NEW_THREAD_NUMBER);
     await expect(threadPins(eliPage)).toHaveCount(NEW_THREAD_NUMBER, { timeout: LIVE_TIMEOUT_MS });
+    const danaId = await visitorIdOf(danaPage);
+    await expect
+      .poll(
+        async () => {
+          const { data } = await admin
+            .from("threads")
+            .select("screenshot_path")
+            .eq("created_by", danaId);
+          return data?.some((thread) => thread.screenshot_path !== null) ?? false;
+        },
+        { timeout: LIVE_TIMEOUT_MS },
+      )
+      .toBe(true);
 
     await danaPage
       .getByRole("button", { name: `Thread ${String(NEW_THREAD_NUMBER)}, open`, exact: true })
@@ -77,7 +90,7 @@ test("a visitor without the extension comments, and another visitor sees and ans
     const profile = await admin
       .from("profiles")
       .select("display_name")
-      .eq("user_id", await visitorIdOf(danaPage))
+      .eq("user_id", danaId)
       .single();
     expect(profile.data?.display_name).toBe("Demo Dana");
   } finally {
