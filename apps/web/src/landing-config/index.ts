@@ -7,7 +7,7 @@ export interface HeroMedia {
 
 export const HERO_MEDIA: HeroMedia = {
   poster: "/media/sitenote-demo-poster.png",
-  video: null,
+  video: "/media/sitenote-demo.webm",
 };
 
 export function githubUrlFrom(value: string | undefined): string | null {

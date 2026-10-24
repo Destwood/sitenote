@@ -884,3 +884,9 @@ All versions are pinned exactly. No other runtime dependency was added.
 
 - **Chosen:** `NEXT_PUBLIC_GITHUB_URL` is optional. `githubUrlFrom` accepts only http and https URLs (the existing `safeExternalHref`), and the header shows the GitHub link only when it is valid, so an empty value hides it. The root layout sets `metadataBase` from `NEXT_PUBLIC_WEB_URL`, falling back to `http://localhost:3000` for builds without the variable, so Open Graph and Twitter image URLs are absolute and the build prints no warning. The landing's Open Graph and Twitter tags use the file-based `opengraph-image.png` for the image.
 - **Why:** the GitHub link is a public URL, so it gets the same scheme check as other external links (design section 9), and the landing builds in CI without any Supabase variable. Phase 8c adds no runtime or dev dependency, so there is no dependency table for this phase.
+
+## D-131 Recorded media committed from the workflow artifact
+
+- **Chosen:** the poster, the WebM and the Open Graph image in the repository are the files from the `sitenote-media` artifact of a successful `Media` workflow run, and `HERO_MEDIA.video` names `/media/sitenote-demo.webm`. The recording keeps a 1280x720 frame, so the script no longer expects every seeded pin: after the visitor joins it waits for the first pin to be visible, because the widget renders only the pins inside the viewport. The shared `joinDemo` helper keeps its exact pin count for the tall-viewport e2e.
+- **Alternatives:** recording with the 1280x1800 e2e viewport (a portrait-like frame, not a 16:9 video), scrolling the page until every seeded pin has appeared (extra scrolling in the footage for no check the first pin does not give), and a `minVisible` option on `joinDemo` (a second mode in a helper shared with the e2e suite).
+- **Why:** the video stays 16:9 with a natural flow, the assertion states what is on screen, and the media is reproducible from CI.
