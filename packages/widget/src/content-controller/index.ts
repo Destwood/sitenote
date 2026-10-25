@@ -6,7 +6,14 @@ import {
   parseThreadHash,
   type Anchor,
 } from "@sitenote/core";
-import type { AnchorRect, ComposerSubmission, ScreenshotState, ToastView } from "@sitenote/ui";
+import {
+  DEFAULT_SELECTION_PLACEMENT,
+  type AnchorRect,
+  type ComposerSubmission,
+  type ScreenshotState,
+  type SelectionPlacement,
+  type ToastView,
+} from "@sitenote/ui";
 
 import {
   type AnchorTarget,
@@ -70,6 +77,7 @@ export interface ContentState {
   fallbackHighlights: boolean;
   clickUpConfigured: boolean;
   clickUpPending: ReadonlySet<string>;
+  selectionPlacement: SelectionPlacement;
 }
 
 export interface ContentControllerDeps {
@@ -157,6 +165,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     fallbackHighlights: !highlighter.supported,
     clickUpConfigured: false,
     clickUpPending: new Set<string>(),
+    selectionPlacement: DEFAULT_SELECTION_PLACEMENT,
   });
 
   let sessionThreads: ThreadRecord[] | null = null;
@@ -353,6 +362,20 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     if (!result.data.screenshotAttached) {
       pushToast({ message: CLICKUP_SCREENSHOT_MISSING_MESSAGE, variant: "info" });
     }
+  }
+
+  async function refreshSelectionPlacement(): Promise<void> {
+    if (deps.backend.getSelectionPlacement === undefined) {
+      return;
+    }
+    const result = await deps.backend.getSelectionPlacement();
+    if (!result.ok) {
+      return;
+    }
+    const placement = result.data;
+    store.setState((state) =>
+      state.selectionPlacement === placement ? state : { ...state, selectionPlacement: placement },
+    );
   }
 
   async function loadShowResolved(siteId: string): Promise<void> {
@@ -559,13 +582,19 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
           ? { element: target, point: { clientX: event.clientX, clientY: event.clientY } }
           : null;
     };
+    const handleFocus = (): void => {
+      void refreshSelectionPlacement();
+    };
     win.addEventListener("keydown", handleKeyDown, true);
     win.addEventListener("hashchange", openThreadFromHash);
+    win.addEventListener("focus", handleFocus);
     doc.addEventListener("contextmenu", handleContextMenu, { capture: true, passive: true });
     syncTargets(seen);
+    void refreshSelectionPlacement();
     deactivate = () => {
       win.removeEventListener("keydown", handleKeyDown, true);
       win.removeEventListener("hashchange", openThreadFromHash);
+      win.removeEventListener("focus", handleFocus);
       doc.removeEventListener("contextmenu", handleContextMenu, { capture: true });
       contextTarget = null;
       unsubscribe();

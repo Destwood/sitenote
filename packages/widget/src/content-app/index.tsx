@@ -194,7 +194,11 @@ export function ContentApp({ controller }: ContentAppProps) {
       />
       {state.commentMode ? <CommentModeBanner onExit={controller.exitCommentMode} /> : null}
       {selectionMeasurement?.visible === true ? (
-        <SelectionButton rect={selectionMeasurement.rect} onClick={controller.startTextComment} />
+        <SelectionButton
+          rect={selectionMeasurement.rect}
+          onClick={controller.startTextComment}
+          placement={state.selectionPlacement}
+        />
       ) : null}
       {sidebarOpen ? (
         <div ref={sidebarRef} style={{ display: "contents" }}>

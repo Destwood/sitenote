@@ -34,5 +34,6 @@ export function createExtensionBackend(): WidgetBackend {
       sendMessage({ type: "preferences.set", siteId, showResolved }),
     getClickUpStatus: (workspaceId) => sendMessage({ type: "clickup.status", workspaceId }),
     createClickUpTask: (threadId) => sendMessage({ type: "clickup.createTask", threadId }),
+    getSelectionPlacement: () => sendMessage({ type: "preferences.getSelectionPlacement" }),
   };
 }

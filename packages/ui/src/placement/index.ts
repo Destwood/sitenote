@@ -71,3 +71,18 @@ export function placeAbove(
   }
   return { left, top: clamp(anchor.y + anchor.height + ANCHOR_GAP, VIEWPORT_MARGIN, maxTop) };
 }
+
+export function placeBelow(
+  anchor: AnchorRect,
+  element: Size,
+  viewport: Size,
+): { left: number; top: number } {
+  const maxLeft = viewport.width - element.width - VIEWPORT_MARGIN;
+  const maxTop = viewport.height - element.height - VIEWPORT_MARGIN;
+  const left = clamp(anchor.x + anchor.width / 2 - element.width / 2, VIEWPORT_MARGIN, maxLeft);
+  const belowTop = anchor.y + anchor.height + ANCHOR_GAP;
+  if (belowTop >= VIEWPORT_MARGIN && belowTop <= maxTop) {
+    return { left, top: belowTop };
+  }
+  return { left, top: clamp(anchor.y - ANCHOR_GAP - element.height, VIEWPORT_MARGIN, maxTop) };
+}

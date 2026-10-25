@@ -20,6 +20,10 @@ vi.mock("../site-panel", () => ({
   SitePanel: ({ webUrl }: { webUrl: string }) => <div data-testid="site-panel">{webUrl}</div>,
 }));
 
+vi.mock("../selection-placement-control", () => ({
+  SelectionPlacementControl: () => <div data-testid="selection-placement-control" />,
+}));
+
 vi.mock("../notifications-panel", () => ({
   NotificationsPanel: ({ onUnreadChange }: { onUnreadChange: (unread: number) => void }) => (
     <button

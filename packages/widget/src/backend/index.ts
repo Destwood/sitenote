@@ -1,4 +1,5 @@
 import type { Anchor, ThreadContext } from "@sitenote/core";
+import type { SelectionPlacement } from "@sitenote/ui";
 
 import type {
   CapturedScreenshot,
@@ -79,4 +80,5 @@ export interface WidgetBackend {
   setPreference: (siteId: string, showResolved: boolean) => Promise<MessageResult<null>>;
   getClickUpStatus: (workspaceId: string) => Promise<MessageResult<boolean>>;
   createClickUpTask: (threadId: string) => Promise<MessageResult<ClickUpTaskResult>>;
+  getSelectionPlacement?: () => Promise<MessageResult<SelectionPlacement>>;
 }

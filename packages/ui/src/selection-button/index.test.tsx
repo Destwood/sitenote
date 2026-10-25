@@ -14,21 +14,38 @@ afterEach(() => {
 });
 
 describe("SelectionButton", () => {
-  it("floats above the centre of the selection", () => {
+  it("floats below the centre of the selection by default", () => {
     render(<SelectionButton rect={{ x: 200, y: 300, width: 100, height: 20 }} onClick={vi.fn()} />);
 
     const button = screen.getByRole("button", { name: "Comment" });
 
     expect(button.style.left).toBe(`${String(250 - SELECTION_BUTTON_SIZE.width / 2)}px`);
-    expect(button.style.top).toBe(`${String(300 - 8 - SELECTION_BUTTON_SIZE.height)}px`);
+    expect(button.style.top).toBe(`${String(300 + 20 + 8)}px`);
     expect(button.style.zIndex).toBe(String(Z_INDEX.selectionButton));
     expect(button.className).toContain("fixed");
   });
 
-  it("flips below a selection at the top edge", () => {
-    render(<SelectionButton rect={{ x: 200, y: 5, width: 100, height: 20 }} onClick={vi.fn()} />);
+  it("floats above the centre of the selection when placed above", () => {
+    render(
+      <SelectionButton
+        rect={{ x: 200, y: 300, width: 100, height: 20 }}
+        onClick={vi.fn()}
+        placement="above"
+      />,
+    );
 
-    expect(screen.getByRole("button").style.top).toBe("33px");
+    const button = screen.getByRole("button", { name: "Comment" });
+
+    expect(button.style.left).toBe(`${String(250 - SELECTION_BUTTON_SIZE.width / 2)}px`);
+    expect(button.style.top).toBe(`${String(300 - 8 - SELECTION_BUTTON_SIZE.height)}px`);
+  });
+
+  it("flips above a selection at the bottom edge", () => {
+    render(<SelectionButton rect={{ x: 200, y: 740, width: 100, height: 20 }} onClick={vi.fn()} />);
+
+    expect(screen.getByRole("button").style.top).toBe(
+      `${String(740 - 8 - SELECTION_BUTTON_SIZE.height)}px`,
+    );
   });
 
   it("stays inside the viewport near the left edge", () => {

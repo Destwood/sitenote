@@ -107,6 +107,7 @@ function makeState(overrides: Partial<ContentState> = {}): ContentState {
     fallbackHighlights: false,
     clickUpConfigured: false,
     clickUpPending: new Set<string>(),
+    selectionPlacement: "below",
     ...overrides,
   };
 }
@@ -369,6 +370,25 @@ describe("comment mode and selection", () => {
     await user.click(screen.getByRole("button", { name: "Comment" }));
 
     expect(actions.startTextComment).toHaveBeenCalledTimes(1);
+  });
+
+  it("places the Comment button below the selection by default", () => {
+    setup({
+      selection: document.createRange(),
+      positions: new Map([[SELECTION_ID, measurement(200, 200)]]),
+    });
+
+    expect(screen.getByRole("button", { name: "Comment" }).style.top).toBe("218px");
+  });
+
+  it("places the Comment button above the selection when the setting says so", () => {
+    setup({
+      selection: document.createRange(),
+      positions: new Map([[SELECTION_ID, measurement(200, 200)]]),
+      selectionPlacement: "above",
+    });
+
+    expect(screen.getByRole("button", { name: "Comment" }).style.top).toBe("150px");
   });
 
   it("hides the Comment button when the selection is out of view", () => {

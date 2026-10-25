@@ -8,6 +8,7 @@ import { failure, success, type MessageResult } from "@sitenote/widget";
 import type { NotificationCenter } from "../notification-center";
 import type { ResolvedPreference } from "../resolved-preference";
 import type { ScreenshotService } from "../screenshot-service";
+import type { SelectionPlacementPreference } from "../selection-placement";
 import type { SiteEnablement } from "../site-enablement";
 
 export interface RouterSender {
@@ -24,6 +25,7 @@ export interface MessageRouterDeps {
   notifications: Pick<NotificationCenter, "list" | "markRead" | "markAllRead">;
   screenshots: ScreenshotService;
   preferences: ResolvedPreference;
+  selectionPlacement: SelectionPlacementPreference;
   getEnabledSite: (origin: string) => Promise<EnabledEntry | null>;
   onWake: () => Promise<void>;
   handleTestMessage?: ((message: unknown) => boolean) | undefined;
@@ -57,7 +59,8 @@ export function senderOriginOf(sender: RouterSender): string | null {
 }
 
 export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
-  const { service, data, enablement, notifications, screenshots, preferences } = deps;
+  const { service, data, enablement, notifications, screenshots, preferences, selectionPlacement } =
+    deps;
   const extensionPrefix = `chrome-extension://${deps.extensionId}/`;
 
   function classify(sender: RouterSender): SenderKind {
@@ -124,7 +127,7 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
       if (kind === "contentScript" && request.origin !== senderOriginOf(sender)) {
         return failure("forbidden");
       }
-    } else if (kind !== "extensionPage") {
+    } else if (request.type !== "preferences.getSelectionPlacement" && kind !== "extensionPage") {
       return failure("forbidden_sender");
     }
 
@@ -166,6 +169,15 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
       case "preferences.set":
         try {
           await preferences.save(request.siteId, request.showResolved);
+          return success(null);
+        } catch {
+          return failure("unknown");
+        }
+      case "preferences.getSelectionPlacement":
+        return success(await selectionPlacement.load());
+      case "preferences.setSelectionPlacement":
+        try {
+          await selectionPlacement.save(request.placement);
           return success(null);
         } catch {
           return failure("unknown");

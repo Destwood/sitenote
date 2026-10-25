@@ -142,6 +142,53 @@ test("comment on selected text: the Comment button creates a highlighted thread"
   await expect.poll(() => page.evaluate(() => CSS.highlights.has("sitenote"))).toBe(true);
 });
 
+async function selectionRect(page: Page): Promise<{ top: number; bottom: number }> {
+  return page.evaluate(() => {
+    const rect = window.getSelection()?.getRangeAt(0).getBoundingClientRect();
+    return { top: rect?.top ?? Number.NaN, bottom: rect?.bottom ?? Number.NaN };
+  });
+}
+
+test("the Comment button sits below the selected text by default", async ({
+  context,
+  extensionId,
+}) => {
+  const { page } = await openReviewPage(context, extensionId, OWNER, "/p/text-comment");
+
+  await page.locator(".lead").click({ clickCount: 3 });
+  const selectionButton = page.getByRole("button", { name: "Comment", exact: true });
+  await expect(selectionButton).toBeVisible();
+  const selection = await selectionRect(page);
+  const box = await selectionButton.boundingBox();
+  if (box === null) {
+    throw new Error("the Comment button has no box");
+  }
+
+  expect(box.y).toBeGreaterThanOrEqual(selection.bottom);
+});
+
+test("the Comment button sits above the selected text when the popup setting says so", async ({
+  context,
+  extensionId,
+}) => {
+  const { page, popup } = await openReviewPage(context, extensionId, OWNER, "/p/text-comment");
+  await popup.getByRole("combobox", { name: "Comment button" }).selectOption("above");
+  await expect(popup.getByRole("combobox", { name: "Comment button" })).toHaveValue("above");
+  await page.reload();
+  await expect(hostOf(page)).toHaveAttribute("data-live", "true");
+
+  await page.locator(".lead").click({ clickCount: 3 });
+  const selectionButton = page.getByRole("button", { name: "Comment", exact: true });
+  await expect(selectionButton).toBeVisible();
+  const selection = await selectionRect(page);
+  const box = await selectionButton.boundingBox();
+  if (box === null) {
+    throw new Error("the Comment button has no box");
+  }
+
+  expect(box.y + box.height).toBeLessThanOrEqual(selection.top);
+});
+
 test("reply, edit and delete your own comments", async ({ context, extensionId }) => {
   const path = "/p/replies";
   await ownerCleanup(`${FIXTURE_ORIGIN}${path}`);

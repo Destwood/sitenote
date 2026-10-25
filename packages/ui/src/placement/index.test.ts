@@ -4,6 +4,7 @@ import {
   ANCHOR_GAP,
   VIEWPORT_MARGIN,
   placeAbove,
+  placeBelow,
   placePanel,
   type AnchorRect,
   type PanelPlacement,
@@ -131,6 +132,33 @@ describe("placeAbove", () => {
   it("clamps the flipped position to the bottom edge", () => {
     expect(placeAbove({ x: 200, y: 10, width: 100, height: 790 }, element, VIEWPORT).top).toBe(
       800 - 32 - VIEWPORT_MARGIN,
+    );
+  });
+});
+
+describe("placeBelow", () => {
+  const element: Size = { width: 96, height: 32 };
+
+  it("centres the element below the anchor", () => {
+    expect(placeBelow({ x: 200, y: 200, width: 100, height: 20 }, element, VIEWPORT)).toEqual({
+      left: 202,
+      top: 200 + 20 + ANCHOR_GAP,
+    });
+  });
+
+  it("flips above the anchor at the bottom edge", () => {
+    expect(placeBelow({ x: 200, y: 740, width: 100, height: 20 }, element, VIEWPORT)).toEqual({
+      left: 202,
+      top: 740 - ANCHOR_GAP - 32,
+    });
+  });
+
+  it("clamps to the left and right edges", () => {
+    expect(placeBelow({ x: 0, y: 200, width: 20, height: 20 }, element, VIEWPORT).left).toBe(
+      VIEWPORT_MARGIN,
+    );
+    expect(placeBelow({ x: 990, y: 200, width: 20, height: 20 }, element, VIEWPORT).left).toBe(
+      1000 - 96 - VIEWPORT_MARGIN,
     );
   });
 });
