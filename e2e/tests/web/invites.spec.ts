@@ -262,3 +262,15 @@ test("the forget-session endpoint refuses requests from another origin", async (
   expect(missing.status()).toBe(403);
   expect(own.status()).toBe(204);
 });
+
+test("the extension session endpoint refuses another origin and a visitor", async ({ page }) => {
+  const foreign = await page.request.post(`${WEB_ORIGIN}/extension/connect/session`, {
+    headers: { origin: "https://evil.example" },
+  });
+  const signedOut = await page.request.post(`${WEB_ORIGIN}/extension/connect/session`, {
+    headers: { origin: WEB_ORIGIN },
+  });
+
+  expect(foreign.status()).toBe(403);
+  expect(signedOut.status()).toBe(401);
+});

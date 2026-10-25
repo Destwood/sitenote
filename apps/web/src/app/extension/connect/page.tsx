@@ -27,8 +27,7 @@ export default async function ExtensionConnectPage() {
         <h1 className="text-2xl font-bold tracking-tight">Connect the extension</h1>
         <p className="text-neutral-600">
           You are signed in as <strong className="break-all">{user.email ?? "your account"}</strong>
-          . Connecting moves this session to the extension, so this browser signs you out of the web
-          app. Sign in again here when you need it.
+          . Connecting signs the extension in to the same account. You stay signed in here.
         </p>
       </header>
       <ExtensionConnect extensionId={getPublicEnv().extensionId} />
