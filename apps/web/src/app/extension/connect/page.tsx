@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { getPublicEnv } from "../../../env";
 import { ExtensionConnect } from "../../../extension-connect";
+import { LINK_BUTTON_CLASS } from "../../../form-controls";
 import { createSupabaseServerClient, getAuthenticatedUser } from "../../../supabase-server";
 
 export const metadata: Metadata = {
@@ -20,9 +21,14 @@ export default async function ExtensionConnectPage() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-8 px-6 py-16">
-      <Link href="/" className="w-fit text-lg font-bold tracking-tight">
-        Sitenote
-      </Link>
+      <div className="flex items-center justify-between">
+        <Link href="/" className="w-fit text-lg font-bold tracking-tight">
+          Sitenote
+        </Link>
+        <Link href="/app" className={LINK_BUTTON_CLASS}>
+          Go to dashboard
+        </Link>
+      </div>
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-bold tracking-tight">Connect the extension</h1>
         <p className="text-neutral-600">

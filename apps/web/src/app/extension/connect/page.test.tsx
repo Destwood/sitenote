@@ -55,4 +55,16 @@ describe("GET /extension/connect", () => {
     expect(screen.getByTestId("connect").textContent).toBe("abcdefghijklmnopabcdefghijklmnop");
     expect(mocks.redirect).not.toHaveBeenCalled();
   });
+
+  it("offers a way to the dashboard from the top of the page", async () => {
+    mocks.getAuthenticatedUser.mockResolvedValue({
+      id: "u-3",
+      email: "ada@example.com",
+      isAnonymous: false,
+    });
+
+    render(await ExtensionConnectPage());
+
+    expect(screen.getByRole("link", { name: "Go to dashboard" }).getAttribute("href")).toBe("/app");
+  });
 });
