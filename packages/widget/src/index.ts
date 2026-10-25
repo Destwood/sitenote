@@ -7,6 +7,7 @@ export * from "./dom-watcher";
 export * from "./document-style";
 export * from "./event-isolation";
 export * from "./page-session";
+export * from "./page-thread-summary";
 export * from "./pin-tracker";
 export * from "./preference-client";
 export * from "./result";

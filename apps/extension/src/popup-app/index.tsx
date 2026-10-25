@@ -6,13 +6,14 @@ import { onAuthStateChanged, sendMessage } from "../message-client";
 import { type AuthState } from "../messages";
 import { ERROR_MESSAGES, type ErrorCode } from "@sitenote/widget";
 import { NotificationsPanel } from "../notifications-panel";
+import { PageThreadsPanel } from "../page-threads-panel";
 import { SignInPanel } from "../sign-in-panel";
 import { SelectionPlacementControl } from "../selection-placement-control";
 import { SitePanel } from "../site-panel";
 
-type TabId = "site" | "notifications";
+type TabId = "comments" | "notifications";
 
-const TAB_ORDER: readonly TabId[] = ["site", "notifications"];
+const TAB_ORDER: readonly TabId[] = ["comments", "notifications"];
 const TAB_CLASS =
   "-mb-px flex-1 border-b-2 px-3 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900";
 
@@ -35,20 +36,41 @@ export function notificationsTabLabel(unread: number): string {
   return unread > 0 ? `Notifications (${String(unread)})` : "Notifications";
 }
 
+export function commentsTabLabel(openCount: number | null): string {
+  return openCount === null ? "Comments" : `Comments (${String(openCount)})`;
+}
+
 interface SignedInTabsProps {
   webUrl: string;
 }
 
 function SignedInTabs({ webUrl }: SignedInTabsProps) {
-  const [tab, setTab] = useState<TabId>("site");
+  const [tab, setTab] = useState<TabId>("comments");
   const [unread, setUnread] = useState(0);
+  const [openCount, setOpenCount] = useState<number | null>(null);
+  const [pageTabId, setPageTabId] = useState<number | null>(null);
+  const [listVersion, setListVersion] = useState(0);
   const tabRefs = useRef<Record<TabId, HTMLButtonElement | null>>({
-    site: null,
+    comments: null,
     notifications: null,
   });
 
-  function select(next: TabId) {
+  const handleSiteState = useCallback((enabled: boolean, tabId: number | null) => {
+    setPageTabId(enabled ? tabId : null);
+    if (!enabled) {
+      setOpenCount(null);
+    }
+  }, []);
+
+  function show(next: TabId) {
     setTab(next);
+    if (next === "comments") {
+      setListVersion((version) => version + 1);
+    }
+  }
+
+  function select(next: TabId) {
+    show(next);
     tabRefs.current[next]?.focus();
   }
 
@@ -84,20 +106,20 @@ function SignedInTabs({ webUrl }: SignedInTabsProps) {
       >
         <button
           ref={(element) => {
-            tabRefs.current.site = element;
+            tabRefs.current.comments = element;
           }}
           type="button"
           role="tab"
-          id="popup-tab-site"
-          aria-selected={tab === "site"}
-          aria-controls="popup-panel-site"
-          tabIndex={tab === "site" ? 0 : -1}
+          id="popup-tab-comments"
+          aria-selected={tab === "comments"}
+          aria-controls="popup-panel-comments"
+          tabIndex={tab === "comments" ? 0 : -1}
           onClick={() => {
-            setTab("site");
+            show("comments");
           }}
-          className={tabClass("site")}
+          className={tabClass("comments")}
         >
-          Site
+          {commentsTabLabel(openCount)}
         </button>
         <button
           ref={(element) => {
@@ -119,11 +141,14 @@ function SignedInTabs({ webUrl }: SignedInTabsProps) {
       </div>
       <div
         role="tabpanel"
-        id="popup-panel-site"
-        aria-labelledby="popup-tab-site"
-        hidden={tab !== "site"}
+        id="popup-panel-comments"
+        aria-labelledby="popup-tab-comments"
+        hidden={tab !== "comments"}
       >
-        <SitePanel webUrl={webUrl} />
+        <SitePanel webUrl={webUrl} onStateChange={handleSiteState} />
+        {pageTabId === null ? null : (
+          <PageThreadsPanel key={listVersion} tabId={pageTabId} onCount={setOpenCount} />
+        )}
       </div>
       <div
         role="tabpanel"
@@ -165,7 +190,12 @@ export function PopupApp({ googleEnabled, webUrl }: PopupAppProps) {
 
   return (
     <main className="flex w-[340px] flex-col gap-4 bg-white p-4 text-neutral-900">
-      <h1 className="text-base font-bold tracking-tight">Sitenote</h1>
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-base font-bold tracking-tight">Sitenote</h1>
+        {view.kind === "ready" && view.state.status === "signedIn" ? (
+          <SelectionPlacementControl />
+        ) : null}
+      </div>
       {view.kind === "loading" ? (
         <p role="status" className="text-sm text-neutral-600">
           Loading...
@@ -187,7 +217,6 @@ export function PopupApp({ googleEnabled, webUrl }: PopupAppProps) {
       {view.kind === "ready" && view.state.status === "signedIn" ? (
         <>
           <AccountPanel user={view.state.user} onSignedOut={showState} />
-          <SelectionPlacementControl />
           <SignedInTabs webUrl={webUrl} />
         </>
       ) : null}

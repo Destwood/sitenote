@@ -35,6 +35,7 @@ interface Target {
 
 interface SitePanelProps {
   webUrl: string;
+  onStateChange?: (enabled: boolean, tabId: number | null) => void;
 }
 
 function readLastWorkspace(): string | null {
@@ -81,7 +82,7 @@ async function resolveView(): Promise<View> {
   return target === null ? { kind: "unavailable" } : loadView(target);
 }
 
-export function SitePanel({ webUrl }: SitePanelProps) {
+export function SitePanel({ webUrl, onStateChange }: SitePanelProps) {
   const [view, setView] = useState<View>({ kind: "loading" });
   const [workspaceId, setWorkspaceId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -110,6 +111,10 @@ export function SitePanel({ webUrl }: SitePanelProps) {
       active = false;
     };
   }, [show]);
+
+  useEffect(() => {
+    onStateChange?.(view.kind === "enabled", view.kind === "enabled" ? view.tab.id : null);
+  }, [view, onStateChange]);
 
   async function enable(tab: Target) {
     if (busy || workspaceId === "") {

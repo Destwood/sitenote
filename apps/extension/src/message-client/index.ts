@@ -7,14 +7,17 @@ import {
   commentModeResponseSchema,
   commentOnElementResponseSchema,
   notificationsChangedSchema,
+  pageOpenThreadResponseSchema,
+  pageThreadsResponseSchema,
   type AuthState,
   type CommentModeState,
   type CommentOnElementState,
   type DataByRequestType,
   type ExtensionRequest,
   type ExtensionRequestType,
+  type PageOpenThreadState,
 } from "../messages";
-import { failure, type MessageResult } from "@sitenote/widget";
+import { failure, type MessageResult, type PageThreadSummary } from "@sitenote/widget";
 
 function schemaFor<Type extends ExtensionRequestType>(
   type: Type,
@@ -54,6 +57,37 @@ export async function commentOnElement(
       { frameId: 0 },
     );
     const parsed = commentOnElementResponseSchema.safeParse(raw);
+    return parsed.success ? parsed.data : failure("page_unavailable");
+  } catch {
+    return failure("page_unavailable");
+  }
+}
+
+export async function listPageThreads(tabId: number): Promise<MessageResult<PageThreadSummary[]>> {
+  try {
+    const raw: unknown = await browser.tabs.sendMessage(
+      tabId,
+      { type: "page.listThreads" },
+      { frameId: 0 },
+    );
+    const parsed = pageThreadsResponseSchema.safeParse(raw);
+    return parsed.success ? parsed.data : failure("page_unavailable");
+  } catch {
+    return failure("page_unavailable");
+  }
+}
+
+export async function openPageThread(
+  tabId: number,
+  threadId: string,
+): Promise<MessageResult<PageOpenThreadState>> {
+  try {
+    const raw: unknown = await browser.tabs.sendMessage(
+      tabId,
+      { type: "page.openThread", threadId },
+      { frameId: 0 },
+    );
+    const parsed = pageOpenThreadResponseSchema.safeParse(raw);
     return parsed.success ? parsed.data : failure("page_unavailable");
   } catch {
     return failure("page_unavailable");

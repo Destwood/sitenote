@@ -172,8 +172,8 @@ test("the Comment button sits above the selected text when the popup setting say
   extensionId,
 }) => {
   const { page, popup } = await openReviewPage(context, extensionId, OWNER, "/p/text-comment");
-  await popup.getByRole("combobox", { name: "Comment button" }).selectOption("above");
-  await expect(popup.getByRole("combobox", { name: "Comment button" })).toHaveValue("above");
+  await popup.getByRole("checkbox", { name: "Button above" }).check();
+  await expect(popup.getByRole("checkbox", { name: "Button above" })).toBeChecked();
   await page.reload();
   await expect(hostOf(page)).toHaveAttribute("data-live", "true");
 
@@ -187,6 +187,28 @@ test("the Comment button sits above the selected text when the popup setting say
   }
 
   expect(box.y + box.height).toBeLessThanOrEqual(selection.top);
+});
+
+test("the popup's Comments tab lists the page's threads and opens one on the page", async ({
+  context,
+  extensionId,
+}) => {
+  const path = "/p/popup-threads";
+  await ownerCleanup(`${FIXTURE_ORIGIN}${path}`);
+  const session = await openReviewPage(context, extensionId, OWNER, path);
+  const { page, popup } = session;
+  await commentOnElement(session, "#cta", { x: 30, y: 12 }, "The popup should list this");
+  await page.getByRole("button", { name: "Close thread" }).click();
+
+  await popup.getByRole("tab", { name: /^Comments/ }).click();
+  const list = popup.getByRole("list", { name: "Comments on this page" });
+  await expect(list).toContainText("#1");
+  await expect(list).toContainText("The popup should list this");
+  await list.getByRole("button", { name: /The popup should list this/ }).click();
+
+  await expect(page.getByRole("dialog", { name: "Thread 1" })).toContainText(
+    "The popup should list this",
+  );
 });
 
 test("reply, edit and delete your own comments", async ({ context, extensionId }) => {

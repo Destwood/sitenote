@@ -240,6 +240,25 @@ describe("SitePanel when the site is enabled", () => {
     expect(screen.queryByLabelText("Workspace")).toBeNull();
   });
 
+  it("reports the enabled tab to its parent and reports it disabled otherwise", async () => {
+    const onStateChange = vi.fn();
+    enabled();
+
+    const { unmount } = render(
+      <SitePanel webUrl="https://web.test" onStateChange={onStateChange} />,
+    );
+
+    await screen.findByTestId("site-state");
+    expect(onStateChange).toHaveBeenLastCalledWith(true, 7);
+    unmount();
+
+    route({ "sites.forOrigin": () => success(null), "workspaces.list": () => success([]) });
+    render(<SitePanel webUrl="https://web.test" onStateChange={onStateChange} />);
+
+    await screen.findByTestId("site-state");
+    expect(onStateChange).toHaveBeenLastCalledWith(false, null);
+  });
+
   it("toggles comment mode in the tab and reports the new state", async () => {
     const user = userEvent.setup();
     enabled();

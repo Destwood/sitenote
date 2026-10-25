@@ -14,6 +14,10 @@ import {
   notificationsChangedSchema,
   pageClientMessageSchema,
   pageEventSchema,
+  pageOpenThreadResponseSchema,
+  pageOpenThreadSchema,
+  pageThreadsRequestSchema,
+  pageThreadsResponseSchema,
   requestSchema,
 } from ".";
 
@@ -561,5 +565,41 @@ describe("comment mode messages", () => {
     expect(commentOnElementResponseSchema.safeParse(success({ started: "yes" })).success).toBe(
       false,
     );
+  });
+
+  it("accepts the list threads request and a response with the page's threads", () => {
+    const thread = {
+      id: "30000000-0000-4000-8000-000000000001",
+      number: 1,
+      status: "resolved",
+      excerpt: "Hello",
+      authorName: "Max",
+      replies: 0,
+      detached: true,
+    };
+
+    expect(pageThreadsRequestSchema.safeParse({ type: "page.listThreads" }).success).toBe(true);
+    expect(pageThreadsResponseSchema.safeParse(success([thread])).success).toBe(true);
+    expect(pageThreadsResponseSchema.safeParse(success([])).success).toBe(true);
+    expect(pageThreadsResponseSchema.safeParse(failure("page_unavailable")).success).toBe(true);
+    expect(
+      pageThreadsResponseSchema.safeParse(success([{ ...thread, status: "archived" }])).success,
+    ).toBe(false);
+    expect(pageThreadsResponseSchema.safeParse(success([{ ...thread, replies: -1 }])).success).toBe(
+      false,
+    );
+  });
+
+  it("accepts the open thread request and its response", () => {
+    const threadId = "30000000-0000-4000-8000-000000000001";
+
+    expect(pageOpenThreadSchema.safeParse({ type: "page.openThread", threadId }).success).toBe(
+      true,
+    );
+    expect(pageOpenThreadSchema.safeParse({ type: "page.openThread", threadId: "x" }).success).toBe(
+      false,
+    );
+    expect(pageOpenThreadResponseSchema.safeParse(success({ opened: false })).success).toBe(true);
+    expect(pageOpenThreadResponseSchema.safeParse(success({ opened: "no" })).success).toBe(false);
   });
 });

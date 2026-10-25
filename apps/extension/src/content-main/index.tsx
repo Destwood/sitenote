@@ -3,6 +3,7 @@ import {
   createWidget,
   failure,
   success,
+  summarizeThreads,
   type ContentState,
   type MessageResult,
 } from "@sitenote/widget";
@@ -92,6 +93,19 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
     extensionId: browser.runtime.id,
     toggle: () => whenReady(() => ({ active: widget.toggleCommentMode() })),
     commentOnElement: () => whenReady(() => ({ started: widget.commentOnContextTarget() })),
+    listThreads: () =>
+      whenReady(() => {
+        const { threads, resolutions } = widget.store.getState();
+        return summarizeThreads(threads, resolutions);
+      }),
+    openThread: (threadId) =>
+      whenReady(() => {
+        const opened = widget.store.getState().threads.some((thread) => thread.id === threadId);
+        if (opened) {
+          widget.selectThread(threadId);
+        }
+        return { opened };
+      }),
   });
   browser.runtime.onMessage.addListener(toggleListener);
   ctx.onInvalidated(() => {

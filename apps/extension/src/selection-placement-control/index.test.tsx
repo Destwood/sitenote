@@ -18,36 +18,30 @@ describe("SelectionPlacementControl", () => {
     mocks.sendMessage.mockResolvedValueOnce(success("above"));
     render(<SelectionPlacementControl />);
 
-    const select = screen.getByRole("combobox", { name: "Comment button" });
+    const checkbox = screen.getByRole("checkbox", { name: "Button above" });
     await vi.waitFor(() => {
-      expect(select).toHaveProperty("value", "above");
+      expect(checkbox).toHaveProperty("checked", true);
     });
     expect(mocks.sendMessage).toHaveBeenCalledWith({ type: "preferences.getSelectionPlacement" });
   });
 
-  it("keeps below when the stored placement cannot be read", async () => {
+  it("keeps the button below when the stored placement cannot be read", async () => {
     mocks.sendMessage.mockResolvedValueOnce(failure("unavailable"));
     render(<SelectionPlacementControl />);
 
     await vi.waitFor(() => {
       expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
     });
-    expect(screen.getByRole("combobox", { name: "Comment button" })).toHaveProperty(
-      "value",
-      "below",
-    );
+    expect(screen.getByRole("checkbox", { name: "Button above" })).toHaveProperty("checked", false);
   });
 
-  it("saves the placement when the user picks an option", async () => {
+  it("saves the placement when the user checks the box", async () => {
     const user = userEvent.setup();
     mocks.sendMessage.mockResolvedValueOnce(success("below"));
     mocks.sendMessage.mockResolvedValueOnce(success(null));
     render(<SelectionPlacementControl />);
 
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Comment button" }),
-      "Above selection",
-    );
+    await user.click(screen.getByRole("checkbox", { name: "Button above" }));
 
     expect(mocks.sendMessage).toHaveBeenLastCalledWith({
       type: "preferences.setSelectionPlacement",
@@ -55,16 +49,35 @@ describe("SelectionPlacementControl", () => {
     });
   });
 
+  it("saves below when the user unchecks the box", async () => {
+    const user = userEvent.setup();
+    mocks.sendMessage.mockResolvedValueOnce(success("above"));
+    mocks.sendMessage.mockResolvedValueOnce(success(null));
+    render(<SelectionPlacementControl />);
+    const checkbox = screen.getByRole("checkbox", { name: "Button above" });
+    await vi.waitFor(() => {
+      expect(checkbox).toHaveProperty("checked", true);
+    });
+
+    await user.click(checkbox);
+
+    expect(mocks.sendMessage).toHaveBeenLastCalledWith({
+      type: "preferences.setSelectionPlacement",
+      placement: "below",
+    });
+    expect(checkbox).toHaveProperty("checked", false);
+  });
+
   it("reverts and shows the error when the placement cannot be saved", async () => {
     const user = userEvent.setup();
     mocks.sendMessage.mockResolvedValueOnce(success("below"));
     mocks.sendMessage.mockResolvedValueOnce(failure("unknown"));
     render(<SelectionPlacementControl />);
-    const select = screen.getByRole("combobox", { name: "Comment button" });
+    const checkbox = screen.getByRole("checkbox", { name: "Button above" });
 
-    await user.selectOptions(select, "Above selection");
+    await user.click(checkbox);
 
     expect((await screen.findByRole("alert")).textContent).toBe(ERROR_MESSAGES.unknown);
-    expect(select).toHaveProperty("value", "below");
+    expect(checkbox).toHaveProperty("checked", false);
   });
 });

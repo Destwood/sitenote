@@ -55,6 +55,19 @@ function toCommentView(
   };
 }
 
+export function numberingOrder(threads: readonly ThreadRecord[]): ThreadRecord[] {
+  return [...threads].sort(
+    (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+  );
+}
+
+export function isOrphaned(
+  resolutions: ReadonlyMap<string, Resolution>,
+  threadId: string,
+): boolean {
+  return resolutions.get(threadId)?.status !== "resolved";
+}
+
 export function buildThreadViews(
   threads: readonly ThreadRecord[],
   resolutions: ReadonlyMap<string, Resolution>,
@@ -62,20 +75,18 @@ export function buildThreadViews(
   members: readonly MemberRecord[] = [],
 ): ThreadView[] {
   const names = new Map(members.map((member) => [member.id, member.displayName]));
-  return [...threads]
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
-    .map((thread, index) => ({
-      id: thread.id,
-      status: thread.status,
-      number: index + 1,
-      author: thread.author,
-      createdAt: thread.createdAt,
-      comments: thread.comments.map((comment) => toCommentView(comment, userId, names)),
-      orphaned: resolutions.get(thread.id)?.status !== "resolved",
-      anchorLabel: anchorLabel(thread.anchor),
-      context: thread.context,
-      hasScreenshot: thread.hasScreenshot,
-    }));
+  return numberingOrder(threads).map((thread, index) => ({
+    id: thread.id,
+    status: thread.status,
+    number: index + 1,
+    author: thread.author,
+    createdAt: thread.createdAt,
+    comments: thread.comments.map((comment) => toCommentView(comment, userId, names)),
+    orphaned: isOrphaned(resolutions, thread.id),
+    anchorLabel: anchorLabel(thread.anchor),
+    context: thread.context,
+    hasScreenshot: thread.hasScreenshot,
+  }));
 }
 
 export function upsertThread(
