@@ -227,6 +227,8 @@ describe("dataRequestSchema", () => {
       { type: "screenshot.capture", rect: RECT, devicePixelRatio: 2 },
       { type: "preferences.get", siteId: SITE_ID },
       { type: "preferences.set", siteId: SITE_ID, showResolved: true },
+      { type: "preferences.getSelectionPlacement" },
+      { type: "preferences.setSelectionPlacement", placement: "above" },
       { type: "sites.setErrorCapture", tabId: 3, origin: ORIGIN, enabled: false },
       { type: "threads.setStatus", threadId: THREAD_ID, status: "resolved" },
       { type: "comments.create", threadId: THREAD_ID, body: "Reply", mentions: [WORKSPACE_ID] },
@@ -297,6 +299,11 @@ describe("dataRequestSchema", () => {
       "a preference value that is not a boolean",
       { type: "preferences.set", siteId: SITE_ID, showResolved: "yes" },
     ],
+    [
+      "a selection placement outside below and above",
+      { type: "preferences.setSelectionPlacement", placement: "left" },
+    ],
+    ["a selection placement without a value", { type: "preferences.setSelectionPlacement" }],
     [
       "an error capture switch without a boolean",
       { type: "sites.setErrorCapture", tabId: 3, origin: ORIGIN, enabled: 1 },
@@ -386,6 +393,15 @@ describe("data responses", () => {
     ).toBe(true);
     expect(RESPONSE_SCHEMAS["preferences.get"].safeParse(success({})).success).toBe(false);
     expect(RESPONSE_SCHEMAS["preferences.set"].safeParse(success(null)).success).toBe(true);
+    expect(
+      RESPONSE_SCHEMAS["preferences.getSelectionPlacement"].safeParse(success("above")).success,
+    ).toBe(true);
+    expect(
+      RESPONSE_SCHEMAS["preferences.getSelectionPlacement"].safeParse(success("left")).success,
+    ).toBe(false);
+    expect(
+      RESPONSE_SCHEMAS["preferences.setSelectionPlacement"].safeParse(success(null)).success,
+    ).toBe(true);
     expect(RESPONSE_SCHEMAS["sites.setErrorCapture"].safeParse(success(null)).success).toBe(true);
     expect(failure("capture_failed").error.message).toBe("The screenshot could not be taken.");
   });

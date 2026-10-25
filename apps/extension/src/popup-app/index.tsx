@@ -7,6 +7,7 @@ import { type AuthState } from "../messages";
 import { ERROR_MESSAGES, type ErrorCode } from "@sitenote/widget";
 import { NotificationsPanel } from "../notifications-panel";
 import { SignInPanel } from "../sign-in-panel";
+import { SelectionPlacementControl } from "../selection-placement-control";
 import { SitePanel } from "../site-panel";
 
 type TabId = "site" | "notifications";
@@ -186,6 +187,7 @@ export function PopupApp({ googleEnabled, webUrl }: PopupAppProps) {
       {view.kind === "ready" && view.state.status === "signedIn" ? (
         <>
           <AccountPanel user={view.state.user} onSignedOut={showState} />
+          <SelectionPlacementControl />
           <SignedInTabs webUrl={webUrl} />
         </>
       ) : null}

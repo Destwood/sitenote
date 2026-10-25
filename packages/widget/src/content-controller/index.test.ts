@@ -211,6 +211,7 @@ function fakeBackend(
     setPreference: (siteId, showResolved) => respond("setPreference", [siteId, showResolved]),
     getClickUpStatus: (workspaceId) => respond("getClickUpStatus", [workspaceId]),
     createClickUpTask: (threadId) => respond("createClickUpTask", [threadId]),
+    getSelectionPlacement: () => respond("getSelectionPlacement", []),
   };
 }
 
@@ -1270,6 +1271,57 @@ describe("the page changes under the overlay", () => {
     window.dispatchEvent(new PopStateEvent("popstate"));
 
     expect(state().pending).toBeNull();
+  });
+});
+
+describe("selection placement", () => {
+  it("places the selection button below the text by default", async () => {
+    const { state } = await setup([thread()]);
+
+    expect(state().selectionPlacement).toBe("below");
+  });
+
+  it("loads the stored placement when the page is activated", async () => {
+    const { state } = await setup([thread()], { getSelectionPlacement: () => success("above") });
+
+    await vi.waitFor(() => {
+      expect(state().selectionPlacement).toBe("above");
+    });
+  });
+
+  it("refreshes the placement when the window gets focus", async () => {
+    let placement: "below" | "above" = "below";
+    const { state } = await setup([thread()], {
+      getSelectionPlacement: () => success(placement),
+    });
+
+    placement = "above";
+    window.dispatchEvent(new Event("focus"));
+
+    await vi.waitFor(() => {
+      expect(state().selectionPlacement).toBe("above");
+    });
+  });
+
+  it("keeps the current placement when the stored one cannot be read", async () => {
+    const { state, calls } = await setup([thread()], {
+      getSelectionPlacement: () => failure("unavailable"),
+    });
+
+    await vi.waitFor(() => {
+      expect(calls().map((call) => call.method)).toContain("getSelectionPlacement");
+    });
+    expect(state().selectionPlacement).toBe("below");
+  });
+
+  it("keeps the default when the backend cannot report the placement", async () => {
+    const backend = fakeBackend({}, [thread()], [], { options: null, update: vi.fn() });
+    Reflect.deleteProperty(backend, "getSelectionPlacement");
+
+    const { state } = await setup([thread()], {}, { backend });
+
+    expect(state().status).toBe("ready");
+    expect(state().selectionPlacement).toBe("below");
   });
 });
 

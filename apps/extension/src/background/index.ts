@@ -26,6 +26,7 @@ import { planRefresh, REFRESH_ALARM_NAME, type RefreshOutcome } from "../refresh
 import { createResolvedPreference } from "../resolved-preference";
 import { cropDataUrl } from "../screenshot-crop";
 import { createScreenshotService } from "../screenshot-service";
+import { createSelectionPlacementPreference } from "../selection-placement";
 import { createScreenshotUploader } from "../screenshot-upload";
 import { createSessionHandoff } from "../session-handoff";
 import { createSessionStorage } from "../session-storage";
@@ -165,6 +166,7 @@ export function startBackground(): void {
     notifications,
     screenshots,
     preferences: createResolvedPreference(browser.storage.local),
+    selectionPlacement: createSelectionPlacementPreference(browser.storage.local),
     getEnabledSite: store.get,
     onWake: keepSessionFresh,
     handleTestMessage: hooks?.handle,

@@ -55,6 +55,8 @@ function isBareOrigin(value: string): boolean {
 }
 
 const idSchema = z.guid();
+const selectionPlacementSchema = z.enum(["below", "above"]);
+export type SelectionPlacement = z.infer<typeof selectionPlacementSchema>;
 const originSchema = z.string().check(z.refine(isBareOrigin));
 const pageUrlSchema = z.string().check(z.refine((value) => parsePageUrl(value)?.page === value));
 const bodySchema = z.string().check(z.trim(), z.minLength(1), z.maxLength(COMMENT_MAX_LENGTH));
@@ -90,6 +92,11 @@ export const dataRequestSchema = z.discriminatedUnion("type", [
     type: z.literal("preferences.set"),
     siteId: idSchema,
     showResolved: z.boolean(),
+  }),
+  z.object({ type: z.literal("preferences.getSelectionPlacement") }),
+  z.object({
+    type: z.literal("preferences.setSelectionPlacement"),
+    placement: selectionPlacementSchema,
   }),
   z.object({
     type: z.literal("threads.setStatus"),
@@ -184,6 +191,8 @@ export interface DataByType {
   "screenshot.capture": CapturedScreenshot;
   "preferences.get": Preferences;
   "preferences.set": null;
+  "preferences.getSelectionPlacement": SelectionPlacement;
+  "preferences.setSelectionPlacement": null;
   "threads.setStatus": ThreadRecord;
   "comments.create": CommentRecord;
   "comments.update": CommentRecord;
@@ -221,6 +230,8 @@ export const RESPONSE_SCHEMAS: {
   "screenshot.capture": resultSchema(capturedScreenshotSchema),
   "preferences.get": resultSchema(preferencesSchema),
   "preferences.set": resultSchema(z.null()),
+  "preferences.getSelectionPlacement": resultSchema(selectionPlacementSchema),
+  "preferences.setSelectionPlacement": resultSchema(z.null()),
   "threads.setStatus": resultSchema(threadRecordSchema),
   "comments.create": resultSchema(commentRecordSchema),
   "comments.update": resultSchema(commentRecordSchema),

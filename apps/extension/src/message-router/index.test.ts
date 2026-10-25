@@ -6,6 +6,7 @@ import type { DataService } from "../data-service";
 import type { NotificationCenter } from "../notification-center";
 import type { ResolvedPreference } from "../resolved-preference";
 import type { ScreenshotService } from "../screenshot-service";
+import type { SelectionPlacementPreference } from "../selection-placement";
 import { type AuthState } from "../messages";
 import { failure, success } from "@sitenote/widget";
 import type { SiteEnablement } from "../site-enablement";
@@ -97,12 +98,24 @@ function createFakes() {
     load: vi.fn<ResolvedPreference["load"]>(() => Promise.resolve(true)),
     save: vi.fn<ResolvedPreference["save"]>(() => Promise.resolve()),
   };
+  const selectionPlacement = {
+    load: vi.fn<SelectionPlacementPreference["load"]>(() => Promise.resolve("below")),
+    save: vi.fn<SelectionPlacementPreference["save"]>(() => Promise.resolve()),
+  };
   const notifications: Pick<NotificationCenter, "list" | "markRead" | "markAllRead"> = {
     list: vi.fn(() => Promise.resolve(success({ items: [], unread: 0 }))),
     markRead: vi.fn(() => Promise.resolve(success(null))),
     markAllRead: vi.fn(() => Promise.resolve(success(null))),
   };
-  return { service, data, enablement, notifications, screenshots, preferences };
+  return {
+    service,
+    data,
+    enablement,
+    notifications,
+    screenshots,
+    preferences,
+    selectionPlacement,
+  };
 }
 
 function setup(options: { enabled?: boolean; onWake?: () => Promise<void> } = {}) {
@@ -341,6 +354,45 @@ describe("createMessageRouter preferences", () => {
 
     expect(
       await route({ type: "preferences.set", siteId: SITE_ID, showResolved: true }, CONTENT),
+    ).toEqual(failure("unknown"));
+  });
+});
+
+describe("createMessageRouter selection placement", () => {
+  it("lets a content script read the placement without an enabled site", async () => {
+    const { route, selectionPlacement } = setup({ enabled: false });
+    selectionPlacement.load.mockResolvedValueOnce("above");
+
+    expect(await route({ type: "preferences.getSelectionPlacement" }, CONTENT)).toEqual(
+      success("above"),
+    );
+    expect(selectionPlacement.load).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a popup change the placement", async () => {
+    const { route, selectionPlacement } = setup();
+
+    expect(
+      await route({ type: "preferences.setSelectionPlacement", placement: "above" }, POPUP),
+    ).toEqual(success(null));
+    expect(selectionPlacement.save).toHaveBeenCalledExactlyOnceWith("above");
+  });
+
+  it("refuses to change the placement from a content script", async () => {
+    const { route, selectionPlacement } = setup();
+
+    expect(
+      await route({ type: "preferences.setSelectionPlacement", placement: "above" }, CONTENT),
+    ).toEqual(failure("forbidden_sender"));
+    expect(selectionPlacement.save).not.toHaveBeenCalled();
+  });
+
+  it("answers unknown when the placement cannot be stored", async () => {
+    const { route, selectionPlacement } = setup();
+    selectionPlacement.save.mockRejectedValueOnce(new Error("quota"));
+
+    expect(
+      await route({ type: "preferences.setSelectionPlacement", placement: "below" }, POPUP),
     ).toEqual(failure("unknown"));
   });
 });

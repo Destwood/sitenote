@@ -1,18 +1,30 @@
 import { FOCUS_RING } from "../control-classes";
-import { placeAbove, type AnchorRect } from "../placement";
+import { placeAbove, placeBelow, type AnchorRect } from "../placement";
 import { useViewport } from "../viewport";
 import { Z_INDEX } from "../z-index";
 
 export const SELECTION_BUTTON_SIZE = { width: 96, height: 32 };
 
+export type SelectionPlacement = "below" | "above";
+
+export const DEFAULT_SELECTION_PLACEMENT: SelectionPlacement = "below";
+
 export interface SelectionButtonProps {
   rect: AnchorRect;
   onClick: () => void;
+  placement?: SelectionPlacement;
 }
 
-export function SelectionButton({ rect, onClick }: SelectionButtonProps) {
+export function SelectionButton({
+  rect,
+  onClick,
+  placement = DEFAULT_SELECTION_PLACEMENT,
+}: SelectionButtonProps) {
   const viewport = useViewport();
-  const { left, top } = placeAbove(rect, SELECTION_BUTTON_SIZE, viewport);
+  const { left, top } =
+    placement === "above"
+      ? placeAbove(rect, SELECTION_BUTTON_SIZE, viewport)
+      : placeBelow(rect, SELECTION_BUTTON_SIZE, viewport);
 
   return (
     <button
