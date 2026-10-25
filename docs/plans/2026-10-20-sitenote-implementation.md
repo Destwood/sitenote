@@ -129,7 +129,7 @@ Done when: the demo link works for a visitor without the extension and the exten
 | Phase 2 | Create a Google OAuth client and add the Supabase callback URL; paste client id and secret into local Supabase config | Google sign-in |
 | Phase 7 | Generate a ClickUp personal token | Integration smoke test |
 | Phase 7 | Create a Resend account and API key, verify a sender domain or use the test sender | Email |
-| Phase 8 | Create a production Supabase project and put keys into `.env` and Vercel | Production backend |
+| Phase 8 | Create a production Supabase project and put keys into `.env` and Vercel (`SUPABASE_SECRET_KEY` is server-only, never `NEXT_PUBLIC_`) | Production backend |
 | Phase 8 | Import the GitHub repo into Vercel | Web deploy |
 | After MVP | Chrome Web Store developer account (one-time fee) if publishing there | Distribution |
 

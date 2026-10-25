@@ -2,7 +2,7 @@ import { expect, test } from "../../fixtures/extension";
 import { newEmail, openPopup } from "../../support/extension";
 import { WEB_ORIGIN, signInOnWeb, webAuthCookies } from "../../support/web-auth";
 
-test("a member signs in on the web, connects the extension and the web app signs out", async ({
+test("a member connects the extension and stays signed in on the web", async ({
   context,
   extensionId,
 }) => {
@@ -18,13 +18,13 @@ test("a member signs in on the web, connects the extension and the web app signs
   await page.getByRole("button", { name: "Connect the extension" }).click();
 
   await expect(page.getByTestId("extension-connected")).toBeVisible();
-  await expect.poll(() => webAuthCookies(context)).toEqual([]);
+  await expect.poll(() => webAuthCookies(context)).not.toEqual([]);
 
   const popup = await openPopup(context, extensionId);
   await expect(popup.getByTestId("account-email")).toHaveText(email);
 
   await page.goto(`${WEB_ORIGIN}/app`);
-  await expect(page).toHaveURL(/\/sign-in\?next=/);
+  await expect(page).toHaveURL(`${WEB_ORIGIN}/app`);
 });
 
 test("the popup sends a signed-out user to the connect page on the website", async ({
