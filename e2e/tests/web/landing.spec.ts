@@ -1,4 +1,7 @@
 import { expect, test } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+
+import { WEB_ORIGIN, signInOnWeb } from "../../support/web-auth";
 
 test("the landing page renders, opens the demo and logs no console errors", async ({ page }) => {
   const problems: string[] = [];
@@ -28,4 +31,17 @@ test("the landing page renders, opens the demo and logs no console errors", asyn
   await expect(
     page.getByRole("heading", { level: 1, name: "Comments that stay on the page" }),
   ).toBeVisible();
+});
+
+test("the landing header links to the dashboard for a signed-in member", async ({ page }) => {
+  await signInOnWeb(page, `e2e-${randomUUID()}@sitenote.test`);
+  await expect(page).toHaveURL(`${WEB_ORIGIN}/app`);
+
+  await page.goto(`${WEB_ORIGIN}/`);
+  const banner = page.getByRole("banner");
+  await expect(banner.getByRole("link", { name: "Dashboard" })).toBeVisible();
+  await expect(banner.getByRole("link", { name: "Sign in" })).toHaveCount(0);
+
+  await banner.getByRole("link", { name: "Dashboard" }).click();
+  await expect(page).toHaveURL(`${WEB_ORIGIN}/app`);
 });

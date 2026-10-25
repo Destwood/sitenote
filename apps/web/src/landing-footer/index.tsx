@@ -3,7 +3,11 @@ import Link from "next/link";
 const LINK_CLASS =
   "rounded-sm hover:text-neutral-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900";
 
-export function LandingFooter() {
+interface LandingFooterProps {
+  signedIn: boolean;
+}
+
+export function LandingFooter({ signedIn }: LandingFooterProps) {
   return (
     <footer className="border-t border-neutral-200">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-8 text-sm text-neutral-600">
@@ -31,8 +35,8 @@ export function LandingFooter() {
               </a>
             </li>
             <li>
-              <Link href="/sign-in" className={LINK_CLASS}>
-                Sign in
+              <Link href={signedIn ? "/app" : "/sign-in"} className={LINK_CLASS}>
+                {signedIn ? "Dashboard" : "Sign in"}
               </Link>
             </li>
           </ul>

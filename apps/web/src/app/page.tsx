@@ -8,6 +8,7 @@ import { LandingHeader } from "../landing-header";
 import { LandingHero } from "../landing-hero";
 import { LandingInstall } from "../landing-install";
 import { LandingSteps } from "../landing-steps";
+import { createSupabaseServerClient, getAuthenticatedUser } from "../supabase-server";
 
 const TITLE = "Sitenote | Figma-style comments on any live website";
 const DESCRIPTION =
@@ -20,10 +21,23 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
 
-export default function HomePage() {
+async function isSignedIn(): Promise<boolean> {
+  try {
+    const user = await getAuthenticatedUser(await createSupabaseServerClient());
+    return user !== null && !user.isAnonymous;
+  } catch {
+    return false;
+  }
+}
+
+export default async function HomePage() {
+  const signedIn = await isSignedIn();
   return (
     <>
-      <LandingHeader githubUrl={githubUrlFrom(process.env.NEXT_PUBLIC_GITHUB_URL)} />
+      <LandingHeader
+        githubUrl={githubUrlFrom(process.env.NEXT_PUBLIC_GITHUB_URL)}
+        signedIn={signedIn}
+      />
       <main id="main">
         <LandingHero />
         <LandingFeatures />
@@ -31,7 +45,7 @@ export default function HomePage() {
         <LandingInstall />
         <LandingFaq />
       </main>
-      <LandingFooter />
+      <LandingFooter signedIn={signedIn} />
     </>
   );
 }
