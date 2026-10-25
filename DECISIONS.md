@@ -920,3 +920,9 @@ All versions are pinned exactly. No other runtime dependency was added.
 - **Chosen:** the popup lists the threads of the open page by asking the content script, which already holds them (no second query), and clicking a thread opens it on the page and closes the popup. The tab that held "Site" is now "Comments": it shows the site controls and, once the site is enabled, the page's threads with the open count in the tab label. The site list stays in the dashboard. The "Comment button" setting is a "Button above" checkbox in the popup header instead of a select below the account panel.
 - **Alternatives:** a site-wide list from the database (needs a new query and a page navigation to open a thread), keeping the select (it took too much space, and the "Site" tab showed nothing useful once a site was enabled).
 - **Why:** in manual QA the setting took too much space and the "Site" tab showed nothing useful once a site was enabled. The content script already has the threads, so the list needs no new request, and opening a thread reuses the page's own dialog.
+
+## D-137 Recording pace for the product video
+
+- **Chosen:** slowMo 250 ms, typed text with a 55 ms key delay, pauses of 0.9 s between steps and 2.2 s on key frames, only in the media script.
+- **Alternatives:** slowing playback with `playbackRate` on the landing video (choppy frames), slowMo for the whole e2e suite (slower CI).
+- **Why:** manual QA found the video unreadable at machine speed.
