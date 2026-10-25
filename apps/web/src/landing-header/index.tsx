@@ -9,9 +9,10 @@ const SKIP_LINK_CLASS =
 
 interface LandingHeaderProps {
   githubUrl: string | null;
+  signedIn: boolean;
 }
 
-export function LandingHeader({ githubUrl }: LandingHeaderProps) {
+export function LandingHeader({ githubUrl, signedIn }: LandingHeaderProps) {
   return (
     <header className="sticky top-0 z-10 border-b border-neutral-200 bg-white/95 backdrop-blur">
       <a href="#main" className={SKIP_LINK_CLASS}>
@@ -48,8 +49,8 @@ export function LandingHeader({ githubUrl }: LandingHeaderProps) {
             </li>
           )}
           <li>
-            <Link href="/sign-in" className={SECONDARY_BUTTON_CLASS}>
-              Sign in
+            <Link href={signedIn ? "/app" : "/sign-in"} className={SECONDARY_BUTTON_CLASS}>
+              {signedIn ? "Dashboard" : "Sign in"}
             </Link>
           </li>
         </ul>
