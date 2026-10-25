@@ -2,7 +2,7 @@ import * as z from "zod/mini";
 
 import type { StorageAreaLike } from "../session-storage";
 
-const STORAGE_KEY = "sitenote.sites";
+export const ENABLEMENT_STORAGE_KEY = "sitenote.sites";
 
 const entrySchema = z.object({
   siteId: z.guid(),
@@ -24,8 +24,8 @@ export function createEnablementStore(area: StorageAreaLike): EnablementStore {
   let queue: Promise<unknown> = Promise.resolve();
 
   async function read(): Promise<Record<string, EnabledEntry>> {
-    const stored = await area.get(STORAGE_KEY);
-    const raw = stored[STORAGE_KEY];
+    const stored = await area.get(ENABLEMENT_STORAGE_KEY);
+    const raw = stored[ENABLEMENT_STORAGE_KEY];
     if (typeof raw !== "string") {
       return {};
     }
@@ -46,7 +46,7 @@ export function createEnablementStore(area: StorageAreaLike): EnablementStore {
   async function update(
     change: (map: Record<string, EnabledEntry>) => Record<string, EnabledEntry>,
   ): Promise<void> {
-    await area.set({ [STORAGE_KEY]: JSON.stringify(change(await read())) });
+    await area.set({ [ENABLEMENT_STORAGE_KEY]: JSON.stringify(change(await read())) });
   }
 
   return {

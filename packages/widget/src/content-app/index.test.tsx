@@ -117,6 +117,7 @@ function makeController(store: Store<ContentState>) {
     stop: vi.fn(),
     toggleCommentMode: vi.fn(() => true),
     exitCommentMode: vi.fn(),
+    commentOnContextTarget: vi.fn(() => false),
     toggleSidebar: vi.fn(),
     closeSidebar: vi.fn(),
     setShowResolved: vi.fn(),

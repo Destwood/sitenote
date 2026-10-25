@@ -63,7 +63,14 @@ test("the e2e build asks for the documented permissions and the fixture, example
   if (!isRecord(manifest)) {
     return;
   }
-  expect(manifest.permissions).toEqual(["storage", "identity", "alarms", "scripting", "activeTab"]);
+  expect(manifest.permissions).toEqual([
+    "storage",
+    "identity",
+    "alarms",
+    "scripting",
+    "activeTab",
+    "contextMenus",
+  ]);
   expect(manifest.optional_host_permissions).toEqual(["http://*/*", "https://*/*"]);
   expect(manifest.host_permissions).toEqual([
     "http://127.0.0.1/*",

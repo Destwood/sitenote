@@ -73,11 +73,6 @@ export async function enterCommentMode({ page, popup }: ReviewSession): Promise<
   await expect(page.getByRole("status").filter({ hasText: "Comment mode:" })).toBeVisible();
 }
 
-export async function exitCommentMode(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Exit", exact: true }).click();
-  await expect(hostOf(page)).toHaveAttribute("data-comment-mode", "off");
-}
-
 export async function submitNewThread(page: Page, body: string): Promise<void> {
   const dialog = page.getByRole("dialog", { name: "New thread" });
   await expect(dialog).toBeVisible();

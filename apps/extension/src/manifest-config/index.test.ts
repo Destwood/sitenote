@@ -76,6 +76,7 @@ describe("createManifest", () => {
       "alarms",
       "scripting",
       "activeTab",
+      "contextMenus",
     ]);
     expect(manifest.key).toMatch(/^MIIB/);
   });

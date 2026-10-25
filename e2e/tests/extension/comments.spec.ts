@@ -12,7 +12,6 @@ import {
   commentOnElement,
   deleteThreadsOnPage,
   enterCommentMode,
-  exitCommentMode,
   hostOf,
   openInSecondContext,
   openReviewPage,
@@ -210,7 +209,7 @@ test("threads follow the URL of a single page app", async ({ context, extensionI
   await commentOnElement(session, "#spa-action", { x: 20, y: 10 }, "Comment on the first page");
   await page.getByRole("button", { name: "Close thread" }).click();
   await expect(pinOf(page, 1)).toBeVisible();
-  await exitCommentMode(page);
+  await expect(hostOf(page)).toHaveAttribute("data-comment-mode", "off");
 
   await page.getByRole("link", { name: "Second page" }).click();
 
@@ -223,7 +222,7 @@ test("threads follow the URL of a single page app", async ({ context, extensionI
   await expect(pinOf(page, 1)).toBeVisible();
   await expect(hostOf(page)).toHaveAttribute("data-thread-count", "1");
   await page.getByRole("button", { name: "Close thread" }).click();
-  await exitCommentMode(page);
+  await expect(hostOf(page)).toHaveAttribute("data-comment-mode", "off");
 
   await page.getByRole("link", { name: "First page" }).click();
 
@@ -301,7 +300,7 @@ test("only people who may change the status see Resolve, and the pin follows it 
   }
 });
 
-test("Escape cancels a pending thread first and then leaves comment mode", async ({
+test("picking an element leaves comment mode and Escape cancels the pending thread", async ({
   context,
   extensionId,
 }) => {
@@ -316,17 +315,26 @@ test("Escape cancels a pending thread first and then leaves comment mode", async
 
   await page.locator("#cta").click({ position: { x: 20, y: 10 } });
   await expect(page.getByRole("dialog", { name: "New thread" })).toBeVisible();
+  await expect(hostOf(page)).toHaveAttribute("data-comment-mode", "off");
+  expect(await cursorOf()).toBe("auto");
+
   await page.keyboard.press("Escape");
 
   await expect(page.getByRole("dialog", { name: "New thread" })).toHaveCount(0);
   await expect(pinOf(page, 1, "pending")).toHaveCount(0);
-  await expect(hostOf(page)).toHaveAttribute("data-comment-mode", "on");
+  expect(await threadsOnPage(owner, `${FIXTURE_ORIGIN}${path}`)).toHaveLength(0);
+});
+
+test("Escape leaves comment mode when nothing is pending", async ({ context, extensionId }) => {
+  const path = "/p/escape-mode";
+  await ownerCleanup(`${FIXTURE_ORIGIN}${path}`);
+  const session = await openReviewPage(context, extensionId, OWNER, path);
+  const { page } = session;
+  await enterCommentMode(session);
 
   await page.locator("body").press("Escape");
 
   await expect(hostOf(page)).toHaveAttribute("data-comment-mode", "off");
-  expect(await cursorOf()).toBe("auto");
-  expect(await threadsOnPage(owner, `${FIXTURE_ORIGIN}${path}`)).toHaveLength(0);
 });
 
 test("a thread on the real public site example.com is created and restored", async ({

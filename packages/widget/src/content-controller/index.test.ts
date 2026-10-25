@@ -523,6 +523,7 @@ describe("comment mode", () => {
     expect(pending?.target.kind).toBe("element");
     expect(pending?.captureId).toBe(CAPTURE_ID);
     expect(state().activeThreadId).toBeNull();
+    expect(state().commentMode).toBe(false);
   });
 
   it("ignores clicks when comment mode is off", async () => {
@@ -545,7 +546,7 @@ describe("comment mode", () => {
     expect(state().commentMode).toBe(false);
   });
 
-  it("cancels a pending thread with the first Escape and exits with the second", async () => {
+  it("leaves comment mode after a pick and Escape cancels the pending thread", async () => {
     const { controller: api, state } = await setup();
     api.toggleCommentMode();
     under = element("#cta");
@@ -555,12 +556,11 @@ describe("comment mode", () => {
     await vi.waitFor(() => {
       expect(state().pending).not.toBeNull();
     });
+    expect(state().commentMode).toBe(false);
 
     element("#copy").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+
     expect(state().pending).toBeNull();
-    expect(state().commentMode).toBe(true);
-
-    element("#copy").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(state().commentMode).toBe(false);
   });
 
@@ -605,6 +605,82 @@ describe("comment mode", () => {
 
     expect(state().hover).toBeNull();
     expect(state().commentMode).toBe(false);
+  });
+});
+
+describe("commenting on the right-clicked element", () => {
+  function rightClick(target: Element): void {
+    target.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }),
+    );
+  }
+
+  it("returns false without a right-clicked element", async () => {
+    const { controller: api, state } = await setup();
+
+    expect(api.commentOnContextTarget()).toBe(false);
+    expect(state().pending).toBeNull();
+  });
+
+  it("starts a pending thread on the right-clicked element and leaves comment mode", async () => {
+    const { controller: api, state } = await setup();
+    api.toggleCommentMode();
+    rightClick(element("#cta"));
+
+    expect(api.commentOnContextTarget()).toBe(true);
+
+    await vi.waitFor(() => {
+      expect(state().pending).not.toBeNull();
+    });
+    const pending = state().pending;
+    expect(pending?.anchor.kind).toBe("element");
+    expect(pending?.target).toMatchObject({ kind: "element", element: element("#cta") });
+    expect(pending?.captureId).toBe(CAPTURE_ID);
+    expect(state().commentMode).toBe(false);
+  });
+
+  it("starts the thread without comment mode being on", async () => {
+    const { controller: api, state } = await setup();
+    rightClick(element("#copy"));
+
+    expect(api.commentOnContextTarget()).toBe(true);
+
+    await vi.waitFor(() => {
+      expect(state().pending).not.toBeNull();
+    });
+    expect(state().commentMode).toBe(false);
+  });
+
+  it("uses the stored target only once", async () => {
+    const { controller: api } = await setup();
+    rightClick(element("#cta"));
+
+    expect(api.commentOnContextTarget()).toBe(true);
+    expect(api.commentOnContextTarget()).toBe(false);
+  });
+
+  it("returns false when the right-clicked element has been removed", async () => {
+    const { controller: api, state } = await setup();
+    rightClick(element("#cta"));
+    element("#cta").remove();
+
+    expect(api.commentOnContextTarget()).toBe(false);
+    expect(state().pending).toBeNull();
+  });
+
+  it("ignores a right-click on the extension itself", async () => {
+    const { controller: api } = await setup();
+    rightClick(host);
+
+    expect(api.commentOnContextTarget()).toBe(false);
+  });
+
+  it("returns false when the site is not enabled", async () => {
+    const { controller: api, state } = await setup([], { getSiteInfo: () => success(null) });
+    rightClick(element("#cta"));
+
+    expect(state().status).toBe("disabled");
+    expect(api.commentOnContextTarget()).toBe(false);
   });
 });
 

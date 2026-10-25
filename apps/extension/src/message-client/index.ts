@@ -5,9 +5,11 @@ import {
   RESPONSE_SCHEMAS,
   authStateChangedSchema,
   commentModeResponseSchema,
+  commentOnElementResponseSchema,
   notificationsChangedSchema,
   type AuthState,
   type CommentModeState,
+  type CommentOnElementState,
   type DataByRequestType,
   type ExtensionRequest,
   type ExtensionRequestType,
@@ -36,6 +38,22 @@ export async function toggleCommentMode(tabId: number): Promise<MessageResult<Co
   try {
     const raw: unknown = await browser.tabs.sendMessage(tabId, { type: "commentMode.toggle" });
     const parsed = commentModeResponseSchema.safeParse(raw);
+    return parsed.success ? parsed.data : failure("page_unavailable");
+  } catch {
+    return failure("page_unavailable");
+  }
+}
+
+export async function commentOnElement(
+  tabId: number,
+): Promise<MessageResult<CommentOnElementState>> {
+  try {
+    const raw: unknown = await browser.tabs.sendMessage(
+      tabId,
+      { type: "commentMode.commentOnElement" },
+      { frameId: 0 },
+    );
+    const parsed = commentOnElementResponseSchema.safeParse(raw);
     return parsed.success ? parsed.data : failure("page_unavailable");
   } catch {
     return failure("page_unavailable");

@@ -273,3 +273,11 @@ export const commentModeStateSchema = z.object({ active: z.boolean() });
 export type CommentModeState = z.infer<typeof commentModeStateSchema>;
 
 export const commentModeResponseSchema = resultSchema(commentModeStateSchema);
+
+export const commentOnElementSchema = z.object({ type: z.literal("commentMode.commentOnElement") });
+
+export const commentOnElementStateSchema = z.object({ started: z.boolean() });
+
+export type CommentOnElementState = z.infer<typeof commentOnElementStateSchema>;
+
+export const commentOnElementResponseSchema = resultSchema(commentOnElementStateSchema);

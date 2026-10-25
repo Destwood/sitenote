@@ -41,7 +41,7 @@ export function createManifest({ e2e, webUrl }: ManifestOptions): UserManifest {
     name: "Sitenote",
     description: "Figma-style comments on any live website.",
     key: EXTENSION_PUBLIC_KEY,
-    permissions: ["storage", "identity", "alarms", "scripting", "activeTab"],
+    permissions: ["storage", "identity", "alarms", "scripting", "activeTab", "contextMenus"],
     optional_host_permissions: ["http://*/*", "https://*/*"],
     ...(matches.length > 0 ? { externally_connectable: { matches } } : {}),
     ...(e2e ? { host_permissions: [...E2E_HOST_PERMISSIONS] } : {}),

@@ -1,5 +1,11 @@
 import { SITENOTE_ROOT_TAG } from "@sitenote/core";
-import { createWidget, failure, success, type ContentState } from "@sitenote/widget";
+import {
+  createWidget,
+  failure,
+  success,
+  type ContentState,
+  type MessageResult,
+} from "@sitenote/widget";
 import { browser } from "wxt/browser";
 import type { ContentScriptContext } from "wxt/utils/content-script-context";
 import {
@@ -74,15 +80,18 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
     syncHost(state);
   });
 
+  function whenReady<Data>(run: () => Data): MessageResult<Data> {
+    const { status } = widget.store.getState();
+    if (status !== "ready") {
+      return failure(status === "signedOut" ? "unauthorized" : "page_unavailable");
+    }
+    return success(run());
+  }
+
   const toggleListener = createToggleListener({
     extensionId: browser.runtime.id,
-    toggle: () => {
-      const { status } = widget.store.getState();
-      if (status !== "ready") {
-        return failure(status === "signedOut" ? "unauthorized" : "page_unavailable");
-      }
-      return success({ active: widget.toggleCommentMode() });
-    },
+    toggle: () => whenReady(() => ({ active: widget.toggleCommentMode() })),
+    commentOnElement: () => whenReady(() => ({ started: widget.commentOnContextTarget() })),
   });
   browser.runtime.onMessage.addListener(toggleListener);
   ctx.onInvalidated(() => {
