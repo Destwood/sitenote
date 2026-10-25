@@ -51,6 +51,7 @@ describe("GET /extension/connect", () => {
 
     expect(screen.getByRole("heading", { name: "Connect the extension" })).toBeTruthy();
     expect(screen.getByText("ada@example.com")).toBeTruthy();
+    expect(screen.getByText(/You stay signed in here\./)).toBeTruthy();
     expect(screen.getByTestId("connect").textContent).toBe("abcdefghijklmnopabcdefghijklmnop");
     expect(mocks.redirect).not.toHaveBeenCalled();
   });

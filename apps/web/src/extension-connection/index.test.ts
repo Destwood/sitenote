@@ -12,7 +12,7 @@ vi.mock("../supabase-browser", () => ({
 vi.mock("../extension-bridge", () => ({ sendSessionToExtension: mocks.sendSessionToExtension }));
 vi.mock("../web-session", () => ({ forgetWebSession: mocks.forgetWebSession }));
 
-import { connectExtension } from ".";
+import { connectExtension, connectMemberExtension } from ".";
 
 const EXTENSION_ID = "abcdefghijklmnopabcdefghijklmnop";
 const SESSION = { access_token: "access", refresh_token: "refresh" };
@@ -83,5 +83,73 @@ describe("connectExtension", () => {
     mocks.getSession.mockRejectedValue(new Error("offline"));
 
     expect(await connectExtension(EXTENSION_ID)).toEqual({ status: "failed" });
+  });
+});
+
+const MINTED = { accessToken: "minted-access", refreshToken: "minted-refresh" };
+
+function sessionFetch(response: Response) {
+  return vi.fn<typeof fetch>(() => Promise.resolve(response));
+}
+
+describe("connectMemberExtension", () => {
+  it("hands the minted session over and keeps the web session", async () => {
+    const fetcher = sessionFetch(Response.json(MINTED));
+
+    expect(await connectMemberExtension(EXTENSION_ID, fetcher)).toEqual({
+      status: "connected",
+      webCopyCleared: true,
+    });
+    expect(fetcher).toHaveBeenCalledWith("/extension/connect/session", {
+      method: "POST",
+      credentials: "same-origin",
+    });
+    expect(mocks.sendSessionToExtension).toHaveBeenCalledWith(EXTENSION_ID, {
+      accessToken: "minted-access",
+      refreshToken: "minted-refresh",
+    });
+    expect(mocks.forgetWebSession).not.toHaveBeenCalled();
+    expect(mocks.getSession).not.toHaveBeenCalled();
+  });
+
+  it("fails when the session endpoint refuses", async () => {
+    expect(
+      await connectMemberExtension(EXTENSION_ID, sessionFetch(new Response(null, { status: 502 }))),
+    ).toEqual({
+      status: "failed",
+    });
+    expect(mocks.sendSessionToExtension).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["an empty access token", { accessToken: "", refreshToken: "refresh" }],
+    ["a missing refresh token", { accessToken: "access" }],
+    ["a body that is not JSON", "not json"],
+  ])("fails on %s", async (_label, body) => {
+    const response = typeof body === "string" ? new Response(body) : Response.json(body);
+
+    expect(await connectMemberExtension(EXTENSION_ID, sessionFetch(response))).toEqual({
+      status: "failed",
+    });
+    expect(mocks.sendSessionToExtension).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ status: "unavailable" }, { status: "missing" }],
+    [{ status: "rejected", code: "already_signed_in" }, { status: "alreadySignedIn" }],
+    [{ status: "rejected", code: "session_rejected" }, { status: "failed" }],
+  ])("maps the extension result %o", async (result, expected) => {
+    mocks.sendSessionToExtension.mockResolvedValue(result);
+
+    expect(await connectMemberExtension(EXTENSION_ID, sessionFetch(Response.json(MINTED)))).toEqual(
+      expected,
+    );
+    expect(mocks.forgetWebSession).not.toHaveBeenCalled();
+  });
+
+  it("fails when the network throws", async () => {
+    const fetcher = vi.fn<typeof fetch>(() => Promise.reject(new TypeError("offline")));
+
+    expect(await connectMemberExtension(EXTENSION_ID, fetcher)).toEqual({ status: "failed" });
   });
 });

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { connectExtension, type ExtensionConnection } from "../extension-connection";
+import { connectMemberExtension, type ExtensionConnection } from "../extension-connection";
 import { InstallInstructions } from "../extension-install";
 import { ERROR_CLASS, PRIMARY_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
 
@@ -17,7 +17,7 @@ export function ExtensionConnect({ extensionId }: ExtensionConnectProps) {
 
   async function connect() {
     setView({ status: "connecting" });
-    setView(await connectExtension(extensionId));
+    setView(await connectMemberExtension(extensionId));
   }
 
   switch (view.status) {
@@ -39,17 +39,9 @@ export function ExtensionConnect({ extensionId }: ExtensionConnectProps) {
       );
     case "connected":
       return (
-        <div className="flex flex-col gap-2">
-          <p role="status" data-testid="extension-connected" className="font-medium">
-            The extension is connected. You can close this tab.
-          </p>
-          {view.webCopyCleared ? null : (
-            <p className="text-sm text-neutral-600">
-              This browser still holds a copy of your web session. Close this tab and do not sign in
-              to the web app with it.
-            </p>
-          )}
-        </div>
+        <p role="status" data-testid="extension-connected" className="font-medium">
+          The extension is connected. You are still signed in here.
+        </p>
       );
     case "missing":
       return (
