@@ -4,11 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { type AuthState } from "../messages";
 import { failure, success } from "@sitenote/widget";
-import { PopupApp, notificationsTabLabel } from ".";
+import { PopupApp, commentsTabLabel, notificationsTabLabel } from ".";
 
 const mocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
   onAuthStateChanged: vi.fn(),
+  threadsMounted: vi.fn(),
 }));
 
 vi.mock("../message-client", () => ({
@@ -17,8 +18,54 @@ vi.mock("../message-client", () => ({
 }));
 
 vi.mock("../site-panel", () => ({
-  SitePanel: ({ webUrl }: { webUrl: string }) => <div data-testid="site-panel">{webUrl}</div>,
+  SitePanel: ({
+    webUrl,
+    onStateChange,
+  }: {
+    webUrl: string;
+    onStateChange?: (enabled: boolean, tabId: number | null) => void;
+  }) => (
+    <>
+      <div data-testid="site-panel">{webUrl}</div>
+      <button
+        type="button"
+        onClick={() => {
+          onStateChange?.(true, 7);
+        }}
+      >
+        Report enabled
+      </button>
+    </>
+  ),
 }));
+
+vi.mock("../page-threads-panel", async () => {
+  const { useEffect } = await import("react");
+  return {
+    PageThreadsPanel: ({
+      tabId,
+      onCount,
+    }: {
+      tabId: number;
+      onCount: (openCount: number) => void;
+    }) => {
+      useEffect(() => {
+        mocks.threadsMounted(tabId);
+      }, [tabId]);
+      return (
+        <button
+          type="button"
+          data-testid="page-threads-panel"
+          onClick={() => {
+            onCount(2);
+          }}
+        >
+          Report open threads
+        </button>
+      );
+    },
+  };
+});
 
 vi.mock("../selection-placement-control", () => ({
   SelectionPlacementControl: () => <div data-testid="selection-placement-control" />,
@@ -52,6 +99,7 @@ let unsubscribe: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   localStorage.clear();
   mocks.sendMessage.mockReset();
+  mocks.threadsMounted.mockReset();
   unsubscribe = vi.fn();
   mocks.onAuthStateChanged.mockReset();
   mocks.onAuthStateChanged.mockImplementation((listener: (state: AuthState) => void) => {
@@ -117,24 +165,30 @@ describe("PopupApp", () => {
     expect(notificationsTabLabel(120)).toBe("Notifications (120)");
   });
 
-  it("shows the Site tab first and the notifications panel hidden behind its tab", async () => {
+  it("labels the comments tab with the open threads of the page when they are known", () => {
+    expect(commentsTabLabel(null)).toBe("Comments");
+    expect(commentsTabLabel(0)).toBe("Comments (0)");
+    expect(commentsTabLabel(4)).toBe("Comments (4)");
+  });
+
+  it("shows the Comments tab first and the notifications panel hidden behind its tab", async () => {
     const user = userEvent.setup();
     mocks.sendMessage.mockResolvedValue(success(SIGNED_IN));
     render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
     await screen.findByTestId("site-panel");
 
-    const site = screen.getByRole("tab", { name: "Site" });
+    const comments = screen.getByRole("tab", { name: "Comments" });
     const notifications = screen.getByRole("tab", { name: "Notifications" });
-    expect(site.getAttribute("aria-selected")).toBe("true");
+    expect(comments.getAttribute("aria-selected")).toBe("true");
     expect(notifications.getAttribute("aria-selected")).toBe("false");
-    expect(screen.getByRole("tabpanel", { name: "Site" })).toBeTruthy();
+    expect(screen.getByRole("tabpanel", { name: "Comments" })).toBeTruthy();
     expect(screen.queryByRole("tabpanel", { name: "Notifications" })).toBeNull();
 
     await user.click(notifications);
 
     expect(notifications.getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("tabpanel", { name: "Notifications" })).toBeTruthy();
-    expect(screen.queryByRole("tabpanel", { name: "Site" })).toBeNull();
+    expect(screen.queryByRole("tabpanel", { name: "Comments" })).toBeNull();
     expect(notifications.getAttribute("aria-controls")).toBe(
       screen.getByRole("tabpanel", { name: "Notifications" }).getAttribute("id"),
     );
@@ -157,24 +211,24 @@ describe("PopupApp", () => {
     mocks.sendMessage.mockResolvedValue(success(SIGNED_IN));
     render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
     await screen.findByTestId("site-panel");
-    const site = screen.getByRole("tab", { name: "Site" });
+    const comments = screen.getByRole("tab", { name: "Comments" });
     const notifications = screen.getByRole("tab", { name: "Notifications" });
 
-    site.focus();
+    comments.focus();
     await user.keyboard("{ArrowRight}");
     expect(document.activeElement).toBe(notifications);
     expect(notifications.getAttribute("aria-selected")).toBe("true");
     expect(notifications.getAttribute("tabindex")).toBe("0");
-    expect(site.getAttribute("tabindex")).toBe("-1");
+    expect(comments.getAttribute("tabindex")).toBe("-1");
 
     await user.keyboard("{ArrowRight}");
-    expect(document.activeElement).toBe(site);
+    expect(document.activeElement).toBe(comments);
 
     await user.keyboard("{ArrowLeft}");
     expect(document.activeElement).toBe(notifications);
 
     await user.keyboard("{Home}");
-    expect(document.activeElement).toBe(site);
+    expect(document.activeElement).toBe(comments);
 
     await user.keyboard("{End}");
     expect(document.activeElement).toBe(notifications);
@@ -187,6 +241,63 @@ describe("PopupApp", () => {
 
     expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.queryByTestId("notifications-panel")).toBeNull();
+  });
+
+  it("lists the page's threads under the site panel only once the site is enabled", async () => {
+    const user = userEvent.setup();
+    mocks.sendMessage.mockResolvedValue(success(SIGNED_IN));
+    render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
+    await screen.findByTestId("site-panel");
+    expect(screen.queryByTestId("page-threads-panel")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Report enabled" }));
+
+    expect(screen.getByTestId("page-threads-panel")).toBeTruthy();
+    expect(mocks.threadsMounted).toHaveBeenCalledWith(7);
+  });
+
+  it("labels the comments tab with the open threads the page reports", async () => {
+    const user = userEvent.setup();
+    mocks.sendMessage.mockResolvedValue(success(SIGNED_IN));
+    render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
+    await screen.findByTestId("site-panel");
+    await user.click(screen.getByRole("button", { name: "Report enabled" }));
+
+    await user.click(screen.getByTestId("page-threads-panel"));
+
+    expect(screen.getByRole("tab", { name: "Comments (2)" })).toBeTruthy();
+  });
+
+  it("lists the page's threads again each time the comments tab is opened", async () => {
+    const user = userEvent.setup();
+    mocks.sendMessage.mockResolvedValue(success(SIGNED_IN));
+    render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
+    await screen.findByTestId("site-panel");
+    await user.click(screen.getByRole("button", { name: "Report enabled" }));
+    expect(mocks.threadsMounted).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("tab", { name: "Notifications" }));
+    await user.click(screen.getByRole("tab", { name: "Comments" }));
+
+    expect(mocks.threadsMounted).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows the comment button setting in the header only to a signed-in user", async () => {
+    mocks.sendMessage.mockResolvedValue(success(SIGNED_OUT));
+    const { unmount } = render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
+    await screen.findByLabelText("Email");
+    expect(screen.queryByTestId("selection-placement-control")).toBeNull();
+    unmount();
+
+    mocks.sendMessage.mockResolvedValue(success(SIGNED_IN));
+    render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
+
+    expect(await screen.findByTestId("selection-placement-control")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("heading", { name: "Sitenote" })
+        .parentElement?.contains(screen.getByTestId("selection-placement-control")),
+    ).toBe(true);
   });
 
   it("follows a state broadcast from the background", async () => {

@@ -1,12 +1,12 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { ERROR_CLASS, INPUT_CLASS } from "../form-controls";
 import { sendMessage } from "../message-client";
 import { type SelectionPlacement } from "../messages";
 import { ERROR_MESSAGES, type ErrorCode } from "@sitenote/widget";
 
+const ABOVE_HINT = "Show the Comment button above selected text";
+
 export function SelectionPlacementControl() {
-  const selectId = useId();
   const [placement, setPlacement] = useState<SelectionPlacement>("below");
   const [error, setError] = useState<ErrorCode | null>(null);
 
@@ -37,23 +37,20 @@ export function SelectionPlacementControl() {
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <label htmlFor={selectId} className="text-sm font-semibold text-neutral-900">
-        Comment button
+    <div className="flex flex-col items-end gap-1">
+      <label title={ABOVE_HINT} className="flex items-center gap-1 text-xs text-neutral-600">
+        <input
+          type="checkbox"
+          checked={placement === "above"}
+          onChange={(event) => {
+            void handleChange(event.target.checked ? "above" : "below");
+          }}
+          className="size-4 accent-neutral-900"
+        />
+        Button above
       </label>
-      <select
-        id={selectId}
-        value={placement}
-        onChange={(event) => {
-          void handleChange(event.target.value === "above" ? "above" : "below");
-        }}
-        className={INPUT_CLASS}
-      >
-        <option value="below">Below selection</option>
-        <option value="above">Above selection</option>
-      </select>
       {error === null ? null : (
-        <p role="alert" className={ERROR_CLASS}>
+        <p role="alert" className="text-xs text-red-800">
           {ERROR_MESSAGES[error]}
         </p>
       )}

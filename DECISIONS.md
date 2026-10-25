@@ -914,3 +914,9 @@ All versions are pinned exactly. No other runtime dependency was added.
 - **Chosen:** `/` is rendered per request. `HomePage` reads the user with `createSupabaseServerClient` and `getAuthenticatedUser` and passes `signedIn` to `LandingHeader` and `LandingFooter`. For a member (signed in and not anonymous) both show "Dashboard" linking to `/app` in place of "Sign in". Anonymous demo guests count as signed out. A failed read (the helper throws) falls back to signed out, so the landing always renders.
 - **Alternatives:** a client-side session check after hydration (keeps the page static but flashes "Sign in" first), a redirect from `/` to `/app` for members (hides the landing from members).
 - **Why:** in manual QA members kept signing in again from the landing. One cookie read per request is cheap and avoids the flash.
+
+## D-136 Popup Comments tab and the compact button setting
+
+- **Chosen:** the popup lists the threads of the open page by asking the content script, which already holds them (no second query), and clicking a thread opens it on the page and closes the popup. The tab that held "Site" is now "Comments": it shows the site controls and, once the site is enabled, the page's threads with the open count in the tab label. The site list stays in the dashboard. The "Comment button" setting is a "Button above" checkbox in the popup header instead of a select below the account panel.
+- **Alternatives:** a site-wide list from the database (needs a new query and a page navigation to open a thread), keeping the select (it took too much space, and the "Site" tab showed nothing useful once a site was enabled).
+- **Why:** in manual QA the setting took too much space and the "Site" tab showed nothing useful once a site was enabled. The content script already has the threads, so the list needs no new request, and opening a thread reuses the page's own dialog.

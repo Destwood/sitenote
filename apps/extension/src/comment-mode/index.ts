@@ -1,10 +1,13 @@
 import {
   commentModeToggleSchema,
   commentOnElementSchema,
+  pageOpenThreadSchema,
+  pageThreadsRequestSchema,
   type CommentModeState,
   type CommentOnElementState,
+  type PageOpenThreadState,
 } from "../messages";
-import { type MessageResult } from "@sitenote/widget";
+import { type MessageResult, type PageThreadSummary } from "@sitenote/widget";
 
 export interface ToggleSender {
   id?: string | undefined;
@@ -15,13 +18,19 @@ export interface ToggleListenerDeps {
   extensionId: string;
   toggle: () => MessageResult<CommentModeState>;
   commentOnElement: () => MessageResult<CommentOnElementState>;
+  listThreads: () => MessageResult<PageThreadSummary[]>;
+  openThread: (threadId: string) => MessageResult<PageOpenThreadState>;
 }
 
 export type ToggleListener = (
   message: unknown,
   sender: ToggleSender,
   sendResponse: (
-    response: MessageResult<CommentModeState> | MessageResult<CommentOnElementState>,
+    response:
+      | MessageResult<CommentModeState>
+      | MessageResult<CommentOnElementState>
+      | MessageResult<PageThreadSummary[]>
+      | MessageResult<PageOpenThreadState>,
   ) => void,
 ) => void;
 
@@ -30,10 +39,15 @@ export function createToggleListener(deps: ToggleListenerDeps): ToggleListener {
     if (sender.id !== deps.extensionId || sender.tab !== undefined) {
       return;
     }
+    const open = pageOpenThreadSchema.safeParse(message);
     if (commentModeToggleSchema.safeParse(message).success) {
       sendResponse(deps.toggle());
     } else if (commentOnElementSchema.safeParse(message).success) {
       sendResponse(deps.commentOnElement());
+    } else if (pageThreadsRequestSchema.safeParse(message).success) {
+      sendResponse(deps.listThreads());
+    } else if (open.success) {
+      sendResponse(deps.openThread(open.data.threadId));
     }
   };
 }

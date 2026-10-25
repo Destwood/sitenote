@@ -1,18 +1,29 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { failure, success, type MessageResult } from "@sitenote/widget";
+import { failure, success, type MessageResult, type PageThreadSummary } from "@sitenote/widget";
 import { createToggleListener } from ".";
-import type { CommentModeState, CommentOnElementState } from "../messages";
+import type { CommentModeState, CommentOnElementState, PageOpenThreadState } from "../messages";
 
 const EXTENSION_ID = "anefihllkbkenhjbjggfndgemgkfaeoa";
 const TOGGLE = { type: "commentMode.toggle" };
 const COMMENT_ON_ELEMENT = { type: "commentMode.commentOnElement" };
+const LIST_THREADS = { type: "page.listThreads" };
+const OPEN_THREAD = { type: "page.openThread", threadId: "30000000-0000-4000-8000-000000000001" };
 
 function listenerWith(
   toggle: () => MessageResult<CommentModeState> = () => success({ active: true }),
   commentOnElement: () => MessageResult<CommentOnElementState> = () => success({ started: true }),
+  listThreads: () => MessageResult<PageThreadSummary[]> = () => success([]),
+  openThread: (threadId: string) => MessageResult<PageOpenThreadState> = () =>
+    success({ opened: true }),
 ) {
-  return createToggleListener({ extensionId: EXTENSION_ID, toggle, commentOnElement });
+  return createToggleListener({
+    extensionId: EXTENSION_ID,
+    toggle,
+    commentOnElement,
+    listThreads,
+    openThread,
+  });
 }
 
 describe("createToggleListener", () => {
@@ -55,6 +66,42 @@ describe("createToggleListener", () => {
     )(COMMENT_ON_ELEMENT, { id: EXTENSION_ID }, respond);
 
     expect(respond).toHaveBeenCalledExactlyOnceWith(failure("page_unavailable"));
+  });
+
+  it("answers a list threads request from the popup with the page's threads", () => {
+    const threads: PageThreadSummary[] = [
+      {
+        id: "30000000-0000-4000-8000-000000000001",
+        number: 1,
+        status: "open",
+        excerpt: "Hello",
+        authorName: "Max",
+        replies: 0,
+        detached: false,
+      },
+    ];
+    const listThreads = vi.fn(() => success(threads));
+    const respond = vi.fn();
+
+    listenerWith(undefined, undefined, listThreads)(LIST_THREADS, { id: EXTENSION_ID }, respond);
+
+    expect(listThreads).toHaveBeenCalledTimes(1);
+    expect(respond).toHaveBeenCalledExactlyOnceWith(success(threads));
+  });
+
+  it("answers an open thread request with the thread id and the result", () => {
+    const openThread = vi.fn(() => success({ opened: false }));
+    const respond = vi.fn();
+
+    listenerWith(
+      undefined,
+      undefined,
+      undefined,
+      openThread,
+    )(OPEN_THREAD, { id: EXTENSION_ID }, respond);
+
+    expect(openThread).toHaveBeenCalledExactlyOnceWith(OPEN_THREAD.threadId);
+    expect(respond).toHaveBeenCalledExactlyOnceWith(success({ opened: false }));
   });
 
   it.each([

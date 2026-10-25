@@ -292,3 +292,28 @@ export const commentOnElementStateSchema = z.object({ started: z.boolean() });
 export type CommentOnElementState = z.infer<typeof commentOnElementStateSchema>;
 
 export const commentOnElementResponseSchema = resultSchema(commentOnElementStateSchema);
+
+export const pageThreadsRequestSchema = z.object({ type: z.literal("page.listThreads") });
+
+export const pageThreadSummarySchema = z.object({
+  id: idSchema,
+  number: z.int().check(z.positive()),
+  status: z.enum(THREAD_STATUSES),
+  excerpt: z.string(),
+  authorName: z.string(),
+  replies: z.int().check(z.nonnegative()),
+  detached: z.boolean(),
+});
+
+export const pageThreadsResponseSchema = resultSchema(z.array(pageThreadSummarySchema));
+
+export const pageOpenThreadSchema = z.object({
+  type: z.literal("page.openThread"),
+  threadId: idSchema,
+});
+
+export const pageOpenThreadStateSchema = z.object({ opened: z.boolean() });
+
+export type PageOpenThreadState = z.infer<typeof pageOpenThreadStateSchema>;
+
+export const pageOpenThreadResponseSchema = resultSchema(pageOpenThreadStateSchema);

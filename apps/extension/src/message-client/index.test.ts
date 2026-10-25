@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { failure, success } from "@sitenote/widget";
 import {
   commentOnElement,
+  listPageThreads,
   onAuthStateChanged,
   onNotificationsChanged,
+  openPageThread,
   sendMessage,
   toggleCommentMode,
 } from ".";
@@ -209,6 +211,80 @@ describe("commentOnElement", () => {
     mocks.tabsSendMessage.mockResolvedValue({ started: true });
 
     expect(await commentOnElement(7)).toEqual(failure("page_unavailable"));
+  });
+});
+
+describe("listPageThreads", () => {
+  const SUMMARY = {
+    id: "30000000-0000-4000-8000-000000000001",
+    number: 1,
+    status: "open",
+    excerpt: "Hello",
+    authorName: "Max",
+    replies: 0,
+    detached: false,
+  } as const;
+
+  it("asks the top frame of the tab for its threads and returns them", async () => {
+    mocks.tabsSendMessage.mockResolvedValue(success([SUMMARY]));
+
+    expect(await listPageThreads(7)).toEqual(success([SUMMARY]));
+    expect(mocks.tabsSendMessage).toHaveBeenCalledWith(
+      7,
+      { type: "page.listThreads" },
+      { frameId: 0 },
+    );
+  });
+
+  it("passes the content script's own failure through", async () => {
+    mocks.tabsSendMessage.mockResolvedValue(failure("unauthorized"));
+
+    expect(await listPageThreads(7)).toEqual(failure("unauthorized"));
+  });
+
+  it("says the page is unavailable when there is no content script", async () => {
+    mocks.tabsSendMessage.mockRejectedValue(new Error("Could not establish connection."));
+
+    expect(await listPageThreads(7)).toEqual(failure("page_unavailable"));
+  });
+
+  it("says the page is unavailable for an answer of the wrong shape", async () => {
+    mocks.tabsSendMessage.mockResolvedValue(success([{ ...SUMMARY, replies: -1 }]));
+
+    expect(await listPageThreads(7)).toEqual(failure("page_unavailable"));
+  });
+});
+
+describe("openPageThread", () => {
+  const THREAD_ID = "30000000-0000-4000-8000-000000000001";
+
+  it("asks the top frame of the tab to open the thread and returns the result", async () => {
+    mocks.tabsSendMessage.mockResolvedValue(success({ opened: true }));
+
+    expect(await openPageThread(7, THREAD_ID)).toEqual(success({ opened: true }));
+    expect(mocks.tabsSendMessage).toHaveBeenCalledWith(
+      7,
+      { type: "page.openThread", threadId: THREAD_ID },
+      { frameId: 0 },
+    );
+  });
+
+  it("passes the content script's own failure through", async () => {
+    mocks.tabsSendMessage.mockResolvedValue(failure("page_unavailable"));
+
+    expect(await openPageThread(7, THREAD_ID)).toEqual(failure("page_unavailable"));
+  });
+
+  it("says the page is unavailable when there is no content script", async () => {
+    mocks.tabsSendMessage.mockRejectedValue(new Error("Could not establish connection."));
+
+    expect(await openPageThread(7, THREAD_ID)).toEqual(failure("page_unavailable"));
+  });
+
+  it("says the page is unavailable for an answer of the wrong shape", async () => {
+    mocks.tabsSendMessage.mockResolvedValue(success({ opened: "yes" }));
+
+    expect(await openPageThread(7, THREAD_ID)).toEqual(failure("page_unavailable"));
   });
 });
 
