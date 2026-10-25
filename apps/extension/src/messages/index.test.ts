@@ -8,6 +8,8 @@ import {
   authStateSchema,
   commentModeResponseSchema,
   commentModeToggleSchema,
+  commentOnElementResponseSchema,
+  commentOnElementSchema,
   dataRequestSchema,
   notificationsChangedSchema,
   pageClientMessageSchema,
@@ -532,5 +534,16 @@ describe("comment mode messages", () => {
     expect(commentModeResponseSchema.safeParse(success({ active: true })).success).toBe(true);
     expect(commentModeResponseSchema.safeParse(failure("page_unavailable")).success).toBe(true);
     expect(commentModeResponseSchema.safeParse(success({ active: "yes" })).success).toBe(false);
+  });
+
+  it("accepts the comment on element request and its response", () => {
+    expect(commentOnElementSchema.safeParse({ type: "commentMode.commentOnElement" }).success).toBe(
+      true,
+    );
+    expect(commentOnElementResponseSchema.safeParse(success({ started: true })).success).toBe(true);
+    expect(commentOnElementResponseSchema.safeParse(failure("unauthorized")).success).toBe(true);
+    expect(commentOnElementResponseSchema.safeParse(success({ started: "yes" })).success).toBe(
+      false,
+    );
   });
 });

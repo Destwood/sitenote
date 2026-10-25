@@ -17,7 +17,7 @@ import {
   resolveAnchor,
 } from "../anchor-target";
 import { createDocumentStyle } from "../document-style";
-import { createPicker } from "../comment-picker";
+import { createPicker, type PickPoint } from "../comment-picker";
 import { createPinTracker, type Measurements, type TrackedTarget } from "../pin-tracker";
 import { createStore, type Store } from "../store";
 import { createTextHighlighter } from "../text-highlighter";
@@ -88,6 +88,7 @@ export interface ContentController {
   stop: () => void;
   toggleCommentMode: () => boolean;
   exitCommentMode: () => void;
+  commentOnContextTarget: () => boolean;
   toggleSidebar: () => void;
   closeSidebar: () => void;
   setShowResolved: (show: boolean) => void;
@@ -166,6 +167,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
   let capturing = false;
   let pageLoaded = false;
   let deactivate: (() => void) | null = null;
+  let contextTarget: { element: Element; point: PickPoint } | null = null;
 
   const tracker = createPinTracker({
     win,
@@ -182,13 +184,18 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       store.setState((state) => ({ ...state, hover: hover === null ? null : hover.rect }));
     },
     onPick: (element, point) => {
-      const anchor = createElementAnchor(element, point);
-      void beginCaptured({
-        anchor,
-        target: { kind: "element", element, offset: anchor.offset },
-      });
+      setCommentMode(false);
+      beginOnElement(element, point);
     },
   });
+
+  function beginOnElement(element: Element, point: PickPoint): void {
+    const anchor = createElementAnchor(element, point);
+    void beginCaptured({
+      anchor,
+      target: { kind: "element", element, offset: anchor.offset },
+    });
+  }
 
   function pushToast(toast: Omit<ToastView, "id">): void {
     toastCounter += 1;
@@ -545,12 +552,22 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
         void loadScreenshot(state.activeThreadId);
       }
     });
+    const handleContextMenu = (event: MouseEvent): void => {
+      const target = event.target;
+      contextTarget =
+        target instanceof Element && !deps.isOwn(target)
+          ? { element: target, point: { clientX: event.clientX, clientY: event.clientY } }
+          : null;
+    };
     win.addEventListener("keydown", handleKeyDown, true);
     win.addEventListener("hashchange", openThreadFromHash);
+    doc.addEventListener("contextmenu", handleContextMenu, { capture: true, passive: true });
     syncTargets(seen);
     deactivate = () => {
       win.removeEventListener("keydown", handleKeyDown, true);
       win.removeEventListener("hashchange", openThreadFromHash);
+      doc.removeEventListener("contextmenu", handleContextMenu, { capture: true });
+      contextTarget = null;
       unsubscribe();
       stopSelection();
       stopDom();
@@ -726,6 +743,16 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     },
     exitCommentMode: () => {
       setCommentMode(false);
+    },
+    commentOnContextTarget: () => {
+      const stored = contextTarget;
+      contextTarget = null;
+      if (store.getState().status !== "ready" || !stored?.element.isConnected) {
+        return false;
+      }
+      setCommentMode(false);
+      beginOnElement(stored.element, stored.point);
+      return true;
     },
     toggleSidebar: () => {
       store.setState((state) => ({ ...state, sidebarOpen: !state.sidebarOpen }));

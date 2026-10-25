@@ -22,6 +22,7 @@ export interface Widget {
   start: ContentController["start"];
   stop: ContentController["stop"];
   toggleCommentMode: ContentController["toggleCommentMode"];
+  commentOnContextTarget: ContentController["commentOnContextTarget"];
   selectThread: ContentController["selectThread"];
   render: (container: HTMLElement) => () => void;
 }
@@ -77,6 +78,7 @@ export function createWidget({ backend, document, window }: WidgetOptions): Widg
     start: controller.start,
     stop: controller.stop,
     toggleCommentMode: controller.toggleCommentMode,
+    commentOnContextTarget: controller.commentOnContextTarget,
     selectThread: controller.selectThread,
     render: (target) => {
       container = target;

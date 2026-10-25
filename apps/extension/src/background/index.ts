@@ -6,13 +6,14 @@ import { createAuthService } from "../auth-service";
 import { createBadge } from "../badge";
 import { createCaptureStore } from "../capture-store";
 import { createCommandListener } from "../command-listener";
+import { createContextMenuClickListener, createContextMenuSync } from "../context-menu";
 import { createDataService } from "../data-service";
-import { createEnablementStore } from "../enablement-store";
+import { createEnablementStore, ENABLEMENT_STORAGE_KEY } from "../enablement-store";
 import { getExtensionEnv } from "../env";
 import { createExternalRouter } from "../external-router";
 import { createHubPort } from "../hub-port";
 import { createMessageRouter } from "../message-router";
-import { toggleCommentMode } from "../message-client";
+import { commentOnElement, toggleCommentMode } from "../message-client";
 import {
   PAGE_PORT_NAME,
   type AuthStateChangedMessage,
@@ -111,6 +112,13 @@ export function startBackground(): void {
     permissions: browser.permissions,
     onDisabled: hub.notifyDisabled,
   });
+  const syncContextMenu = createContextMenuSync({
+    removeAll: () => browser.contextMenus.removeAll(),
+    create: (properties) => {
+      browser.contextMenus.create(properties);
+    },
+    listOrigins: async () => Object.keys(await store.list()),
+  });
 
   async function scheduleRefresh(outcome: RefreshOutcome): Promise<void> {
     const when = planRefresh(outcome, Date.now());
@@ -188,6 +196,7 @@ export function startBackground(): void {
     }
   });
   browser.commands.onCommand.addListener(createCommandListener(toggleCommentMode));
+  browser.contextMenus.onClicked.addListener(createContextMenuClickListener({ commentOnElement }));
   browser.permissions.onRemoved.addListener(() => {
     ignoreFailure(enablement.reconcile());
   });
@@ -195,11 +204,18 @@ export function startBackground(): void {
     ignoreFailure(keepSessionFresh());
     ignoreFailure(enablement.reconcile());
     ignoreFailure(notifications.refresh());
+    ignoreFailure(syncContextMenu());
   });
   browser.runtime.onInstalled.addListener(() => {
     ignoreFailure(keepSessionFresh());
     ignoreFailure(enablement.reconcile());
     ignoreFailure(notifications.refresh());
+    ignoreFailure(syncContextMenu());
+  });
+  browser.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === "local" && ENABLEMENT_STORAGE_KEY in changes) {
+      ignoreFailure(syncContextMenu());
+    }
   });
   browser.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === REFRESH_ALARM_NAME) {

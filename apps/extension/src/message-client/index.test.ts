@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { failure, success } from "@sitenote/widget";
-import { onAuthStateChanged, onNotificationsChanged, sendMessage, toggleCommentMode } from ".";
+import {
+  commentOnElement,
+  onAuthStateChanged,
+  onNotificationsChanged,
+  sendMessage,
+  toggleCommentMode,
+} from ".";
 
 type Listener = (message: unknown, sender: { id?: string | undefined }) => undefined;
 
@@ -172,6 +178,37 @@ describe("toggleCommentMode", () => {
     mocks.tabsSendMessage.mockResolvedValue({ active: true });
 
     expect(await toggleCommentMode(7)).toEqual(failure("page_unavailable"));
+  });
+});
+
+describe("commentOnElement", () => {
+  it("sends the request to the top frame of the tab and returns the result", async () => {
+    mocks.tabsSendMessage.mockResolvedValue(success({ started: true }));
+
+    expect(await commentOnElement(7)).toEqual(success({ started: true }));
+    expect(mocks.tabsSendMessage).toHaveBeenCalledWith(
+      7,
+      { type: "commentMode.commentOnElement" },
+      { frameId: 0 },
+    );
+  });
+
+  it("passes the content script's own failure through", async () => {
+    mocks.tabsSendMessage.mockResolvedValue(failure("unauthorized"));
+
+    expect(await commentOnElement(7)).toEqual(failure("unauthorized"));
+  });
+
+  it("says the page is unavailable when there is no content script", async () => {
+    mocks.tabsSendMessage.mockRejectedValue(new Error("Could not establish connection."));
+
+    expect(await commentOnElement(7)).toEqual(failure("page_unavailable"));
+  });
+
+  it("says the page is unavailable for an answer of the wrong shape", async () => {
+    mocks.tabsSendMessage.mockResolvedValue({ started: true });
+
+    expect(await commentOnElement(7)).toEqual(failure("page_unavailable"));
   });
 });
 
