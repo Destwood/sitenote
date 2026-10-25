@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { connectMemberExtension, type ExtensionConnection } from "../extension-connection";
@@ -39,9 +40,14 @@ export function ExtensionConnect({ extensionId }: ExtensionConnectProps) {
       );
     case "connected":
       return (
-        <p role="status" data-testid="extension-connected" className="font-medium">
-          The extension is connected. You are still signed in here.
-        </p>
+        <div className="flex flex-col gap-3">
+          <p role="status" data-testid="extension-connected" className="font-medium">
+            The extension is connected. You are still signed in here.
+          </p>
+          <Link href="/app" className={`${PRIMARY_BUTTON_CLASS} w-fit`}>
+            Open dashboard
+          </Link>
+        </div>
       );
     case "missing":
       return (

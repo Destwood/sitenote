@@ -23,7 +23,7 @@ test("a member connects the extension and stays signed in on the web", async ({
   const popup = await openPopup(context, extensionId);
   await expect(popup.getByTestId("account-email")).toHaveText(email);
 
-  await page.goto(`${WEB_ORIGIN}/app`);
+  await page.getByRole("link", { name: "Open dashboard" }).click();
   await expect(page).toHaveURL(`${WEB_ORIGIN}/app`);
 });
 

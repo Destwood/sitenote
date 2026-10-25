@@ -42,6 +42,7 @@ describe("ExtensionConnect", () => {
     );
     expect(mocks.connectMemberExtension).toHaveBeenCalledWith(EXTENSION_ID);
     expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.getByRole("link", { name: "Open dashboard" }).getAttribute("href")).toBe("/app");
   });
 
   it("shows the install instructions when the extension is missing and retries", async () => {
