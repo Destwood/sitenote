@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   useEffect,
   useState,
@@ -60,7 +59,6 @@ function continueLabel(next: string): string {
 }
 
 export function SignInForm({ next, googleEnabled, initialError }: SignInFormProps) {
-  const router = useRouter();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(initialError);
@@ -92,7 +90,6 @@ export function SignInForm({ next, googleEnabled, initialError }: SignInFormProp
       if (await hasMemberSession()) {
         if (active) {
           setStep("signedIn");
-          router.refresh();
         }
       }
     }
@@ -112,7 +109,7 @@ export function SignInForm({ next, googleEnabled, initialError }: SignInFormProp
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
     };
-  }, [step, router]);
+  }, [step]);
 
   async function requestLink(): Promise<boolean> {
     setBusy(true);

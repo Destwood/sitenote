@@ -6,13 +6,8 @@ const mocks = vi.hoisted(() => ({
   signInWithOtp: vi.fn(),
   getSession: vi.fn(),
   signInWithOAuth: vi.fn(),
-  replace: vi.fn(),
-  refresh: vi.fn(),
 }));
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: mocks.replace, refresh: mocks.refresh }),
-}));
 vi.mock("../env", () => ({
   getPublicEnv: () => ({ webUrl: "http://localhost:3000" }),
 }));
@@ -162,7 +157,6 @@ describe("waiting step", () => {
     });
 
     expect(screen.queryByTestId("signed-in")).toBeNull();
-    expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
   it("switches to signed in once the link was opened and offers the dashboard", async () => {
@@ -176,7 +170,6 @@ describe("waiting step", () => {
 
     expect(screen.getByTestId("signed-in").textContent).toContain("ada@example.com");
     expect(screen.getByRole("link", { name: "Open dashboard" }).getAttribute("href")).toBe("/app");
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
 
   it("checks again as soon as the tab becomes visible", async () => {
