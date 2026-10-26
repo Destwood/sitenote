@@ -125,4 +125,5 @@ Every non-trivial choice is recorded in [DECISIONS.md](DECISIONS.md) with the al
 
 - [Design](docs/plans/2026-10-20-sitenote-design.md)
 - [Implementation plan](docs/plans/2026-10-20-sitenote-implementation.md)
+- [Production deploy](docs/deploy.md)
 - [Decisions](DECISIONS.md)
