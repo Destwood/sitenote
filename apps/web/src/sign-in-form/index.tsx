@@ -1,20 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   useEffect,
   useState,
   useSyncExternalStore,
-  type ChangeEvent,
   type SubmitEvent as FormSubmitEvent,
 } from "react";
 
-import {
-  describeOAuthError,
-  describeSendCodeError,
-  describeVerifyCodeError,
-  type AuthFailure,
-} from "../auth-error";
+import { describeOAuthError, describeSendLinkError, type AuthFailure } from "../auth-error";
 import { getPublicEnv } from "../env";
 import {
   ERROR_CLASS,
@@ -29,10 +24,10 @@ const subscribeToNothing = () => () => undefined;
 const isClient = () => true;
 const isServer = () => false;
 
-export const OTP_LENGTH = 6;
 export const RESEND_DELAY_SECONDS = 60;
+export const SESSION_POLL_INTERVAL_MS = 2000;
 
-type Step = "email" | "code";
+type Step = "email" | "waiting" | "signedIn";
 
 interface SignInFormProps {
   next: string;
@@ -51,11 +46,23 @@ async function attempt(
   }
 }
 
+async function hasMemberSession(): Promise<boolean> {
+  try {
+    const { data } = await getSupabaseBrowserClient().auth.getSession();
+    return data.session !== null && data.session.user.is_anonymous !== true;
+  } catch {
+    return false;
+  }
+}
+
+function continueLabel(next: string): string {
+  return next === "/app" || next.startsWith("/app/") ? "Open dashboard" : "Continue";
+}
+
 export function SignInForm({ next, googleEnabled, initialError }: SignInFormProps) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(initialError);
   const [busy, setBusy] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
@@ -76,7 +83,38 @@ export function SignInForm({ next, googleEnabled, initialError }: SignInFormProp
     };
   }, [resendLocked]);
 
-  async function requestCode(): Promise<boolean> {
+  useEffect(() => {
+    if (step !== "waiting") {
+      return;
+    }
+    let active = true;
+    async function check() {
+      if (await hasMemberSession()) {
+        if (active) {
+          setStep("signedIn");
+          router.refresh();
+        }
+      }
+    }
+    const timer = setInterval(() => {
+      void check();
+    }, SESSION_POLL_INTERVAL_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void check();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      active = false;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [step, router]);
+
+  async function requestLink(): Promise<boolean> {
     setBusy(true);
     setError(null);
     const emailRedirectTo = `${getPublicEnv().webUrl}/auth/callback?next=${encodeURIComponent(next)}`;
@@ -88,7 +126,7 @@ export function SignInForm({ next, googleEnabled, initialError }: SignInFormProp
     );
     setBusy(false);
     if (failure !== null) {
-      setError(describeSendCodeError(failure));
+      setError(describeSendLinkError(failure));
       return false;
     }
     setSecondsLeft(RESEND_DELAY_SECONDS);
@@ -100,38 +138,17 @@ export function SignInForm({ next, googleEnabled, initialError }: SignInFormProp
     if (busy) {
       return;
     }
-    if (await requestCode()) {
-      setCode("");
-      setStep("code");
+    if (await requestLink()) {
+      setResent(false);
+      setStep("waiting");
     }
-  }
-
-  async function handleCodeSubmit(event: FormSubmitEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (busy || code.length !== OTP_LENGTH) {
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    const failure = await attempt(() =>
-      getSupabaseBrowserClient().auth.verifyOtp({ email, token: code, type: "email" }),
-    );
-    if (failure !== null) {
-      setBusy(false);
-      setCode("");
-      setError(describeVerifyCodeError(failure));
-      return;
-    }
-    router.replace(next);
-    router.refresh();
   }
 
   async function handleResend() {
-    if (busy || secondsLeft > 0) {
+    if (busy || resendLocked) {
       return;
     }
-    if (await requestCode()) {
-      setCode("");
+    if (await requestLink()) {
       setResent(true);
     }
   }
@@ -157,14 +174,22 @@ export function SignInForm({ next, googleEnabled, initialError }: SignInFormProp
 
   function handleChangeEmail() {
     setStep("email");
-    setCode("");
     setError(null);
     setResent(false);
     setSecondsLeft(0);
   }
 
-  function handleCodeChange(event: ChangeEvent<HTMLInputElement>) {
-    setCode(event.target.value.replace(/\D/g, "").slice(0, OTP_LENGTH));
+  if (step === "signedIn") {
+    return (
+      <div className="flex flex-col gap-4">
+        <p role="status" data-testid="signed-in" className="font-medium">
+          You are signed in as <strong className="break-all">{email}</strong>.
+        </p>
+        <Link href={next} className={`${PRIMARY_BUTTON_CLASS} w-fit`}>
+          {continueLabel(next)}
+        </Link>
+      </div>
+    );
   }
 
   const errorMessage =
@@ -200,58 +225,31 @@ export function SignInForm({ next, googleEnabled, initialError }: SignInFormProp
           </div>
           {errorMessage}
           <button type="submit" disabled={busy || !hydrated} className={PRIMARY_BUTTON_CLASS}>
-            {busy ? "Sending code..." : "Email me a code"}
+            {busy ? "Sending link..." : "Email me a sign-in link"}
           </button>
         </form>
       ) : (
-        <form onSubmit={(event) => void handleCodeSubmit(event)} className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4">
           <p role="status" className="text-sm text-neutral-600">
-            Check your email. Click the sign-in link, or enter the {OTP_LENGTH}-digit code if the
-            email has one. The message was sent to <strong>{email}</strong>.
-            {resent ? " A new code was sent." : null}
+            We sent a sign-in link to <strong className="break-all">{email}</strong>. Open it in
+            this browser. This page updates as soon as you are signed in.
+            {resent ? " A new link was sent." : null}
           </p>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="sign-in-code" className="text-sm font-medium text-neutral-700">
-              {OTP_LENGTH}-digit code
-            </label>
-            <input
-              id="sign-in-code"
-              name="code"
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              pattern={`[0-9]{${String(OTP_LENGTH)}}`}
-              maxLength={OTP_LENGTH}
-              required
-              autoFocus
-              value={code}
-              onChange={handleCodeChange}
-              aria-describedby={describedBy}
-              className={`${INPUT_CLASS} text-center font-mono text-2xl tracking-[0.5em]`}
-            />
-          </div>
           {errorMessage}
-          <button
-            type="submit"
-            disabled={busy || code.length !== OTP_LENGTH}
-            className={PRIMARY_BUTTON_CLASS}
-          >
-            {busy ? "Verifying..." : "Verify code"}
-          </button>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <button
               type="button"
               onClick={() => void handleResend()}
-              disabled={busy || secondsLeft > 0}
+              disabled={busy || resendLocked}
               className={LINK_BUTTON_CLASS}
             >
-              {secondsLeft > 0 ? `Resend code in ${String(secondsLeft)}s` : "Resend code"}
+              {resendLocked ? `Resend link in ${String(secondsLeft)}s` : "Resend link"}
             </button>
             <button type="button" onClick={handleChangeEmail} className={LINK_BUTTON_CLASS}>
               Use a different email
             </button>
           </div>
-        </form>
+        </div>
       )}
       {googleEnabled && step === "email" ? (
         <div className="flex flex-col gap-3">

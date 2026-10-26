@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 
-import { clearMailbox, waitForOtpCode } from "../../support/mailpit";
+import { requestSignInLink } from "../../support/web-auth";
 import { anonymousSessionCookies } from "../../support/supabase-session";
 
 const SEEDED_OWNER = "owner@sitenote.test";
@@ -12,26 +12,16 @@ function newEmail(): string {
   return `e2e-${randomUUID()}@sitenote.test`;
 }
 
-async function requestCode(page: Page, email: string): Promise<string> {
-  await clearMailbox(email);
-  await page.getByLabel("Email").fill(email);
-  await page.getByRole("button", { name: "Email me a code" }).click();
-  await expect(page.getByLabel("6-digit code")).toBeVisible();
-  return waitForOtpCode(email);
-}
-
-async function signInWithCode(page: Page, email: string, path = "/sign-in"): Promise<void> {
+async function signInWithLink(page: Page, email: string, path = "/sign-in"): Promise<void> {
   await page.goto(path);
-  const code = await requestCode(page, email);
-  await page.getByLabel("6-digit code").fill(code);
-  await page.getByRole("button", { name: "Verify code" }).click();
+  await page.goto(await requestSignInLink(page, email));
 }
 
 function searchParam(page: Page, name: string): string | null {
   return new URL(page.url()).searchParams.get(name);
 }
 
-test("a new user signs in with an email code, creates a workspace and signs out", async ({
+test("a new user signs in with an email link, creates a workspace and signs out", async ({
   page,
 }) => {
   const email = newEmail();
@@ -40,10 +30,9 @@ test("a new user signs in with an email code, creates a workspace and signs out"
   await page.getByRole("banner").getByRole("link", { name: "Sign in" }).click();
   await expect(page).toHaveURL("/sign-in");
 
-  const code = await requestCode(page, email);
+  const link = await requestSignInLink(page, email);
   await expect(page.getByRole("status")).toContainText(email);
-  await page.getByLabel("6-digit code").fill(code);
-  await page.getByRole("button", { name: "Verify code" }).click();
+  await page.goto(link);
 
   await expect(page).toHaveURL("/app");
   await expect(page.getByRole("heading", { name: "Your workspaces" })).toBeVisible();
@@ -78,7 +67,7 @@ test("a new user signs in with an email code, creates a workspace and signs out"
 });
 
 test("the workspace form rejects a blank name and keeps the user on the page", async ({ page }) => {
-  await signInWithCode(page, newEmail());
+  await signInWithLink(page, newEmail());
   await expect(page).toHaveURL("/app");
 
   await page.getByLabel("Workspace name").fill("   ");
@@ -88,8 +77,8 @@ test("the workspace form rejects a blank name and keeps the user on the page", a
   await expect(page.getByText("You are not in any workspace yet.")).toBeVisible();
 });
 
-test("the seeded owner signs in by code and sees Northwind Studio", async ({ page }) => {
-  await signInWithCode(page, SEEDED_OWNER);
+test("the seeded owner signs in by link and sees Northwind Studio", async ({ page }) => {
+  await signInWithLink(page, SEEDED_OWNER);
 
   await expect(page).toHaveURL("/app");
   await expect(page.getByTestId("display-name")).toHaveText("Olena Owner");
@@ -99,54 +88,44 @@ test("the seeded owner signs in by code and sees Northwind Studio", async ({ pag
 });
 
 test("a seeded member sees the workspace with the member role", async ({ page }) => {
-  await signInWithCode(page, SEEDED_MEMBER);
+  await signInWithLink(page, SEEDED_MEMBER);
 
   await expect(page).toHaveURL("/app");
   const row = page.getByRole("listitem").filter({ hasText: WORKSPACE_NAME });
   await expect(row).toContainText("Member");
 });
 
-test("a wrong code shows an error and a correct code still works afterwards", async ({ page }) => {
+test("the sign-in page updates when the link is opened in another tab", async ({
+  page,
+  context,
+}) => {
   const email = newEmail();
   await page.goto("/sign-in");
-  const code = await requestCode(page, email);
-  const wrong = code === "000000" ? "111111" : "000000";
+  const link = await requestSignInLink(page, email);
+  await expect(page.getByLabel(/code/i)).toHaveCount(0);
 
-  await page.getByLabel("6-digit code").fill(wrong);
-  await page.getByRole("button", { name: "Verify code" }).click();
+  const other = await context.newPage();
+  await other.goto(link);
+  await expect(other).toHaveURL("/app");
 
-  await expect(page.locator("#sign-in-error")).toContainText("wrong or has expired");
-  await expect(page).toHaveURL("/sign-in");
-  await expect(page.getByLabel("6-digit code")).toHaveValue("");
-
-  await page.getByLabel("6-digit code").fill(code);
-  await page.getByRole("button", { name: "Verify code" }).click();
+  await expect(page.getByTestId("signed-in")).toContainText(email);
+  await page.getByRole("link", { name: "Open dashboard" }).click();
   await expect(page).toHaveURL("/app");
+  await expect(page.getByRole("heading", { name: "Your workspaces" })).toBeVisible();
 });
 
-test("the code input is a numeric one-time-code field", async ({ page }) => {
+test("resend is locked right after a link was sent", async ({ page }) => {
   await page.goto("/sign-in");
-  await requestCode(page, newEmail());
+  await requestSignInLink(page, newEmail());
 
-  const input = page.getByLabel("6-digit code");
-  await expect(input).toHaveAttribute("inputmode", "numeric");
-  await expect(input).toHaveAttribute("autocomplete", "one-time-code");
-  await input.pressSequentially("12ab34567");
-  await expect(input).toHaveValue("123456");
-});
-
-test("resend is locked right after a code was sent", async ({ page }) => {
-  await page.goto("/sign-in");
-  await requestCode(page, newEmail());
-
-  await expect(page.getByRole("button", { name: /^Resend code in \d+s$/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /^Resend link in \d+s$/ })).toBeDisabled();
 });
 
 test("a raw protocol-relative next parameter is ignored after sign-in", async ({
   page,
   baseURL,
 }) => {
-  await signInWithCode(page, newEmail(), "/sign-in?next=//evil.example");
+  await signInWithLink(page, newEmail(), "/sign-in?next=//evil.example");
 
   await expect(page).toHaveURL("/app");
   expect(new URL(page.url()).origin).toBe(baseURL);
@@ -162,7 +141,7 @@ const UNSAFE_NEXT_VALUES = [
 
 for (const unsafe of UNSAFE_NEXT_VALUES) {
   test(`the next parameter ${unsafe} is ignored after sign-in`, async ({ page, baseURL }) => {
-    await signInWithCode(page, newEmail(), `/sign-in?next=${encodeURIComponent(unsafe)}`);
+    await signInWithLink(page, newEmail(), `/sign-in?next=${encodeURIComponent(unsafe)}`);
 
     await expect(page).toHaveURL("/app");
     expect(new URL(page.url()).origin).toBe(baseURL);
@@ -170,7 +149,7 @@ for (const unsafe of UNSAFE_NEXT_VALUES) {
 }
 
 test("a safe next parameter is honoured", async ({ page }) => {
-  await signInWithCode(page, newEmail(), "/sign-in?next=/app%3Fvia%3Demail");
+  await signInWithLink(page, newEmail(), "/sign-in?next=/app%3Fvia%3Demail");
 
   await expect(page).toHaveURL("/app?via=email");
 });
@@ -179,7 +158,7 @@ test("a failed auth callback returns to sign-in with a fixed message", async ({ 
   await page.goto("/auth/callback?code=not-a-real-code&next=/app");
 
   await expect(page).toHaveURL("/sign-in?error=exchange_failed");
-  await expect(page.locator("#sign-in-error")).toContainText("could not complete the sign-in");
+  await expect(page.locator("#sign-in-error")).toContainText("invalid or has expired");
 });
 
 test("an auth callback without a code explains that the link is incomplete", async ({ page }) => {

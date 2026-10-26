@@ -1,10 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { failure, success } from "@sitenote/widget";
 import type { SiteInfo, WorkspaceInfo } from "@sitenote/widget";
-import { LAST_WORKSPACE_KEY, SitePanel } from ".";
+import { ENABLE_POLL_ATTEMPTS, ENABLE_POLL_INTERVAL_MS, LAST_WORKSPACE_KEY, SitePanel } from ".";
 
 const mocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
@@ -12,7 +12,8 @@ const mocks = vi.hoisted(() => ({
   getTargetTab: vi.fn(),
   hasOriginAccess: vi.fn(),
   requestOriginAccess: vi.fn(),
-  removeOriginAccess: vi.fn(),
+  markEnablePending: vi.fn(),
+  clearEnablePending: vi.fn(),
 }));
 
 vi.mock("../message-client", () => ({
@@ -24,7 +25,8 @@ vi.mock("../tab-access", () => ({
   getTargetTab: mocks.getTargetTab,
   hasOriginAccess: mocks.hasOriginAccess,
   requestOriginAccess: mocks.requestOriginAccess,
-  removeOriginAccess: mocks.removeOriginAccess,
+  markEnablePending: mocks.markEnablePending,
+  clearEnablePending: mocks.clearEnablePending,
 }));
 
 const ORIGIN = "https://example.test";
@@ -62,7 +64,8 @@ beforeEach(() => {
   mocks.getTargetTab.mockResolvedValue({ id: 7, origin: ORIGIN });
   mocks.hasOriginAccess.mockResolvedValue(false);
   mocks.requestOriginAccess.mockResolvedValue(true);
-  mocks.removeOriginAccess.mockResolvedValue(undefined);
+  mocks.markEnablePending.mockResolvedValue(undefined);
+  mocks.clearEnablePending.mockResolvedValue(undefined);
 });
 
 describe("SitePanel unavailable pages", () => {
@@ -144,8 +147,38 @@ describe("SitePanel when the site is not enabled", () => {
     expect(screen.queryByRole("button", { name: "Enable on this site" })).toBeNull();
   });
 
-  it("requests the permission, enables the site and shows the enabled state", async () => {
+  it("asks for the permission, leaves the enabling to the background and shows the result", async () => {
     const user = userEvent.setup();
+    let enabled = false;
+    route({
+      "sites.forOrigin": () => success(enabled ? SITE : null),
+      "workspaces.list": () => success([NORTHWIND, AGENCY]),
+    });
+    mocks.requestOriginAccess.mockImplementation(() => {
+      enabled = true;
+      return Promise.resolve(true);
+    });
+    render(<SitePanel webUrl="https://web.test" />);
+    await screen.findByLabelText("Workspace");
+    await user.selectOptions(screen.getByLabelText("Workspace"), AGENCY.id);
+
+    await user.click(screen.getByRole("button", { name: "Enable on this site" }));
+
+    expect((await screen.findByTestId("site-state")).textContent).toBe("Enabled in Northwind");
+    expect(mocks.markEnablePending).toHaveBeenCalledWith(ORIGIN, {
+      tabId: 7,
+      workspaceId: AGENCY.id,
+    });
+    expect(mocks.requestOriginAccess).toHaveBeenCalledWith(ORIGIN);
+    expect(mocks.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "sites.enable" }),
+    );
+    expect(localStorage.getItem(LAST_WORKSPACE_KEY)).toBe(AGENCY.id);
+  });
+
+  it("enables the site itself when the permission was already granted", async () => {
+    const user = userEvent.setup();
+    mocks.hasOriginAccess.mockResolvedValue(true);
     let enabled = false;
     route({
       "sites.forOrigin": () => success(enabled ? SITE : null),
@@ -162,17 +195,18 @@ describe("SitePanel when the site is not enabled", () => {
     await user.click(screen.getByRole("button", { name: "Enable on this site" }));
 
     expect((await screen.findByTestId("site-state")).textContent).toBe("Enabled in Northwind");
-    expect(mocks.requestOriginAccess).toHaveBeenCalledWith(ORIGIN);
     expect(mocks.sendMessage).toHaveBeenCalledWith({
       type: "sites.enable",
       tabId: 7,
       origin: ORIGIN,
       workspaceId: AGENCY.id,
     });
+    expect(mocks.requestOriginAccess).not.toHaveBeenCalled();
+    expect(mocks.markEnablePending).not.toHaveBeenCalled();
     expect(localStorage.getItem(LAST_WORKSPACE_KEY)).toBe(AGENCY.id);
   });
 
-  it("does nothing else when the user declines the permission", async () => {
+  it("forgets the pending enable when the user declines the permission", async () => {
     const user = userEvent.setup();
     notEnabled();
     mocks.requestOriginAccess.mockResolvedValue(false);
@@ -181,31 +215,36 @@ describe("SitePanel when the site is not enabled", () => {
     await user.click(await screen.findByRole("button", { name: "Enable on this site" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain("needs access to this site");
+    expect(mocks.clearEnablePending).toHaveBeenCalledWith(ORIGIN);
     expect(mocks.sendMessage).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: "sites.enable" }),
     );
     expect((await screen.findByTestId("site-state")).textContent).toBe("Not enabled");
   });
 
-  it("shows the fixed message of the error and gives back a permission it just got", async () => {
-    const user = userEvent.setup();
-    route({
-      "sites.forOrigin": () => success(null),
-      "workspaces.list": () => success([AGENCY]),
-      "sites.enable": () => failure("forbidden"),
-    });
-    render(<SitePanel webUrl="https://web.test" />);
+  it("reports a failure when the background does not enable the site in time", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: (ms) => vi.advanceTimersByTime(ms) });
+      notEnabled();
+      render(<SitePanel webUrl="https://web.test" />);
 
-    await user.click(await screen.findByRole("button", { name: "Enable on this site" }));
+      await user.click(await screen.findByRole("button", { name: "Enable on this site" }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ENABLE_POLL_ATTEMPTS * ENABLE_POLL_INTERVAL_MS);
+      });
 
-    expect((await screen.findByRole("alert")).textContent).toBe(
-      "You do not have permission to do this.",
-    );
-    expect(mocks.removeOriginAccess).toHaveBeenCalledWith(ORIGIN);
-    expect(localStorage.getItem(LAST_WORKSPACE_KEY)).toBeNull();
+      expect((await screen.findByRole("alert")).textContent).toBe(
+        "Something went wrong. Try again.",
+      );
+      expect((await screen.findByTestId("site-state")).textContent).toBe("Not enabled");
+      expect(localStorage.getItem(LAST_WORKSPACE_KEY)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it("keeps a permission the user already had when enabling fails", async () => {
+  it("shows the fixed message of the error when enabling a granted site fails", async () => {
     const user = userEvent.setup();
     mocks.hasOriginAccess.mockResolvedValue(true);
     route({
@@ -220,7 +259,7 @@ describe("SitePanel when the site is not enabled", () => {
     expect((await screen.findByRole("alert")).textContent).toBe(
       "Sitenote is not available on this page.",
     );
-    expect(mocks.removeOriginAccess).not.toHaveBeenCalled();
+    expect(localStorage.getItem(LAST_WORKSPACE_KEY)).toBeNull();
   });
 });
 

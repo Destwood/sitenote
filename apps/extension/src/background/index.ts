@@ -20,6 +20,8 @@ import {
   type NotificationsChangedMessage,
 } from "../messages";
 import { createNotificationCenter } from "../notification-center";
+import { createPendingEnableStore } from "../pending-enable";
+import { createPermissionGrantHandler } from "../permission-grant";
 import { createChannelFactory, createNotificationChannelFactory } from "../realtime-channels";
 import { createRealtimeHub } from "../realtime-hub";
 import { planRefresh, REFRESH_ALARM_NAME, type RefreshOutcome } from "../refresh-schedule";
@@ -31,6 +33,7 @@ import { createScreenshotUploader } from "../screenshot-upload";
 import { createSessionHandoff } from "../session-handoff";
 import { createSessionStorage } from "../session-storage";
 import { createSiteEnablement } from "../site-enablement";
+import { removeOriginAccess } from "../tab-access";
 import { restrictToTrustedContexts } from "../storage-access";
 import { createTestHooks } from "../test-hooks";
 
@@ -199,6 +202,15 @@ export function startBackground(): void {
   });
   browser.commands.onCommand.addListener(createCommandListener(toggleCommentMode));
   browser.contextMenus.onClicked.addListener(createContextMenuClickListener({ commentOnElement }));
+  const onPermissionGranted = createPermissionGrantHandler({
+    pending: createPendingEnableStore(browser.storage.local),
+    enablement,
+    removeAccess: removeOriginAccess,
+    now: Date.now,
+  });
+  browser.permissions.onAdded.addListener((granted) => {
+    ignoreFailure(onPermissionGranted(granted));
+  });
   browser.permissions.onRemoved.addListener(() => {
     ignoreFailure(enablement.reconcile());
   });

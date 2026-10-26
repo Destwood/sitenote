@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   signInWithOtp: vi.fn(),
-  verifyOtp: vi.fn(),
+  getSession: vi.fn(),
   signInWithOAuth: vi.fn(),
   replace: vi.fn(),
   refresh: vi.fn(),
@@ -20,13 +20,13 @@ vi.mock("../supabase-browser", () => ({
   getSupabaseBrowserClient: () => ({
     auth: {
       signInWithOtp: mocks.signInWithOtp,
-      verifyOtp: mocks.verifyOtp,
+      getSession: mocks.getSession,
       signInWithOAuth: mocks.signInWithOAuth,
     },
   }),
 }));
 
-import { RESEND_DELAY_SECONDS, SignInForm } from ".";
+import { RESEND_DELAY_SECONDS, SESSION_POLL_INTERVAL_MS, SignInForm } from ".";
 
 function setup(props: Partial<Parameters<typeof SignInForm>[0]> = {}) {
   const user = userEvent.setup({ advanceTimers: (ms) => vi.advanceTimersByTime(ms) });
@@ -34,16 +34,19 @@ function setup(props: Partial<Parameters<typeof SignInForm>[0]> = {}) {
   return user;
 }
 
-async function reachCodeStep(user: ReturnType<typeof userEvent.setup>, email = "ada@example.com") {
+async function reachWaitingStep(
+  user: ReturnType<typeof userEvent.setup>,
+  email = "ada@example.com",
+) {
   await user.type(screen.getByLabelText("Email"), email);
-  await user.click(screen.getByRole("button", { name: "Email me a code" }));
-  await screen.findByLabelText("6-digit code");
+  await user.click(screen.getByRole("button", { name: "Email me a sign-in link" }));
+  await screen.findByRole("button", { name: /^Resend link/ });
 }
 
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   mocks.signInWithOtp.mockResolvedValue({ data: {}, error: null });
-  mocks.verifyOtp.mockResolvedValue({ data: {}, error: null });
+  mocks.getSession.mockResolvedValue({ data: { session: null } });
   mocks.signInWithOAuth.mockResolvedValue({ data: {}, error: null });
 });
 
@@ -57,14 +60,14 @@ describe("email step", () => {
     setup();
 
     expect(screen.getByLabelText("Email")).toHaveProperty("type", "email");
-    expect(screen.queryByLabelText("6-digit code")).toBeNull();
+    expect(screen.queryByLabelText(/code/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /google/i })).toBeNull();
   });
 
-  it("requests a code for a new or existing user and moves to the code step", async () => {
+  it("requests a link for a new or existing user and moves to the waiting step", async () => {
     const user = setup();
 
-    await reachCodeStep(user);
+    await reachWaitingStep(user);
 
     expect(mocks.signInWithOtp).toHaveBeenCalledWith({
       email: "ada@example.com",
@@ -74,13 +77,12 @@ describe("email step", () => {
       },
     });
     expect(screen.getByRole("status").textContent).toContain("ada@example.com");
-    expect(screen.getByRole("status").textContent).toContain("Click the sign-in link");
   });
 
   it("sends the magic link back to the callback with the safe next path", async () => {
     const user = setup({ next: "/app/settings?tab=members" });
 
-    await reachCodeStep(user);
+    await reachWaitingStep(user);
 
     expect(mocks.signInWithOtp).toHaveBeenCalledWith({
       email: "ada@example.com",
@@ -99,10 +101,10 @@ describe("email step", () => {
     const user = setup();
 
     await user.type(screen.getByLabelText("Email"), "ada@example.com");
-    await user.click(screen.getByRole("button", { name: "Email me a code" }));
+    await user.click(screen.getByRole("button", { name: "Email me a sign-in link" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain("Too many attempts");
-    expect(screen.queryByLabelText("6-digit code")).toBeNull();
+    expect(screen.queryByLabelText(/code/i)).toBeNull();
   });
 
   it("explains an address the server rejects", async () => {
@@ -113,7 +115,7 @@ describe("email step", () => {
     const user = setup();
 
     await user.type(screen.getByLabelText("Email"), "ada@example.com");
-    await user.click(screen.getByRole("button", { name: "Email me a code" }));
+    await user.click(screen.getByRole("button", { name: "Email me a sign-in link" }));
 
     expect((await screen.findByRole("alert")).textContent).toBe("Enter a valid email address.");
   });
@@ -123,10 +125,10 @@ describe("email step", () => {
     const user = setup();
 
     await user.type(screen.getByLabelText("Email"), "ada@example.com");
-    await user.click(screen.getByRole("button", { name: "Email me a code" }));
+    await user.click(screen.getByRole("button", { name: "Email me a sign-in link" }));
 
-    expect((await screen.findByRole("alert")).textContent).toContain("could not send");
-    expect(screen.getByRole("button", { name: "Email me a code" })).toHaveProperty(
+    expect((await screen.findByRole("alert")).textContent).toContain("could not send the link");
+    expect(screen.getByRole("button", { name: "Email me a sign-in link" })).toHaveProperty(
       "disabled",
       false,
     );
@@ -139,104 +141,93 @@ describe("email step", () => {
   });
 });
 
-describe("code step", () => {
-  it("renders a numeric one-time-code input of six digits", async () => {
+describe("waiting step", () => {
+  it("tells the user to open the link and offers no code field", async () => {
     const user = setup();
-    await reachCodeStep(user);
+    await reachWaitingStep(user);
 
-    const input = screen.getByLabelText("6-digit code");
-    expect(input.getAttribute("inputmode")).toBe("numeric");
-    expect(input.getAttribute("autocomplete")).toBe("one-time-code");
-    expect(input.getAttribute("maxlength")).toBe("6");
+    const status = screen.getByRole("status").textContent;
+    expect(status).toContain("ada@example.com");
+    expect(status).toContain("sign-in link");
+    expect(screen.queryByLabelText(/code/i)).toBeNull();
   });
 
-  it("keeps only digits, caps the length and enables verification at six digits", async () => {
+  it("keeps waiting while there is no session or only a guest session", async () => {
+    mocks.getSession.mockResolvedValue({ data: { session: { user: { is_anonymous: true } } } });
     const user = setup();
-    await reachCodeStep(user);
-    const input = screen.getByLabelText("6-digit code");
-    const verify = screen.getByRole("button", { name: "Verify code" });
+    await reachWaitingStep(user);
 
-    await user.type(input, "12a3 4");
-    expect(input).toHaveProperty("value", "1234");
-    expect(verify).toHaveProperty("disabled", true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SESSION_POLL_INTERVAL_MS * 3);
+    });
 
-    await user.type(input, "5678");
-    expect(input).toHaveProperty("value", "123456");
-    expect(verify).toHaveProperty("disabled", false);
+    expect(screen.queryByTestId("signed-in")).toBeNull();
+    expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
-  it("verifies the code and navigates to the safe destination", async () => {
-    const user = setup({ next: "/app/settings" });
-    await reachCodeStep(user);
+  it("switches to signed in once the link was opened and offers the dashboard", async () => {
+    const user = setup();
+    await reachWaitingStep(user);
+    mocks.getSession.mockResolvedValue({ data: { session: { user: { is_anonymous: false } } } });
 
-    await user.type(screen.getByLabelText("6-digit code"), "123456");
-    await user.click(screen.getByRole("button", { name: "Verify code" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SESSION_POLL_INTERVAL_MS);
+    });
 
-    await waitFor(() => {
-      expect(mocks.replace).toHaveBeenCalledWith("/app/settings");
-    });
-    expect(mocks.verifyOtp).toHaveBeenCalledWith({
-      email: "ada@example.com",
-      token: "123456",
-      type: "email",
-    });
+    expect(screen.getByTestId("signed-in").textContent).toContain("ada@example.com");
+    expect(screen.getByRole("link", { name: "Open dashboard" }).getAttribute("href")).toBe("/app");
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it("shows an error, clears the code and does not navigate when the code is wrong", async () => {
-    mocks.verifyOtp.mockResolvedValue({
-      data: {},
-      error: { code: "otp_expired", status: 403 },
-    });
+  it("checks again as soon as the tab becomes visible", async () => {
     const user = setup();
-    await reachCodeStep(user);
+    await reachWaitingStep(user);
+    mocks.getSession.mockResolvedValue({ data: { session: { user: { is_anonymous: false } } } });
 
-    await user.type(screen.getByLabelText("6-digit code"), "000000");
-    await user.click(screen.getByRole("button", { name: "Verify code" }));
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
 
-    expect((await screen.findByRole("alert")).textContent).toContain("wrong or has expired");
-    expect(screen.getByLabelText("6-digit code")).toHaveProperty("value", "");
-    expect(mocks.replace).not.toHaveBeenCalled();
+    expect(screen.getByTestId("signed-in")).toBeTruthy();
   });
 
-  it("explains a rate limit while verifying", async () => {
-    mocks.verifyOtp.mockResolvedValue({
-      data: {},
-      error: { code: "over_request_rate_limit", status: 429 },
+  it("labels the way on as Continue when the destination is not the dashboard", async () => {
+    const user = setup({ next: "/invite/abc" });
+    await reachWaitingStep(user);
+    mocks.getSession.mockResolvedValue({ data: { session: { user: { is_anonymous: false } } } });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SESSION_POLL_INTERVAL_MS);
     });
-    const user = setup();
-    await reachCodeStep(user);
 
-    await user.type(screen.getByLabelText("6-digit code"), "123456");
-    await user.click(screen.getByRole("button", { name: "Verify code" }));
-
-    expect((await screen.findByRole("alert")).textContent).toContain("Too many attempts");
+    expect(screen.getByRole("link", { name: "Continue" }).getAttribute("href")).toBe("/invite/abc");
   });
 
   it("goes back to the email step", async () => {
     const user = setup();
-    await reachCodeStep(user);
+    await reachWaitingStep(user);
 
     await user.click(screen.getByRole("button", { name: "Use a different email" }));
 
     expect(screen.getByLabelText("Email")).toBeTruthy();
-    expect(screen.queryByLabelText("6-digit code")).toBeNull();
+    expect(screen.queryByRole("button", { name: /resend/i })).toBeNull();
   });
 });
 
 describe("resend", () => {
-  it("is locked for 60 seconds and then sends a new code", async () => {
+  it("is locked for 60 seconds and then sends a new link", async () => {
     const user = setup();
-    await reachCodeStep(user);
+    await reachWaitingStep(user);
     const resend = screen.getByRole("button", {
-      name: `Resend code in ${String(RESEND_DELAY_SECONDS)}s`,
+      name: `Resend link in ${String(RESEND_DELAY_SECONDS)}s`,
     });
     expect(resend).toHaveProperty("disabled", true);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync((RESEND_DELAY_SECONDS - 1) * 1000);
     });
-    expect(screen.getByRole("button", { name: "Resend code in 1s" })).toHaveProperty(
+    expect(screen.getByRole("button", { name: "Resend link in 1s" })).toHaveProperty(
       "disabled",
       true,
     );
@@ -244,7 +235,7 @@ describe("resend", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1000);
     });
-    const ready = screen.getByRole("button", { name: "Resend code" });
+    const ready = screen.getByRole("button", { name: "Resend link" });
     expect(ready).toHaveProperty("disabled", false);
 
     await user.click(ready);
@@ -252,8 +243,8 @@ describe("resend", () => {
     await waitFor(() => {
       expect(mocks.signInWithOtp).toHaveBeenCalledTimes(2);
     });
-    expect(screen.getByRole("status").textContent).toContain("A new code was sent.");
-    expect(screen.getByRole("button", { name: "Resend code in 60s" })).toHaveProperty(
+    expect(screen.getByRole("status").textContent).toContain("A new link was sent.");
+    expect(screen.getByRole("button", { name: "Resend link in 60s" })).toHaveProperty(
       "disabled",
       true,
     );
@@ -261,13 +252,13 @@ describe("resend", () => {
 
   it("reports a failed resend", async () => {
     const user = setup();
-    await reachCodeStep(user);
+    await reachWaitingStep(user);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(RESEND_DELAY_SECONDS * 1000);
     });
     mocks.signInWithOtp.mockResolvedValue({ data: {}, error: { status: 429 } });
 
-    await user.click(screen.getByRole("button", { name: "Resend code" }));
+    await user.click(screen.getByRole("button", { name: "Resend link" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain("Too many attempts");
   });

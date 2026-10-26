@@ -1,6 +1,8 @@
 import { parsePageUrl } from "@sitenote/core";
 import { browser } from "wxt/browser";
 
+import { createPendingEnableStore, type PendingEnable } from "../pending-enable";
+
 const UNSUPPORTED_HOSTS: ReadonlySet<string> = new Set([
   "chromewebstore.google.com",
   "chrome.google.com",
@@ -61,4 +63,17 @@ export async function requestOriginAccess(origin: string): Promise<boolean> {
 
 export async function removeOriginAccess(origin: string): Promise<void> {
   await browser.permissions.remove(patternOf(origin)).catch(() => false);
+}
+
+export async function markEnablePending(
+  origin: string,
+  entry: Omit<PendingEnable, "at">,
+): Promise<void> {
+  await createPendingEnableStore(browser.storage.local).put(origin, { ...entry, at: Date.now() });
+}
+
+export async function clearEnablePending(origin: string): Promise<void> {
+  await createPendingEnableStore(browser.storage.local)
+    .remove(origin)
+    .catch(() => undefined);
 }

@@ -3,8 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   describeCallbackError,
   describeOAuthError,
-  describeSendCodeError,
-  describeVerifyCodeError,
+  describeSendLinkError,
   parseCallbackError,
 } from ".";
 
@@ -31,35 +30,27 @@ describe("parseCallbackError", () => {
       "Sign-in was cancelled. You can try again.",
     );
     expect(describeCallbackError("missing_code")).toContain("incomplete");
-    expect(describeCallbackError("exchange_failed")).toContain("could not complete");
+    expect(describeCallbackError("exchange_failed")).toContain("invalid or has expired");
   });
 });
 
-describe("code errors", () => {
+describe("link errors", () => {
   it("explains rate limits by status and by code", () => {
-    expect(describeSendCodeError({ status: 429 })).toContain("Too many attempts");
-    expect(describeSendCodeError({ code: "over_email_send_rate_limit" })).toContain(
+    expect(describeSendLinkError({ status: 429 })).toContain("Too many attempts");
+    expect(describeSendLinkError({ code: "over_email_send_rate_limit" })).toContain(
       "Too many attempts",
     );
-    expect(describeVerifyCodeError({ status: 429 })).toContain("Too many attempts");
     expect(describeOAuthError({ code: "over_request_rate_limit" })).toContain("Too many attempts");
   });
 
   it("explains an invalid address", () => {
-    expect(describeSendCodeError({ code: "email_address_invalid" })).toBe(
+    expect(describeSendLinkError({ code: "email_address_invalid" })).toBe(
       "Enter a valid email address.",
     );
   });
 
-  it("explains a wrong or expired code", () => {
-    expect(describeVerifyCodeError({ code: "otp_expired", status: 403 })).toContain(
-      "wrong or has expired",
-    );
-  });
-
   it("falls back to a connection hint without leaking raw messages", () => {
-    expect(describeSendCodeError({ status: 500 })).toContain("could not send");
-    expect(describeVerifyCodeError({})).toContain("could not verify");
+    expect(describeSendLinkError({ status: 500 })).toContain("could not send the link");
     expect(describeOAuthError({ status: 400 })).toContain("Google sign-in");
   });
 });

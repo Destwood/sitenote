@@ -11,7 +11,7 @@ import {
   revokeInviteToken,
 } from "../../support/invites";
 import { signInSeededUser } from "../../support/seeded-user";
-import { WEB_ORIGIN, requestWebCode, signInOnWeb } from "../../support/web-auth";
+import { WEB_ORIGIN, requestSignInLink, signInOnWeb } from "../../support/web-auth";
 
 const OWNER = "owner@sitenote.test";
 const GUEST_NAME = "Gina Client";
@@ -123,9 +123,7 @@ test("a member invite asks the visitor to sign in and then joins them as a membe
       `${WEB_ORIGIN}/sign-in?next=${encodeURIComponent(`/invite/${token}`)}`,
     );
     const email = newEmail();
-    const code = await requestWebCode(visitor.page, email);
-    await visitor.page.getByLabel("6-digit code").fill(code);
-    await visitor.page.getByRole("button", { name: "Verify code" }).click();
+    await visitor.page.goto(await requestSignInLink(visitor.page, email));
 
     await expect(visitor.page).toHaveURL(`${WEB_ORIGIN}/invite/${token}`);
     await visitor.page.getByRole("button", { name: `Join ${workspaceName} as member` }).click();

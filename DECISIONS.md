@@ -926,3 +926,15 @@ All versions are pinned exactly. No other runtime dependency was added.
 - **Chosen:** slowMo 250 ms, typed text with a 55 ms key delay, pauses of 0.9 s between steps and 2.2 s on key frames, only in the media script.
 - **Alternatives:** slowing playback with `playbackRate` on the landing video (choppy frames), slowMo for the whole e2e suite (slower CI).
 - **Why:** manual QA found the video unreadable at machine speed.
+
+## D-138 Web sign-in is a link, not a code
+
+- **Chosen:** the web sign-in form sends `signInWithOtp` with `emailRedirectTo` and then waits. The waiting step polls `auth.getSession()` every 2 s and on `focus` / `visibilitychange`; a non-anonymous session switches it to "You are signed in" with a link to `next` ("Open dashboard" for `/app`, "Continue" otherwise) and calls `router.refresh()`. The code field, `verifyOtp` and `describeVerifyCodeError` are gone from the web; an expired or reused link comes back through `/auth/callback` as `exchange_failed` with the message "The sign-in link is invalid or has expired. Request a new one." The local e-mail templates carry the link (`{{ .ConfirmationURL }}`) and still the code (`{{ .Token }}`), because the extension popup signs in with the code (D-043 is unchanged for the extension). The e2e helper `waitForSignInLink` reads the `href` from Mailpit.
+- **Alternatives:** keeping both a link and a code field on the web; a BroadcastChannel from the callback tab; a Realtime subscription on the session.
+- **Why:** production e-mails contain only the link, so the code field asked for something that never arrived. The session cookie is shared by all tabs of the browser, so polling it is the smallest thing that works without extra channels. A guest session is ignored while waiting.
+
+## D-139 Enabling a site no longer depends on the popup surviving the permission prompt
+
+- **Chosen:** the popup writes a pending enable (`tabId`, `workspaceId`, timestamp, two minutes to live) to `storage.local`, calls `permissions.request` and then only polls `sites.forOrigin`. The background listens to `permissions.onAdded`, takes the pending entry for the granted origin and runs `enablement.enable`; if that fails it removes the permission again. When the permission was already held, the popup sends `sites.enable` as before.
+- **Alternatives:** enabling from the popup after the request resolves (the previous behaviour); an options page that requests the permission.
+- **Why:** Chrome closes the popup when the permission prompt takes focus, so the code after `permissions.request` never ran and the user had to click Enable a second time. The cause is inferred from the platform behaviour and the code, not reproduced in a browser in this change.

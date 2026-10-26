@@ -9,15 +9,18 @@ import {
 import { sendMessage, toggleCommentMode } from "../message-client";
 import { ERROR_MESSAGES, type ErrorCode } from "@sitenote/widget";
 import {
+  clearEnablePending,
   getTargetTab,
   hasOriginAccess,
-  removeOriginAccess,
+  markEnablePending,
   requestOriginAccess,
   type TargetTab,
 } from "../tab-access";
 import type { SiteInfo, WorkspaceInfo } from "@sitenote/widget";
 
 export const LAST_WORKSPACE_KEY = "sitenote.lastWorkspace";
+export const ENABLE_POLL_INTERVAL_MS = 500;
+export const ENABLE_POLL_ATTEMPTS = 20;
 const PERMISSION_DENIED_MESSAGE = "Sitenote needs access to this site to show comments on it.";
 const GUEST_HINT = "Guests can enable only sites that an owner or member has already added.";
 
@@ -82,6 +85,17 @@ async function resolveView(): Promise<View> {
   return target === null ? { kind: "unavailable" } : loadView(target);
 }
 
+async function waitUntilEnabled(origin: string): Promise<boolean> {
+  for (let attempt = 0; attempt < ENABLE_POLL_ATTEMPTS; attempt += 1) {
+    const site = await sendMessage({ type: "sites.forOrigin", origin });
+    if (site.ok && site.data !== null) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, ENABLE_POLL_INTERVAL_MS));
+  }
+  return false;
+}
+
 export function SitePanel({ webUrl, onStateChange }: SitePanelProps) {
   const [view, setView] = useState<View>({ kind: "loading" });
   const [workspaceId, setWorkspaceId] = useState("");
@@ -123,26 +137,32 @@ export function SitePanel({ webUrl, onStateChange }: SitePanelProps) {
     setBusy(true);
     setFailed(null);
     setNotice(null);
-    const alreadyGranted = await hasOriginAccess(tab.origin);
-    const granted = await requestOriginAccess(tab.origin);
-    if (!granted) {
-      setFailed(PERMISSION_DENIED_MESSAGE);
-      setBusy(false);
-      return;
-    }
-    const result = await sendMessage({
-      type: "sites.enable",
-      tabId: tab.id,
-      origin: tab.origin,
-      workspaceId,
-    });
-    if (!result.ok) {
-      if (!alreadyGranted) {
-        await removeOriginAccess(tab.origin);
+    if (await hasOriginAccess(tab.origin)) {
+      const result = await sendMessage({
+        type: "sites.enable",
+        tabId: tab.id,
+        origin: tab.origin,
+        workspaceId,
+      });
+      if (!result.ok) {
+        setFailed(ERROR_MESSAGES[result.error.code]);
+        setBusy(false);
+        return;
       }
-      setFailed(ERROR_MESSAGES[result.error.code]);
-      setBusy(false);
-      return;
+    } else {
+      const request = requestOriginAccess(tab.origin);
+      await markEnablePending(tab.origin, { tabId: tab.id, workspaceId });
+      if (!(await request)) {
+        await clearEnablePending(tab.origin);
+        setFailed(PERMISSION_DENIED_MESSAGE);
+        setBusy(false);
+        return;
+      }
+      if (!(await waitUntilEnabled(tab.origin))) {
+        setFailed(ERROR_MESSAGES.unknown);
+        setBusy(false);
+        return;
+      }
     }
     saveLastWorkspace(workspaceId);
     await load();

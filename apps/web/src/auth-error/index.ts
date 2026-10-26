@@ -4,11 +4,10 @@ export type CallbackErrorKey = (typeof CALLBACK_ERROR_KEYS)[number];
 
 const CALLBACK_ERROR_MESSAGES: Readonly<Record<CallbackErrorKey, string>> = {
   missing_code: "The sign-in link is incomplete. Start again.",
-  exchange_failed: "We could not complete the sign-in. Start again.",
+  exchange_failed: "The sign-in link is invalid or has expired. Request a new one.",
   access_denied: "Sign-in was cancelled. You can try again.",
 };
 
-const OTP_EXPIRED = "otp_expired";
 const INVALID_EMAIL = "email_address_invalid";
 const RATE_LIMIT_CODES: ReadonlySet<string> = new Set([
   "over_email_send_rate_limit",
@@ -39,24 +38,14 @@ export function describeCallbackError(key: CallbackErrorKey): string {
   return CALLBACK_ERROR_MESSAGES[key];
 }
 
-export function describeSendCodeError(failure: AuthFailure): string {
+export function describeSendLinkError(failure: AuthFailure): string {
   if (isRateLimited(failure)) {
     return RATE_LIMIT_MESSAGE;
   }
   if (failure.code === INVALID_EMAIL) {
     return "Enter a valid email address.";
   }
-  return "We could not send the code. Check your connection and try again.";
-}
-
-export function describeVerifyCodeError(failure: AuthFailure): string {
-  if (isRateLimited(failure)) {
-    return RATE_LIMIT_MESSAGE;
-  }
-  if (failure.code === OTP_EXPIRED) {
-    return "That code is wrong or has expired. Check the code or request a new one.";
-  }
-  return "We could not verify the code. Check your connection and try again.";
+  return "We could not send the link. Check your connection and try again.";
 }
 
 export function describeOAuthError(failure: AuthFailure): string {
