@@ -329,6 +329,11 @@ test("switching console error capture off removes the errors from new threads an
   await checkbox.click();
   await expect(checkbox).not.toBeChecked();
   await expect(popup.getByRole("status")).toHaveText("Console errors will not be captured.");
+  await popup.keyboard.press("Escape");
+  await expect(popup.getByRole("button", { name: "More options" })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
   await commentOnElement(first, "#heading", { x: 20, y: 10 }, "Errors are off");
   const live = await onlyThread(workspace.owner.client, pageUrl("/e/toggle-live"));
   expect(live.context?.consoleErrors).toEqual([]);
@@ -351,6 +356,11 @@ test("switching console error capture off removes the errors from new threads an
   await checkbox.click();
   await expect(checkbox).toBeChecked();
   await expect(popup.getByRole("status")).toHaveText("Console errors will be captured.");
+  await popup.keyboard.press("Escape");
+  await expect(popup.getByRole("button", { name: "More options" })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
   const third = await context.newPage();
   await third.goto(`${FIXTURE_ORIGIN}/e/toggle-on`);
   await expect(hostOf(third)).toHaveAttribute("data-live", "true");
