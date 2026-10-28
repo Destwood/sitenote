@@ -6,6 +6,7 @@ import {
   listPageThreads,
   onAuthStateChanged,
   onNotificationsChanged,
+  openPageSidebar,
   openPageThread,
   sendMessage,
   toggleCommentMode,
@@ -285,6 +286,31 @@ describe("openPageThread", () => {
     mocks.tabsSendMessage.mockResolvedValue(success({ opened: "yes" }));
 
     expect(await openPageThread(7, THREAD_ID)).toEqual(failure("page_unavailable"));
+  });
+});
+
+describe("openPageSidebar", () => {
+  it("asks the top frame of the tab to open the sidebar and returns the result", async () => {
+    mocks.tabsSendMessage.mockResolvedValue(success({ opened: true }));
+
+    expect(await openPageSidebar(7)).toEqual(success({ opened: true }));
+    expect(mocks.tabsSendMessage).toHaveBeenCalledWith(
+      7,
+      { type: "page.openSidebar" },
+      { frameId: 0 },
+    );
+  });
+
+  it("says the page is unavailable when there is no content script", async () => {
+    mocks.tabsSendMessage.mockRejectedValue(new Error("Could not establish connection."));
+
+    expect(await openPageSidebar(7)).toEqual(failure("page_unavailable"));
+  });
+
+  it("says the page is unavailable for an answer of the wrong shape", async () => {
+    mocks.tabsSendMessage.mockResolvedValue(success({ opened: "yes" }));
+
+    expect(await openPageSidebar(7)).toEqual(failure("page_unavailable"));
   });
 });
 

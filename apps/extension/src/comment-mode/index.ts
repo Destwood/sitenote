@@ -1,10 +1,12 @@
 import {
   commentModeToggleSchema,
   commentOnElementSchema,
+  pageOpenSidebarSchema,
   pageOpenThreadSchema,
   pageThreadsRequestSchema,
   type CommentModeState,
   type CommentOnElementState,
+  type PageOpenSidebarState,
   type PageOpenThreadState,
 } from "../messages";
 import { type MessageResult, type PageThreadSummary } from "@sitenote/widget";
@@ -20,6 +22,7 @@ export interface ToggleListenerDeps {
   commentOnElement: () => MessageResult<CommentOnElementState>;
   listThreads: () => MessageResult<PageThreadSummary[]>;
   openThread: (threadId: string) => MessageResult<PageOpenThreadState>;
+  openSidebar: () => MessageResult<PageOpenSidebarState>;
 }
 
 export type ToggleListener = (
@@ -30,7 +33,8 @@ export type ToggleListener = (
       | MessageResult<CommentModeState>
       | MessageResult<CommentOnElementState>
       | MessageResult<PageThreadSummary[]>
-      | MessageResult<PageOpenThreadState>,
+      | MessageResult<PageOpenThreadState>
+      | MessageResult<PageOpenSidebarState>,
   ) => void,
 ) => void;
 
@@ -48,6 +52,8 @@ export function createToggleListener(deps: ToggleListenerDeps): ToggleListener {
       sendResponse(deps.listThreads());
     } else if (open.success) {
       sendResponse(deps.openThread(open.data.threadId));
+    } else if (pageOpenSidebarSchema.safeParse(message).success) {
+      sendResponse(deps.openSidebar());
     }
   };
 }

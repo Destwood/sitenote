@@ -4,6 +4,7 @@ import {
   E2E_HOST_PERMISSIONS,
   E2E_WEB_MATCHES,
   TOGGLE_COMMENT_MODE_COMMAND,
+  TOGGLE_COMMENT_MODE_SHORTCUT,
   createManifest,
   webMatchOf,
 } from ".";
@@ -84,9 +85,15 @@ describe("createManifest", () => {
   it.each([false, true])("declares the comment mode shortcut when e2e is %s", (e2e) => {
     expect(createManifest({ e2e, webUrl: WEB_URL }).commands).toEqual({
       [TOGGLE_COMMENT_MODE_COMMAND]: {
-        suggested_key: { default: "Alt+Shift+C" },
+        suggested_key: { default: TOGGLE_COMMENT_MODE_SHORTCUT },
         description: "Toggle comment mode",
       },
+    });
+  });
+
+  it("suggests the comment mode shortcut from the constant", () => {
+    expect(createManifest({ e2e: false, webUrl: WEB_URL }).commands).toMatchObject({
+      [TOGGLE_COMMENT_MODE_COMMAND]: { suggested_key: { default: TOGGLE_COMMENT_MODE_SHORTCUT } },
     });
   });
 });

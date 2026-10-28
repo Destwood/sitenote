@@ -106,6 +106,13 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
         }
         return { opened };
       }),
+    openSidebar: () =>
+      whenReady(() => {
+        if (!widget.store.getState().sidebarOpen) {
+          widget.toggleSidebar();
+        }
+        return { opened: true };
+      }),
   });
   browser.runtime.onMessage.addListener(toggleListener);
   ctx.onInvalidated(() => {

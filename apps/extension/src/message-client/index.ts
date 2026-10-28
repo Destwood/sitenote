@@ -7,6 +7,7 @@ import {
   commentModeResponseSchema,
   commentOnElementResponseSchema,
   notificationsChangedSchema,
+  pageOpenSidebarResponseSchema,
   pageOpenThreadResponseSchema,
   pageThreadsResponseSchema,
   type AuthState,
@@ -15,6 +16,7 @@ import {
   type DataByRequestType,
   type ExtensionRequest,
   type ExtensionRequestType,
+  type PageOpenSidebarState,
   type PageOpenThreadState,
 } from "../messages";
 import { failure, type MessageResult, type PageThreadSummary } from "@sitenote/widget";
@@ -88,6 +90,20 @@ export async function openPageThread(
       { frameId: 0 },
     );
     const parsed = pageOpenThreadResponseSchema.safeParse(raw);
+    return parsed.success ? parsed.data : failure("page_unavailable");
+  } catch {
+    return failure("page_unavailable");
+  }
+}
+
+export async function openPageSidebar(tabId: number): Promise<MessageResult<PageOpenSidebarState>> {
+  try {
+    const raw: unknown = await browser.tabs.sendMessage(
+      tabId,
+      { type: "page.openSidebar" },
+      { frameId: 0 },
+    );
+    const parsed = pageOpenSidebarResponseSchema.safeParse(raw);
     return parsed.success ? parsed.data : failure("page_unavailable");
   } catch {
     return failure("page_unavailable");

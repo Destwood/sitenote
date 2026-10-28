@@ -3,6 +3,7 @@ import type { UserManifest } from "wxt";
 import { EXTENSION_PUBLIC_KEY } from "../extension-key";
 
 export const TOGGLE_COMMENT_MODE_COMMAND = "toggle-comment-mode";
+export const TOGGLE_COMMENT_MODE_SHORTCUT = "Alt+Shift+C";
 export const E2E_HOST_PERMISSIONS: readonly string[] = [
   "http://127.0.0.1/*",
   "http://localhost/*",
@@ -47,7 +48,7 @@ export function createManifest({ e2e, webUrl }: ManifestOptions): UserManifest {
     ...(e2e ? { host_permissions: [...E2E_HOST_PERMISSIONS] } : {}),
     commands: {
       [TOGGLE_COMMENT_MODE_COMMAND]: {
-        suggested_key: { default: "Alt+Shift+C" },
+        suggested_key: { default: TOGGLE_COMMENT_MODE_SHORTCUT },
         description: "Toggle comment mode",
       },
     },
