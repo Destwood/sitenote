@@ -37,12 +37,12 @@ export function AccountPanel({ user, webUrl, onSignedOut }: AccountPanelProps) {
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 border-t border-neutral-200 pt-3">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <span
             aria-hidden="true"
-            className="flex size-6 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-xs font-semibold text-white"
+            className="flex size-5 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-[11px] font-semibold text-white"
           >
             {initialOf(user.displayName)}
           </span>
@@ -52,7 +52,7 @@ export function AccountPanel({ user, webUrl, onSignedOut }: AccountPanelProps) {
             target="_blank"
             rel="noreferrer"
             title={user.email ?? "Guest session"}
-            className="truncate text-sm font-medium text-neutral-900 underline underline-offset-4"
+            className="truncate text-xs font-medium text-neutral-900 underline underline-offset-4"
           >
             {user.displayName}
           </a>

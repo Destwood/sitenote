@@ -1,20 +1,14 @@
 import { useEffect, useState } from "react";
 
-import { ERROR_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
-import { listPageThreads, openPageThread } from "../message-client";
-import { ERROR_MESSAGES, THREAD_NOT_HERE_MESSAGE, type PageThreadSummary } from "@sitenote/widget";
-
-const ITEM_CLASS =
-  "flex w-full flex-col gap-1 rounded-md border border-neutral-200 bg-white px-3 py-2 text-left hover:bg-neutral-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900";
-const BADGE_CLASS =
-  "rounded-sm bg-neutral-100 px-1.5 py-0.5 text-[11px] font-medium text-neutral-700";
+import { ERROR_CLASS, LINK_BUTTON_CLASS } from "../form-controls";
+import { listPageThreads, openPageSidebar } from "../message-client";
+import { ERROR_MESSAGES, type PageThreadSummary } from "@sitenote/widget";
 
 type View =
   { kind: "loading" } | { kind: "error" } | { kind: "ready"; threads: PageThreadSummary[] };
 
 interface PageThreadsPanelProps {
   tabId: number;
-  onCount: (openCount: number) => void;
   close?: () => void;
 }
 
@@ -27,15 +21,17 @@ async function fetchView(tabId: number): Promise<View> {
   return result.ok ? { kind: "ready", threads: result.data } : { kind: "error" };
 }
 
-function byStatusThenNumber(a: PageThreadSummary, b: PageThreadSummary): number {
-  return Number(a.status === "resolved") - Number(b.status === "resolved") || a.number - b.number;
+export function commentsSummary(total: number, open: number): string {
+  if (total === 0) {
+    return "No comments yet";
+  }
+  if (open === 0) {
+    return "No open comments";
+  }
+  return open === 1 ? "1 open comment" : `${String(open)} open comments`;
 }
 
-function repliesLabel(count: number): string {
-  return count === 1 ? "1 reply" : `${String(count)} replies`;
-}
-
-export function PageThreadsPanel({ tabId, onCount, close = closePopup }: PageThreadsPanelProps) {
+export function PageThreadsPanel({ tabId, close = closePopup }: PageThreadsPanelProps) {
   const [view, setView] = useState<View>({ kind: "loading" });
   const [openError, setOpenError] = useState<string | null>(null);
 
@@ -51,26 +47,16 @@ export function PageThreadsPanel({ tabId, onCount, close = closePopup }: PageThr
     };
   }, [tabId]);
 
-  useEffect(() => {
-    if (view.kind === "ready") {
-      onCount(view.threads.filter((thread) => thread.status === "open").length);
-    }
-  }, [view, onCount]);
-
   function retry() {
     setView({ kind: "loading" });
     void fetchView(tabId).then(setView);
   }
 
-  async function open(threadId: string) {
+  async function openSidebar() {
     setOpenError(null);
-    const result = await openPageThread(tabId, threadId);
+    const result = await openPageSidebar(tabId);
     if (!result.ok) {
       setOpenError(ERROR_MESSAGES[result.error.code]);
-      return;
-    }
-    if (!result.data.opened) {
-      setOpenError(THREAD_NOT_HERE_MESSAGE);
       return;
     }
     close();
@@ -78,7 +64,7 @@ export function PageThreadsPanel({ tabId, onCount, close = closePopup }: PageThr
 
   if (view.kind === "loading") {
     return (
-      <p role="status" className="border-t border-neutral-200 pt-4 text-sm text-neutral-600">
+      <p role="status" className="text-sm text-neutral-600">
         Loading comments...
       </p>
     );
@@ -86,51 +72,34 @@ export function PageThreadsPanel({ tabId, onCount, close = closePopup }: PageThr
 
   if (view.kind === "error") {
     return (
-      <div className="flex flex-col gap-3 border-t border-neutral-200 pt-4">
+      <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-neutral-600">Open the page to see its comments.</p>
-        <button type="button" onClick={retry} className={SECONDARY_BUTTON_CLASS}>
+        <button type="button" onClick={retry} className={LINK_BUTTON_CLASS}>
           Try again
         </button>
       </div>
     );
   }
 
+  const openCount = view.threads.filter((thread) => thread.status === "open").length;
+
   return (
-    <div className="flex flex-col gap-3 border-t border-neutral-200 pt-4">
-      <h2 className="text-sm font-semibold text-neutral-900">Comments on this page</h2>
-      {view.threads.length === 0 ? (
-        <p className="text-sm text-neutral-600">
-          No comments yet. Turn on Comment mode or right-click an element.
-        </p>
-      ) : (
-        <ul aria-label="Comments on this page" className="flex flex-col gap-2">
-          {[...view.threads].sort(byStatusThenNumber).map((thread) => (
-            <li key={thread.id}>
-              <button
-                type="button"
-                onClick={() => {
-                  void open(thread.id);
-                }}
-                className={ITEM_CLASS}
-              >
-                <span className="flex flex-wrap items-center gap-2 text-xs font-semibold text-neutral-900">
-                  #{thread.number}
-                  {thread.status === "resolved" ? (
-                    <span className={BADGE_CLASS}>Resolved</span>
-                  ) : null}
-                  {thread.detached ? <span className={BADGE_CLASS}>Detached</span> : null}
-                </span>
-                <span className="break-words text-sm text-neutral-900">
-                  {thread.excerpt === "" ? "No text" : thread.excerpt}
-                </span>
-                <span className="text-xs text-neutral-600">
-                  {thread.authorName} · {repliesLabel(thread.replies)}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2 text-sm">
+        <span data-testid="comments-summary" className="text-neutral-900">
+          {commentsSummary(view.threads.length, openCount)}
+        </span>
+        {view.threads.length > 0 ? (
+          <>
+            <span aria-hidden="true" className="text-neutral-400">
+              ·
+            </span>
+            <button type="button" onClick={() => void openSidebar()} className={LINK_BUTTON_CLASS}>
+              Open on page
+            </button>
+          </>
+        ) : null}
+      </div>
       {openError === null ? null : (
         <p role="alert" className={ERROR_CLASS}>
           {openError}

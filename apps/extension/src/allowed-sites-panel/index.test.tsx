@@ -19,30 +19,21 @@ beforeEach(() => {
 });
 
 describe("AllowedSitesPanel", () => {
-  it("stays collapsed until the toggle is pressed", async () => {
-    const user = userEvent.setup();
+  it("loads and lists the allowed sites on mount", async () => {
     mocks.listOriginAccess.mockResolvedValue(["https://example.test"]);
     render(<AllowedSitesPanel onChanged={vi.fn()} />);
 
-    const toggle = screen.getByRole("button", { name: "Allowed sites" });
-    expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(screen.queryByRole("list", { name: "Allowed sites" })).toBeNull();
-    expect(mocks.listOriginAccess).not.toHaveBeenCalled();
-
-    await user.click(toggle);
-
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("status").textContent).toBe("Loading...");
     expect((await screen.findByRole("list", { name: "Allowed sites" })).textContent).toContain(
       "https://example.test",
     );
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(mocks.listOriginAccess).toHaveBeenCalledOnce();
   });
 
   it("says when there are no allowed sites", async () => {
-    const user = userEvent.setup();
     mocks.listOriginAccess.mockResolvedValue([]);
     render(<AllowedSitesPanel onChanged={vi.fn()} />);
-
-    await user.click(screen.getByRole("button", { name: "Allowed sites" }));
 
     expect((await screen.findByText("No allowed sites yet.")).textContent).toBe(
       "No allowed sites yet.",
@@ -59,7 +50,6 @@ describe("AllowedSitesPanel", () => {
       return Promise.resolve(success(null));
     });
     render(<AllowedSitesPanel onChanged={onChanged} />);
-    await user.click(screen.getByRole("button", { name: "Allowed sites" }));
 
     await user.click(await screen.findByRole("button", { name: "Remove https://alpha.test" }));
 
@@ -79,7 +69,6 @@ describe("AllowedSitesPanel", () => {
     mocks.listOriginAccess.mockResolvedValue(["https://alpha.test"]);
     mocks.sendMessage.mockResolvedValue(failure("unknown"));
     render(<AllowedSitesPanel onChanged={onChanged} />);
-    await user.click(screen.getByRole("button", { name: "Allowed sites" }));
 
     await user.click(await screen.findByRole("button", { name: "Remove https://alpha.test" }));
 
