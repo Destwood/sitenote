@@ -4,9 +4,9 @@ Figma-style comments on any live website.
 
 Click an element or select text, drop a pin, and discuss it in a thread with your team. Every comment carries a screenshot, viewport, browser and console errors, links straight back to the exact spot on the page, and turns into a ClickUp task in one click.
 
-[![A comment pinned to a card on a sample page, with its thread open](apps/web/public/media/sitenote-demo-poster.png)](https://<your-domain>/demo)
+[![A comment pinned to a card on a sample page, with its thread open](apps/web/public/media/sitenote-demo-poster.png)](https://sitenote-tau.vercel.app/demo)
 
-> Live demo: `https://<your-domain>/demo` (placeholder until the first deploy). The demo runs on a sample page and needs no account.
+> Live demo: [sitenote-tau.vercel.app/demo](https://sitenote-tau.vercel.app/demo). The demo runs on a sample page and needs no account.
 >
 > Status: in development. See [the implementation plan](docs/plans/2026-10-20-sitenote-implementation.md).
 
