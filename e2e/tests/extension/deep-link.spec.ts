@@ -86,7 +86,7 @@ test("a reply notification opens the thread on its page with its pin active", as
   await openReviewPage(context, extensionId, OWNER, thread.pagePath);
 
   const popup = await openPopup(context, extensionId);
-  await popup.getByRole("tab", { name: "Notifications" }).click();
+  await popup.getByRole("button", { name: "Notifications" }).click();
   const item = popup.getByTestId("notification-item").filter({ hasText: `Reply ${token}` });
   const [opened] = await Promise.all([context.waitForEvent("page"), item.click()]);
 

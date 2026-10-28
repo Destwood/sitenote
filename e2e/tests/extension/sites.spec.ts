@@ -7,6 +7,7 @@ import {
   enableSite,
   evaluateIn,
   openPopup,
+  openSiteMenu,
   pointPopupAt,
   signIn,
   stopServiceWorker,
@@ -113,8 +114,8 @@ test("a signed-in owner enables Sitenote on the fixture site from the popup", as
   extensionId,
 }) => {
   const { page, popup } = await openFixtureAndPopup(context, extensionId, OWNER);
-  await expect(popup.getByTestId("site-origin")).toHaveText(FIXTURE_ORIGIN);
-  await expect(popup.getByLabel("Workspace")).toHaveValue(/.+/);
+  await expect(popup.getByTestId("site-origin")).toHaveText(new URL(FIXTURE_ORIGIN).host);
+  await expect(popup.getByRole("button", { name: "Enable on this site" })).toBeEnabled();
   await expect(hostOf(page)).toHaveCount(0);
 
   await enableSite(popup, WORKSPACE_NAME);
@@ -203,6 +204,7 @@ test("disabling removes the overlay, unregisters the script and survives a reloa
   await enableSite(popup, WORKSPACE_NAME);
   await expect(hostOf(page)).toHaveCount(1);
 
+  await openSiteMenu(popup);
   await popup.getByRole("button", { name: "Disable on this site" }).click();
 
   await expect(popup.getByTestId("site-state")).toHaveText("Not enabled");

@@ -14,7 +14,7 @@ import {
   submitNewThread,
   type ReviewSession,
 } from "../../support/comments";
-import { evaluateIn, pointPopupAt } from "../../support/extension";
+import { evaluateIn, openSiteMenu, pointPopupAt } from "../../support/extension";
 import {
   createFreshWorkspace,
   deleteFreshWorkspace,
@@ -322,6 +322,7 @@ test("switching console error capture off removes the errors from new threads an
   const first = await open(context, extensionId, "/e/toggle-live");
   const { page, popup } = first;
   await page.locator("#log-error").click();
+  await openSiteMenu(popup);
   const checkbox = popup.getByRole("checkbox", { name: "Capture console errors" });
   await expect(checkbox).toBeChecked();
 
@@ -346,6 +347,7 @@ test("switching console error capture off removes the errors from new threads an
   const off = await onlyThread(workspace.owner.client, pageUrl("/e/toggle-off"));
   expect(off.context?.consoleErrors).toEqual([]);
 
+  await openSiteMenu(popup);
   await checkbox.click();
   await expect(checkbox).toBeChecked();
   await expect(popup.getByRole("status")).toHaveText("Console errors will be captured.");
