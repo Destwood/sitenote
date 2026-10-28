@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { AccountPanel } from "../account-panel";
+import { AllowedSitesPanel } from "../allowed-sites-panel";
 import { ERROR_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
 import { onAuthStateChanged, sendMessage } from "../message-client";
 import { type AuthState } from "../messages";
@@ -50,6 +51,7 @@ function SignedInTabs({ webUrl }: SignedInTabsProps) {
   const [openCount, setOpenCount] = useState<number | null>(null);
   const [pageTabId, setPageTabId] = useState<number | null>(null);
   const [listVersion, setListVersion] = useState(0);
+  const [siteVersion, setSiteVersion] = useState(0);
   const tabRefs = useRef<Record<TabId, HTMLButtonElement | null>>({
     comments: null,
     notifications: null,
@@ -145,10 +147,15 @@ function SignedInTabs({ webUrl }: SignedInTabsProps) {
         aria-labelledby="popup-tab-comments"
         hidden={tab !== "comments"}
       >
-        <SitePanel webUrl={webUrl} onStateChange={handleSiteState} />
+        <SitePanel key={siteVersion} webUrl={webUrl} onStateChange={handleSiteState} />
         {pageTabId === null ? null : (
           <PageThreadsPanel key={listVersion} tabId={pageTabId} onCount={setOpenCount} />
         )}
+        <AllowedSitesPanel
+          onChanged={() => {
+            setSiteVersion((version) => version + 1);
+          }}
+        />
       </div>
       <div
         role="tabpanel"
@@ -216,7 +223,7 @@ export function PopupApp({ googleEnabled, webUrl }: PopupAppProps) {
       ) : null}
       {view.kind === "ready" && view.state.status === "signedIn" ? (
         <>
-          <AccountPanel user={view.state.user} onSignedOut={showState} />
+          <AccountPanel user={view.state.user} webUrl={webUrl} onSignedOut={showState} />
           <SignedInTabs webUrl={webUrl} />
         </>
       ) : null}

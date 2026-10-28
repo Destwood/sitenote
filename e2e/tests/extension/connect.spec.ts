@@ -21,7 +21,7 @@ test("a member connects the extension and stays signed in on the web", async ({
   await expect.poll(() => webAuthCookies(context)).not.toEqual([]);
 
   const popup = await openPopup(context, extensionId);
-  await expect(popup.getByTestId("account-email")).toHaveText(email);
+  await expect(popup.getByTestId("display-name")).toHaveAttribute("title", email);
 
   await page.getByRole("link", { name: "Open dashboard" }).click();
   await expect(page).toHaveURL(`${WEB_ORIGIN}/app`);

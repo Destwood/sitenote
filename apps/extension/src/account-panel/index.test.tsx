@@ -10,17 +10,22 @@ const mocks = vi.hoisted(() => ({ sendMessage: vi.fn() }));
 vi.mock("../message-client", () => ({ sendMessage: mocks.sendMessage }));
 
 const USER = { id: "u", email: "max@sitenote.test", displayName: "Max Member", isAnonymous: false };
+const WEB_URL = "https://web.test";
 
 beforeEach(() => {
   mocks.sendMessage.mockReset();
 });
 
 describe("AccountPanel", () => {
-  it("shows the display name, the email and the initial", () => {
-    render(<AccountPanel user={USER} onSignedOut={vi.fn()} />);
+  it("shows the display name as a link to the dashboard with the email as its tooltip", () => {
+    render(<AccountPanel user={USER} webUrl={WEB_URL} onSignedOut={vi.fn()} />);
 
-    expect(screen.getByTestId("display-name").textContent).toContain("Max Member");
-    expect(screen.getByTestId("account-email").textContent).toContain("max@sitenote.test");
+    const link = screen.getByRole("link", { name: "Max Member" });
+    expect(link.getAttribute("href")).toBe("https://web.test/app");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toContain("noreferrer");
+    expect(link.getAttribute("title")).toBe("max@sitenote.test");
+    expect(screen.queryByText("max@sitenote.test")).toBeNull();
     expect(screen.getByText("M")).toBeTruthy();
   });
 
@@ -28,15 +33,22 @@ describe("AccountPanel", () => {
     render(
       <AccountPanel
         user={{ ...USER, email: null, displayName: "Guest", isAnonymous: true }}
+        webUrl={WEB_URL}
         onSignedOut={vi.fn()}
       />,
     );
 
-    expect(screen.getByTestId("account-email").textContent).toContain("Guest session");
+    expect(screen.getByRole("link", { name: "Guest" }).getAttribute("title")).toBe("Guest session");
   });
 
   it("uppercases the first character of an accented name", () => {
-    render(<AccountPanel user={{ ...USER, displayName: "  élan" }} onSignedOut={vi.fn()} />);
+    render(
+      <AccountPanel
+        user={{ ...USER, displayName: "  élan" }}
+        webUrl={WEB_URL}
+        onSignedOut={vi.fn()}
+      />,
+    );
 
     expect(screen.getByText("É")).toBeTruthy();
   });
@@ -45,7 +57,7 @@ describe("AccountPanel", () => {
     const user = userEvent.setup();
     const onSignedOut = vi.fn();
     mocks.sendMessage.mockResolvedValueOnce(success({ status: "signedOut" }));
-    render(<AccountPanel user={USER} onSignedOut={onSignedOut} />);
+    render(<AccountPanel user={USER} webUrl={WEB_URL} onSignedOut={onSignedOut} />);
 
     await user.click(screen.getByRole("button", { name: "Sign out" }));
 
@@ -59,7 +71,7 @@ describe("AccountPanel", () => {
     const user = userEvent.setup();
     const onSignedOut = vi.fn();
     mocks.sendMessage.mockResolvedValueOnce(failure("sign_out_failed"));
-    render(<AccountPanel user={USER} onSignedOut={onSignedOut} />);
+    render(<AccountPanel user={USER} webUrl={WEB_URL} onSignedOut={onSignedOut} />);
 
     await user.click(screen.getByRole("button", { name: "Sign out" }));
 
@@ -72,6 +84,7 @@ describe("AccountPanel", () => {
     render(
       <AccountPanel
         user={{ ...USER, displayName: "<img src=x onerror=alert(1)>" }}
+        webUrl={WEB_URL}
         onSignedOut={vi.fn()}
       />,
     );

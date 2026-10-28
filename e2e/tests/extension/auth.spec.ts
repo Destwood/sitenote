@@ -104,7 +104,7 @@ test("the seeded member signs in with an email code and the popup shows Max Memb
   await signIn(popup, SEEDED_MEMBER);
 
   await expect(popup.getByTestId("display-name")).toHaveText("Max Member");
-  await expect(popup.getByTestId("account-email")).toHaveText(SEEDED_MEMBER);
+  await expect(popup.getByTestId("display-name")).toHaveAttribute("title", SEEDED_MEMBER);
   await expect(popup.getByRole("button", { name: "Sign out" })).toBeVisible();
   await expect(popup.getByLabel("Email")).toHaveCount(0);
 });
@@ -130,7 +130,7 @@ test("the session survives a stopped service worker", async ({ context, extensio
   await stopServiceWorker(context, popup);
   await popup.reload();
 
-  await expect(popup.getByTestId("account-email")).toHaveText(email);
+  await expect(popup.getByTestId("display-name")).toHaveAttribute("title", email);
 });
 
 test("an expired access token is refreshed when the service worker wakes up", async ({
@@ -155,7 +155,7 @@ test("an expired access token is refreshed when the service worker wakes up", as
   await stopServiceWorker(context, popup);
   await popup.reload();
 
-  await expect(popup.getByTestId("account-email")).toHaveText(email);
+  await expect(popup.getByTestId("display-name")).toHaveAttribute("title", email);
   const after = await readStoredSession(popup);
   expect(after.access_token).not.toBe(before.access_token);
   expect(Number(after.expires_at)).toBeGreaterThan(nowSeconds + 600);
@@ -216,7 +216,7 @@ test("a wrong code shows an error and the right code still works", async ({
 
   await popup.getByLabel("6-digit code").fill(code);
   await popup.getByRole("button", { name: "Verify code" }).click();
-  await expect(popup.getByTestId("account-email")).toHaveText(email);
+  await expect(popup.getByTestId("display-name")).toHaveAttribute("title", email);
 });
 
 test("closing the popup while waiting for the e-mail keeps the code step", async ({
@@ -233,7 +233,7 @@ test("closing the popup while waiting for the e-mail keeps the code step", async
   await expect(reopened.getByRole("status")).toContainText(email);
   await reopened.getByLabel("6-digit code").fill(code);
   await reopened.getByRole("button", { name: "Verify code" }).click();
-  await expect(reopened.getByTestId("account-email")).toHaveText(email);
+  await expect(reopened.getByTestId("display-name")).toHaveAttribute("title", email);
 
   await reopened.getByRole("button", { name: "Sign out" }).click();
   await expect(reopened.getByLabel("Email")).toBeVisible();
@@ -248,7 +248,7 @@ test("an open popup follows sign-in and sign-out done in another popup", async (
   const email = newEmail();
 
   await signIn(first, email);
-  await expect(second.getByTestId("account-email")).toHaveText(email);
+  await expect(second.getByTestId("display-name")).toHaveAttribute("title", email);
 
   await first.getByRole("button", { name: "Sign out" }).click();
   await expect(second.getByLabel("Email")).toBeVisible();

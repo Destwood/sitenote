@@ -142,7 +142,7 @@ describe("PopupApp", () => {
     render(<PopupApp googleEnabled={false} webUrl={WEB_URL} />);
 
     expect((await screen.findByTestId("display-name")).textContent).toContain("Max Member");
-    expect(screen.getByTestId("account-email").textContent).toContain("max@sitenote.test");
+    expect(screen.getByTestId("display-name").getAttribute("title")).toBe("max@sitenote.test");
     expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
   });
 
