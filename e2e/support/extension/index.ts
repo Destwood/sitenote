@@ -95,3 +95,11 @@ export async function enableSite(popup: Page, workspaceName: string): Promise<vo
   await popup.getByRole("button", { name: "Enable on this site" }).click();
   await expect(popup.getByTestId("site-state")).toHaveText(`Enabled in ${workspaceName}`);
 }
+
+export async function openSiteMenu(popup: Page): Promise<void> {
+  const trigger = popup.getByRole("button", { name: "More options" });
+  if ((await trigger.getAttribute("aria-expanded")) === "false") {
+    await trigger.click();
+  }
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+}

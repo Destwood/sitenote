@@ -131,7 +131,7 @@ test("a guest joins from the invite link, the extension takes over the session a
 
   const popup = await openPopup(context, extensionId);
   await expect(popup.getByTestId("display-name")).toHaveText(GUEST_NAME);
-  await expect(popup.getByTestId("account-email")).toHaveText("Guest session");
+  await expect(popup.getByTestId("display-name")).toHaveAttribute("title", "Guest session");
 
   const page = await context.newPage();
   await page.goto(path);
@@ -219,7 +219,7 @@ test("the extension keeps a signed-in member and the page explains how to switch
 
   await popup.reload();
   await expect(popup.getByTestId("display-name")).toHaveText("Max Member");
-  await expect(popup.getByTestId("account-email")).toHaveText(MEMBER);
+  await expect(popup.getByTestId("display-name")).toHaveAttribute("title", MEMBER);
 
   await joinPage.goto(`${WEB_ORIGIN}/app`);
   await expect(joinPage.getByRole("listitem").filter({ hasText: WORKSPACE_NAME })).toContainText(

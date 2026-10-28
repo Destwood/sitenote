@@ -1,19 +1,19 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ERROR_MESSAGES, THREAD_NOT_HERE_MESSAGE, failure, success } from "@sitenote/widget";
+import { ERROR_MESSAGES, failure, success } from "@sitenote/widget";
 import type { PageThreadSummary } from "@sitenote/widget";
-import { PageThreadsPanel } from ".";
+import { PageThreadsPanel, commentsSummary } from ".";
 
 const mocks = vi.hoisted(() => ({
   listPageThreads: vi.fn(),
-  openPageThread: vi.fn(),
+  openPageSidebar: vi.fn(),
 }));
 
 vi.mock("../message-client", () => ({
   listPageThreads: mocks.listPageThreads,
-  openPageThread: mocks.openPageThread,
+  openPageSidebar: mocks.openPageSidebar,
 }));
 
 const TAB_ID = 7;
@@ -51,10 +51,26 @@ const OPEN_THIRD = summary({
   detached: true,
   replies: 3,
 });
+const OPEN_FOURTH = summary({
+  id: "30000000-0000-4000-8000-000000000004",
+  number: 4,
+});
 
 beforeEach(() => {
   mocks.listPageThreads.mockReset();
-  mocks.openPageThread.mockReset();
+  mocks.openPageSidebar.mockReset();
+});
+
+describe("commentsSummary", () => {
+  it.each([
+    [0, 0, "No comments yet"],
+    [2, 0, "No open comments"],
+    [1, 1, "1 open comment"],
+    [3, 2, "2 open comments"],
+    [3, 3, "3 open comments"],
+  ])("%i threads with %i open -> %s", (total, open, expected) => {
+    expect(commentsSummary(total, open)).toBe(expected);
+  });
 });
 
 describe("PageThreadsPanel", () => {
@@ -66,119 +82,87 @@ describe("PageThreadsPanel", () => {
       }),
     );
 
-    render(<PageThreadsPanel tabId={TAB_ID} onCount={vi.fn()} />);
+    render(<PageThreadsPanel tabId={TAB_ID} />);
     expect(screen.getByRole("status").textContent).toBe("Loading comments...");
 
     answer(success([]));
-    expect(await screen.findByText(/No comments on this page yet/)).toBeTruthy();
+    expect(await screen.findByText("No comments yet")).toBeTruthy();
     expect(mocks.listPageThreads).toHaveBeenCalledWith(TAB_ID);
   });
 
   it("asks the content script again when the user tries again after a failure", async () => {
     const user = userEvent.setup();
     mocks.listPageThreads.mockResolvedValueOnce(failure("page_unavailable"));
-    render(<PageThreadsPanel tabId={TAB_ID} onCount={vi.fn()} />);
+    render(<PageThreadsPanel tabId={TAB_ID} />);
 
     expect(await screen.findByText("Open the page to see its comments.")).toBeTruthy();
 
-    mocks.listPageThreads.mockResolvedValueOnce(success([RESOLVED]));
+    mocks.listPageThreads.mockResolvedValueOnce(success([OPEN_SECOND]));
     await user.click(screen.getByRole("button", { name: "Try again" }));
 
-    expect(await screen.findByRole("list", { name: "Comments on this page" })).toBeTruthy();
+    expect(await screen.findByTestId("comments-summary")).toBeTruthy();
     expect(mocks.listPageThreads).toHaveBeenCalledTimes(2);
   });
 
-  it("lists open threads first, then resolved ones, each in number order", async () => {
-    mocks.listPageThreads.mockResolvedValue(success([RESOLVED, OPEN_THIRD, OPEN_SECOND]));
+  it("says there are no comments and offers no button when the page has none", async () => {
+    mocks.listPageThreads.mockResolvedValue(success([]));
 
-    render(<PageThreadsPanel tabId={TAB_ID} onCount={vi.fn()} />);
+    render(<PageThreadsPanel tabId={TAB_ID} />);
 
-    const list = await screen.findByRole("list", { name: "Comments on this page" });
-    const numbers = within(list)
-      .getAllByRole("listitem")
-      .map((item) => /#\d+/.exec(item.textContent)?.[0]);
-    expect(numbers).toEqual(["#2", "#3", "#1"]);
+    expect((await screen.findByTestId("comments-summary")).textContent).toBe("No comments yet");
+    expect(screen.queryByRole("button")).toBeNull();
   });
 
-  it("marks resolved and detached threads with badges and shows the author and reply count", async () => {
-    mocks.listPageThreads.mockResolvedValue(success([RESOLVED, OPEN_THIRD]));
+  it("says there are no open comments when only resolved ones exist", async () => {
+    mocks.listPageThreads.mockResolvedValue(success([RESOLVED]));
 
-    render(<PageThreadsPanel tabId={TAB_ID} onCount={vi.fn()} />);
+    render(<PageThreadsPanel tabId={TAB_ID} />);
 
-    const list = await screen.findByRole("list", { name: "Comments on this page" });
-    expect(within(list).getByText("Resolved")).toBeTruthy();
-    expect(within(list).getByText("Detached")).toBeTruthy();
-    expect(within(list).getByText("Max Member · 3 replies")).toBeTruthy();
-    expect(within(list).getByText("Fixed already")).toBeTruthy();
+    expect((await screen.findByTestId("comments-summary")).textContent).toBe("No open comments");
+    expect(screen.getByRole("button", { name: "Open on page" })).toBeTruthy();
   });
 
-  it("uses the singular for one reply", async () => {
-    mocks.listPageThreads.mockResolvedValue(success([OPEN_SECOND]));
+  it("uses the singular for one open comment", async () => {
+    mocks.listPageThreads.mockResolvedValue(success([RESOLVED, OPEN_SECOND]));
 
-    render(<PageThreadsPanel tabId={TAB_ID} onCount={vi.fn()} />);
+    render(<PageThreadsPanel tabId={TAB_ID} />);
 
-    expect(await screen.findByText("Max Member · 1 reply")).toBeTruthy();
+    expect((await screen.findByTestId("comments-summary")).textContent).toBe("1 open comment");
   });
 
-  it("reports the number of open threads", async () => {
-    const onCount = vi.fn();
-    mocks.listPageThreads.mockResolvedValue(success([RESOLVED, OPEN_THIRD, OPEN_SECOND]));
+  it("counts only open threads in the plural summary", async () => {
+    mocks.listPageThreads.mockResolvedValue(
+      success([RESOLVED, OPEN_SECOND, OPEN_THIRD, OPEN_FOURTH]),
+    );
 
-    render(<PageThreadsPanel tabId={TAB_ID} onCount={onCount} />);
+    render(<PageThreadsPanel tabId={TAB_ID} />);
 
-    await screen.findByRole("list", { name: "Comments on this page" });
-    expect(onCount).toHaveBeenLastCalledWith(2);
+    expect((await screen.findByTestId("comments-summary")).textContent).toBe("3 open comments");
   });
 
-  it("opens the thread on the page and closes the popup", async () => {
+  it("opens the sidebar on the page and closes the popup", async () => {
     const user = userEvent.setup();
     const close = vi.fn();
     mocks.listPageThreads.mockResolvedValue(success([OPEN_THIRD]));
-    mocks.openPageThread.mockResolvedValue(success({ opened: true }));
+    mocks.openPageSidebar.mockResolvedValue(success({ opened: true }));
 
-    render(<PageThreadsPanel tabId={TAB_ID} onCount={vi.fn()} close={close} />);
-    await user.click(await screen.findByRole("button", { name: /Detached one/ }));
+    render(<PageThreadsPanel tabId={TAB_ID} close={close} />);
+    await user.click(await screen.findByRole("button", { name: "Open on page" }));
 
-    expect(mocks.openPageThread).toHaveBeenCalledWith(TAB_ID, OPEN_THIRD.id);
+    expect(mocks.openPageSidebar).toHaveBeenCalledWith(TAB_ID);
     expect(close).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the popup open and explains when the thread is no longer on the page", async () => {
+  it("keeps the popup open and shows the error when the page cannot open the sidebar", async () => {
     const user = userEvent.setup();
     const close = vi.fn();
     mocks.listPageThreads.mockResolvedValue(success([OPEN_SECOND]));
-    mocks.openPageThread.mockResolvedValue(success({ opened: false }));
+    mocks.openPageSidebar.mockResolvedValue(failure("page_unavailable"));
 
-    render(<PageThreadsPanel tabId={TAB_ID} onCount={vi.fn()} close={close} />);
-    await user.click(await screen.findByRole("button", { name: /No text/ }));
-
-    expect((await screen.findByRole("alert")).textContent).toBe(THREAD_NOT_HERE_MESSAGE);
-    expect(close).not.toHaveBeenCalled();
-  });
-
-  it("shows the error when the page cannot open the thread", async () => {
-    const user = userEvent.setup();
-    const close = vi.fn();
-    mocks.listPageThreads.mockResolvedValue(success([OPEN_SECOND]));
-    mocks.openPageThread.mockResolvedValue(failure("page_unavailable"));
-
-    render(<PageThreadsPanel tabId={TAB_ID} onCount={vi.fn()} close={close} />);
-    await user.click(await screen.findByRole("button", { name: /No text/ }));
+    render(<PageThreadsPanel tabId={TAB_ID} close={close} />);
+    await user.click(await screen.findByRole("button", { name: "Open on page" }));
 
     expect((await screen.findByRole("alert")).textContent).toBe(ERROR_MESSAGES.page_unavailable);
     expect(close).not.toHaveBeenCalled();
-  });
-
-  it("says there are no comments when the page has none", async () => {
-    mocks.listPageThreads.mockResolvedValue(success([]));
-
-    render(<PageThreadsPanel tabId={TAB_ID} onCount={vi.fn()} />);
-
-    expect(
-      await screen.findByText(
-        "No comments on this page yet. Turn on Comment mode or right-click an element.",
-      ),
-    ).toBeTruthy();
-    expect(screen.queryByRole("list")).toBeNull();
   });
 });

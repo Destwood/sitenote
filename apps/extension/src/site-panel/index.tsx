@@ -6,20 +6,22 @@ import {
   SECONDARY_BUTTON_CLASS,
   INPUT_CLASS,
 } from "../form-controls";
+import { PageThreadsPanel } from "../page-threads-panel";
+import { TOGGLE_COMMENT_MODE_SHORTCUT } from "../manifest-config";
 import { sendMessage, toggleCommentMode } from "../message-client";
+import { SiteMenu } from "../site-menu";
+import { createPendingEnable } from "../pending-enable";
 import { ERROR_MESSAGES, type ErrorCode } from "@sitenote/widget";
-import {
-  getTargetTab,
-  hasOriginAccess,
-  removeOriginAccess,
-  requestOriginAccess,
-  type TargetTab,
-} from "../tab-access";
+import { getTargetTab, hasOriginAccess, requestOriginAccess, type TargetTab } from "../tab-access";
 import type { SiteInfo, WorkspaceInfo } from "@sitenote/widget";
+import { browser } from "wxt/browser";
 
 export const LAST_WORKSPACE_KEY = "sitenote.lastWorkspace";
 const PERMISSION_DENIED_MESSAGE = "Sitenote needs access to this site to show comments on it.";
 const GUEST_HINT = "Guests can enable only sites that an owner or member has already added.";
+const ENABLE_POLL_ATTEMPTS = 10;
+const ENABLE_POLL_INTERVAL_MS = 300;
+const pending = createPendingEnable(browser.storage.local);
 
 type View =
   | { kind: "loading" }
@@ -35,7 +37,7 @@ interface Target {
 
 interface SitePanelProps {
   webUrl: string;
-  onStateChange?: (enabled: boolean, tabId: number | null) => void;
+  onManageSites: () => void;
 }
 
 function readLastWorkspace(): string | null {
@@ -63,6 +65,14 @@ function asTarget(tab: TargetTab | null): Target | null {
   return tab?.origin == null ? null : { id: tab.id, origin: tab.origin };
 }
 
+export function hostOf(origin: string): string {
+  return URL.parse(origin)?.host ?? origin;
+}
+
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 async function loadView(tab: Target): Promise<View> {
   const site = await sendMessage({ type: "sites.forOrigin", origin: tab.origin });
   if (!site.ok) {
@@ -82,7 +92,7 @@ async function resolveView(): Promise<View> {
   return target === null ? { kind: "unavailable" } : loadView(target);
 }
 
-export function SitePanel({ webUrl, onStateChange }: SitePanelProps) {
+export function SitePanel({ webUrl, onManageSites }: SitePanelProps) {
   const [view, setView] = useState<View>({ kind: "loading" });
   const [workspaceId, setWorkspaceId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -112,9 +122,29 @@ export function SitePanel({ webUrl, onStateChange }: SitePanelProps) {
     };
   }, [show]);
 
-  useEffect(() => {
-    onStateChange?.(view.kind === "enabled", view.kind === "enabled" ? view.tab.id : null);
-  }, [view, onStateChange]);
+  async function enableAfterPrompt(tab: Target) {
+    await pending.set({ tabId: tab.id, origin: tab.origin, workspaceId });
+    const granted = await requestOriginAccess(tab.origin);
+    if (!granted) {
+      await pending.clear();
+      setFailed(PERMISSION_DENIED_MESSAGE);
+      setBusy(false);
+      return;
+    }
+    for (let attempt = 0; attempt < ENABLE_POLL_ATTEMPTS; attempt += 1) {
+      await sleep(ENABLE_POLL_INTERVAL_MS);
+      const site = await sendMessage({ type: "sites.forOrigin", origin: tab.origin });
+      if (site.ok && site.data !== null) {
+        saveLastWorkspace(workspaceId);
+        await load();
+        setBusy(false);
+        return;
+      }
+    }
+    await pending.clear();
+    setFailed(ERROR_MESSAGES.unknown);
+    setBusy(false);
+  }
 
   async function enable(tab: Target) {
     if (busy || workspaceId === "") {
@@ -123,7 +153,10 @@ export function SitePanel({ webUrl, onStateChange }: SitePanelProps) {
     setBusy(true);
     setFailed(null);
     setNotice(null);
-    const alreadyGranted = await hasOriginAccess(tab.origin);
+    if (!(await hasOriginAccess(tab.origin))) {
+      await enableAfterPrompt(tab);
+      return;
+    }
     const granted = await requestOriginAccess(tab.origin);
     if (!granted) {
       setFailed(PERMISSION_DENIED_MESSAGE);
@@ -137,9 +170,6 @@ export function SitePanel({ webUrl, onStateChange }: SitePanelProps) {
       workspaceId,
     });
     if (!result.ok) {
-      if (!alreadyGranted) {
-        await removeOriginAccess(tab.origin);
-      }
       setFailed(ERROR_MESSAGES[result.error.code]);
       setBusy(false);
       return;
@@ -233,56 +263,54 @@ export function SitePanel({ webUrl, onStateChange }: SitePanelProps) {
   }
 
   const tab = view.tab;
+  const enabled = view.kind === "enabled";
   const selected =
     view.kind === "disabled"
       ? view.workspaces.find((workspace) => workspace.id === workspaceId)
       : undefined;
 
   return (
-    <section
-      aria-label="This site"
-      className="flex flex-col gap-3 border-t border-neutral-200 pt-4"
-    >
-      <p data-testid="site-origin" className="truncate text-xs text-neutral-600">
-        {tab.origin}
+    <section aria-label="This site" className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            aria-hidden="true"
+            className={`size-2 shrink-0 rounded-full ${enabled ? "bg-green-600" : "bg-neutral-300"}`}
+          />
+          <p data-testid="site-origin" className="truncate text-sm font-semibold text-neutral-900">
+            {hostOf(tab.origin)}
+          </p>
+        </div>
+        <SiteMenu
+          webUrl={webUrl}
+          captureErrors={enabled ? view.site.captureErrors : null}
+          busy={busy}
+          onToggleCapture={(on) => void changeErrorCapture(tab, on)}
+          onDisable={() => void disable(tab)}
+          onManageSites={onManageSites}
+        />
+      </div>
+      <p data-testid="site-state" className="-mt-2 text-xs text-neutral-600">
+        {enabled ? `Enabled in ${view.site.workspaceName}` : "Not enabled"}
       </p>
       {view.kind === "enabled" ? (
         <>
-          <p data-testid="site-state" className="text-sm font-semibold text-neutral-900">
-            Enabled in {view.site.workspaceName}
-          </p>
-          <label className="flex items-center gap-2 text-sm text-neutral-900">
-            <input
-              type="checkbox"
-              checked={view.site.captureErrors}
-              onChange={(event) => void changeErrorCapture(tab, event.target.checked)}
-              disabled={busy}
-              className="size-4 accent-neutral-900"
-            />
-            Capture console errors
-          </label>
           <button
             type="button"
             onClick={() => void toggle(tab)}
             disabled={busy}
-            className={PRIMARY_BUTTON_CLASS}
+            aria-keyshortcuts={TOGGLE_COMMENT_MODE_SHORTCUT}
+            className={`${PRIMARY_BUTTON_CLASS} w-full flex-col gap-0.5 py-3 text-base`}
           >
-            Comment mode
+            <span>Comment mode</span>
+            <span className="text-xs font-normal text-neutral-300">
+              {TOGGLE_COMMENT_MODE_SHORTCUT}
+            </span>
           </button>
-          <button
-            type="button"
-            onClick={() => void disable(tab)}
-            disabled={busy}
-            className={SECONDARY_BUTTON_CLASS}
-          >
-            Disable on this site
-          </button>
+          <PageThreadsPanel tabId={tab.id} />
         </>
       ) : (
         <>
-          <p data-testid="site-state" className="text-sm font-semibold text-neutral-900">
-            Not enabled
-          </p>
           {view.workspaces.length === 0 ? (
             <p className="text-sm text-neutral-600">
               You are not in a workspace yet.{" "}
@@ -298,23 +326,25 @@ export function SitePanel({ webUrl, onStateChange }: SitePanelProps) {
             </p>
           ) : (
             <>
-              <label className="flex flex-col gap-1 text-sm font-medium text-neutral-900">
-                Workspace
-                <select
-                  value={workspaceId}
-                  onChange={(event) => {
-                    setWorkspaceId(event.target.value);
-                  }}
-                  disabled={busy}
-                  className={INPUT_CLASS}
-                >
-                  {view.workspaces.map((workspace) => (
-                    <option key={workspace.id} value={workspace.id}>
-                      {workspace.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {view.workspaces.length > 1 ? (
+                <label className="flex flex-col gap-1 text-sm font-medium text-neutral-900">
+                  Workspace
+                  <select
+                    value={workspaceId}
+                    onChange={(event) => {
+                      setWorkspaceId(event.target.value);
+                    }}
+                    disabled={busy}
+                    className={INPUT_CLASS}
+                  >
+                    {view.workspaces.map((workspace) => (
+                      <option key={workspace.id} value={workspace.id}>
+                        {workspace.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               {selected?.role === "guest" ? (
                 <p className="text-xs text-neutral-600">{GUEST_HINT}</p>
               ) : null}
@@ -322,7 +352,7 @@ export function SitePanel({ webUrl, onStateChange }: SitePanelProps) {
                 type="button"
                 onClick={() => void enable(tab)}
                 disabled={busy}
-                className={PRIMARY_BUTTON_CLASS}
+                className={`${PRIMARY_BUTTON_CLASS} w-full py-3 text-base`}
               >
                 Enable on this site
               </button>

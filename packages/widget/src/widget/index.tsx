@@ -24,6 +24,7 @@ export interface Widget {
   toggleCommentMode: ContentController["toggleCommentMode"];
   commentOnContextTarget: ContentController["commentOnContextTarget"];
   selectThread: ContentController["selectThread"];
+  toggleSidebar: ContentController["toggleSidebar"];
   render: (container: HTMLElement) => () => void;
 }
 
@@ -80,6 +81,7 @@ export function createWidget({ backend, document, window }: WidgetOptions): Widg
     toggleCommentMode: controller.toggleCommentMode,
     commentOnContextTarget: controller.commentOnContextTarget,
     selectThread: controller.selectThread,
+    toggleSidebar: controller.toggleSidebar,
     render: (target) => {
       container = target;
       isolateEvents(target);

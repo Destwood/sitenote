@@ -14,7 +14,7 @@ import {
   submitNewThread,
   type ReviewSession,
 } from "../../support/comments";
-import { evaluateIn, pointPopupAt } from "../../support/extension";
+import { evaluateIn, openSiteMenu, pointPopupAt } from "../../support/extension";
 import {
   createFreshWorkspace,
   deleteFreshWorkspace,
@@ -322,12 +322,18 @@ test("switching console error capture off removes the errors from new threads an
   const first = await open(context, extensionId, "/e/toggle-live");
   const { page, popup } = first;
   await page.locator("#log-error").click();
+  await openSiteMenu(popup);
   const checkbox = popup.getByRole("checkbox", { name: "Capture console errors" });
   await expect(checkbox).toBeChecked();
 
   await checkbox.click();
   await expect(checkbox).not.toBeChecked();
   await expect(popup.getByRole("status")).toHaveText("Console errors will not be captured.");
+  await popup.getByRole("button", { name: "More options" }).click();
+  await expect(popup.getByRole("button", { name: "More options" })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
   await commentOnElement(first, "#heading", { x: 20, y: 10 }, "Errors are off");
   const live = await onlyThread(workspace.owner.client, pageUrl("/e/toggle-live"));
   expect(live.context?.consoleErrors).toEqual([]);
@@ -346,9 +352,15 @@ test("switching console error capture off removes the errors from new threads an
   const off = await onlyThread(workspace.owner.client, pageUrl("/e/toggle-off"));
   expect(off.context?.consoleErrors).toEqual([]);
 
+  await openSiteMenu(popup);
   await checkbox.click();
   await expect(checkbox).toBeChecked();
   await expect(popup.getByRole("status")).toHaveText("Console errors will be captured.");
+  await popup.getByRole("button", { name: "More options" }).click();
+  await expect(popup.getByRole("button", { name: "More options" })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
   const third = await context.newPage();
   await third.goto(`${FIXTURE_ORIGIN}/e/toggle-on`);
   await expect(hostOf(third)).toHaveAttribute("data-live", "true");

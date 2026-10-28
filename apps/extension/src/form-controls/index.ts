@@ -12,3 +12,6 @@ export const LINK_BUTTON_CLASS =
 
 export const ERROR_CLASS =
   "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800";
+
+export const MENU_ITEM_CLASS =
+  "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-neutral-900 hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-60";

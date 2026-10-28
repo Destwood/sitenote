@@ -14,6 +14,8 @@ import {
   notificationsChangedSchema,
   pageClientMessageSchema,
   pageEventSchema,
+  pageOpenSidebarResponseSchema,
+  pageOpenSidebarSchema,
   pageOpenThreadResponseSchema,
   pageOpenThreadSchema,
   pageThreadsRequestSchema,
@@ -601,5 +603,13 @@ describe("comment mode messages", () => {
     );
     expect(pageOpenThreadResponseSchema.safeParse(success({ opened: false })).success).toBe(true);
     expect(pageOpenThreadResponseSchema.safeParse(success({ opened: "no" })).success).toBe(false);
+  });
+
+  it("accepts the open sidebar request and its response", () => {
+    expect(pageOpenSidebarSchema.safeParse({ type: "page.openSidebar" }).success).toBe(true);
+    expect(pageOpenSidebarSchema.safeParse({ type: "page.openThread" }).success).toBe(false);
+    expect(pageOpenSidebarResponseSchema.safeParse(success({ opened: true })).success).toBe(true);
+    expect(pageOpenSidebarResponseSchema.safeParse(failure("page_unavailable")).success).toBe(true);
+    expect(pageOpenSidebarResponseSchema.safeParse(success({ opened: "yes" })).success).toBe(false);
   });
 });

@@ -1,13 +1,19 @@
 import { formatRelativeTime } from "@sitenote/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ERROR_CLASS, LINK_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
+import {
+  ERROR_CLASS,
+  LINK_BUTTON_CLASS,
+  MENU_ITEM_CLASS,
+  SECONDARY_BUTTON_CLASS,
+} from "../form-controls";
 import { onNotificationsChanged, sendMessage } from "../message-client";
 import { ERROR_MESSAGES, type ErrorCode } from "@sitenote/widget";
 import { openThread } from "../open-thread";
 import type { NotificationRecord } from "@sitenote/widget";
 
 export const NOTIFICATIONS_PAGE_SIZE = 30;
+export const NOTIFICATIONS_PREVIEW_SIZE = 5;
 export const OPEN_FAILED_MESSAGE = "That page could not be opened.";
 export const EMPTY_NOTIFICATIONS_MESSAGE = "No notifications yet.";
 
@@ -18,6 +24,8 @@ type View =
 
 interface NotificationsPanelProps {
   onUnreadChange: (unread: number) => void;
+  limit?: number;
+  webUrl?: string;
 }
 
 function fetchList() {
@@ -39,7 +47,11 @@ export function describePage(pageUrl: string): string {
   return `${url.host}${path}`;
 }
 
-export function NotificationsPanel({ onUnreadChange }: NotificationsPanelProps) {
+export function notificationsLabel(unread: number): string {
+  return unread > 0 ? `Notifications (${String(unread)})` : "Notifications";
+}
+
+export function NotificationsPanel({ onUnreadChange, limit, webUrl }: NotificationsPanelProps) {
   const [view, setView] = useState<View>({ kind: "loading" });
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
@@ -156,8 +168,12 @@ export function NotificationsPanel({ onUnreadChange }: NotificationsPanelProps) 
       {view.items.length === 0 ? (
         <p className="text-sm text-neutral-600">{EMPTY_NOTIFICATIONS_MESSAGE}</p>
       ) : (
-        <ul className="-mx-1 flex max-h-80 flex-col overflow-y-auto">
-          {view.items.map((item) => (
+        <ul
+          className={
+            limit === undefined ? "-mx-1 flex max-h-80 flex-col overflow-y-auto" : "flex flex-col"
+          }
+        >
+          {view.items.slice(0, limit).map((item) => (
             <li key={item.id}>
               <button
                 type="button"
@@ -190,6 +206,45 @@ export function NotificationsPanel({ onUnreadChange }: NotificationsPanelProps) 
           ))}
         </ul>
       )}
+      {limit !== undefined && webUrl !== undefined && view.items.length > limit ? (
+        <a
+          href={`${webUrl}/app`}
+          target="_blank"
+          rel="noreferrer"
+          className={`${LINK_BUTTON_CLASS} self-start`}
+        >
+          Open dashboard for the rest
+        </a>
+      ) : null}
     </section>
+  );
+}
+
+export function NotificationsRow({ webUrl }: { webUrl: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [unread, setUnread] = useState(0);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls="notifications-row-panel"
+        onClick={() => {
+          setExpanded((value) => !value);
+        }}
+        className={`${MENU_ITEM_CLASS} justify-between`}
+      >
+        <span>{notificationsLabel(unread)}</span>
+        <span aria-hidden="true">{expanded ? "▴" : "▾"}</span>
+      </button>
+      <div id="notifications-row-panel" hidden={!expanded}>
+        <NotificationsPanel
+          onUnreadChange={setUnread}
+          limit={NOTIFICATIONS_PREVIEW_SIZE}
+          webUrl={webUrl}
+        />
+      </div>
+    </div>
   );
 }

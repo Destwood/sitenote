@@ -2,13 +2,19 @@ import { describe, expect, it, vi } from "vitest";
 
 import { failure, success, type MessageResult, type PageThreadSummary } from "@sitenote/widget";
 import { createToggleListener } from ".";
-import type { CommentModeState, CommentOnElementState, PageOpenThreadState } from "../messages";
+import type {
+  CommentModeState,
+  CommentOnElementState,
+  PageOpenSidebarState,
+  PageOpenThreadState,
+} from "../messages";
 
 const EXTENSION_ID = "anefihllkbkenhjbjggfndgemgkfaeoa";
 const TOGGLE = { type: "commentMode.toggle" };
 const COMMENT_ON_ELEMENT = { type: "commentMode.commentOnElement" };
 const LIST_THREADS = { type: "page.listThreads" };
 const OPEN_THREAD = { type: "page.openThread", threadId: "30000000-0000-4000-8000-000000000001" };
+const OPEN_SIDEBAR = { type: "page.openSidebar" };
 
 function listenerWith(
   toggle: () => MessageResult<CommentModeState> = () => success({ active: true }),
@@ -16,6 +22,7 @@ function listenerWith(
   listThreads: () => MessageResult<PageThreadSummary[]> = () => success([]),
   openThread: (threadId: string) => MessageResult<PageOpenThreadState> = () =>
     success({ opened: true }),
+  openSidebar: () => MessageResult<PageOpenSidebarState> = () => success({ opened: true }),
 ) {
   return createToggleListener({
     extensionId: EXTENSION_ID,
@@ -23,6 +30,7 @@ function listenerWith(
     commentOnElement,
     listThreads,
     openThread,
+    openSidebar,
   });
 }
 
@@ -104,6 +112,24 @@ describe("createToggleListener", () => {
     expect(respond).toHaveBeenCalledExactlyOnceWith(success({ opened: false }));
   });
 
+  it("answers an open sidebar request from the popup with its result", () => {
+    const openSidebar = vi.fn(() => success({ opened: true }));
+    const toggle = vi.fn(() => success({ active: true }));
+    const respond = vi.fn();
+
+    listenerWith(
+      toggle,
+      undefined,
+      undefined,
+      undefined,
+      openSidebar,
+    )(OPEN_SIDEBAR, { id: EXTENSION_ID }, respond);
+
+    expect(openSidebar).toHaveBeenCalledTimes(1);
+    expect(toggle).not.toHaveBeenCalled();
+    expect(respond).toHaveBeenCalledExactlyOnceWith(success({ opened: true }));
+  });
+
   it.each([
     ["another extension", { id: "other" }],
     ["no sender id", {}],
@@ -111,13 +137,34 @@ describe("createToggleListener", () => {
   ])("ignores a toggle from %s", (_name, sender) => {
     const toggle = vi.fn(() => success({ active: true }));
     const commentOnElement = vi.fn(() => success({ started: true }));
+    const openSidebar = vi.fn(() => success({ opened: true }));
     const respond = vi.fn();
 
-    listenerWith(toggle, commentOnElement)(TOGGLE, sender, respond);
-    listenerWith(toggle, commentOnElement)(COMMENT_ON_ELEMENT, sender, respond);
+    listenerWith(
+      toggle,
+      commentOnElement,
+      undefined,
+      undefined,
+      openSidebar,
+    )(TOGGLE, sender, respond);
+    listenerWith(
+      toggle,
+      commentOnElement,
+      undefined,
+      undefined,
+      openSidebar,
+    )(COMMENT_ON_ELEMENT, sender, respond);
+    listenerWith(
+      toggle,
+      commentOnElement,
+      undefined,
+      undefined,
+      openSidebar,
+    )(OPEN_SIDEBAR, sender, respond);
 
     expect(toggle).not.toHaveBeenCalled();
     expect(commentOnElement).not.toHaveBeenCalled();
+    expect(openSidebar).not.toHaveBeenCalled();
     expect(respond).not.toHaveBeenCalled();
   });
 
@@ -128,12 +175,20 @@ describe("createToggleListener", () => {
   ])("ignores %s", (_name, message) => {
     const toggle = vi.fn(() => success({ active: true }));
     const commentOnElement = vi.fn(() => success({ started: true }));
+    const openSidebar = vi.fn(() => success({ opened: true }));
     const respond = vi.fn();
 
-    listenerWith(toggle, commentOnElement)(message, { id: EXTENSION_ID }, respond);
+    listenerWith(
+      toggle,
+      commentOnElement,
+      undefined,
+      undefined,
+      openSidebar,
+    )(message, { id: EXTENSION_ID }, respond);
 
     expect(toggle).not.toHaveBeenCalled();
     expect(commentOnElement).not.toHaveBeenCalled();
+    expect(openSidebar).not.toHaveBeenCalled();
     expect(respond).not.toHaveBeenCalled();
   });
 });

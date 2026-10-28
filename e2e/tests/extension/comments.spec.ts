@@ -19,7 +19,7 @@ import {
   submitNewThread,
   threadsOnPage,
 } from "../../support/comments";
-import { enableSite, openPopup, pointPopupAt, signIn } from "../../support/extension";
+import { enableSite, openPopup, openSiteMenu, pointPopupAt, signIn } from "../../support/extension";
 import { signInSeededUser } from "../../support/seeded-user";
 
 test.describe.configure({ mode: "default" });
@@ -172,6 +172,7 @@ test("the Comment button sits above the selected text when the popup setting say
   extensionId,
 }) => {
   const { page, popup } = await openReviewPage(context, extensionId, OWNER, "/p/text-comment");
+  await openSiteMenu(popup);
   await popup.getByRole("checkbox", { name: "Button above" }).check();
   await expect(popup.getByRole("checkbox", { name: "Button above" })).toBeChecked();
   await page.reload();
@@ -189,7 +190,7 @@ test("the Comment button sits above the selected text when the popup setting say
   expect(box.y + box.height).toBeLessThanOrEqual(selection.top);
 });
 
-test("the popup's Comments tab lists the page's threads and opens one on the page", async ({
+test("the popup summarises the page's comments and opens the sidebar on the page", async ({
   context,
   extensionId,
 }) => {
@@ -200,11 +201,14 @@ test("the popup's Comments tab lists the page's threads and opens one on the pag
   await commentOnElement(session, "#cta", { x: 30, y: 12 }, "The popup should list this");
   await page.getByRole("button", { name: "Close thread" }).click();
 
-  await popup.getByRole("tab", { name: /^Comments/ }).click();
-  const list = popup.getByRole("list", { name: "Comments on this page" });
-  await expect(list).toContainText("#1");
-  await expect(list).toContainText("The popup should list this");
-  await list.getByRole("button", { name: /The popup should list this/ }).click();
+  await popup.reload();
+  await expect(popup.getByTestId("comments-summary")).toHaveText("1 open comment");
+  await popup.getByRole("button", { name: "Open on page" }).click();
+
+  const sidebar = page.getByRole("complementary", { name: "Comments", exact: true });
+  await expect(sidebar).toBeVisible();
+  await expect(sidebar).toContainText("The popup should list this");
+  await sidebar.getByRole("button", { name: /The popup should list this/ }).click();
 
   await expect(page.getByRole("dialog", { name: "Thread 1" })).toContainText(
     "The popup should list this",

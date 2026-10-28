@@ -20,6 +20,7 @@ import {
   type NotificationsChangedMessage,
 } from "../messages";
 import { createNotificationCenter } from "../notification-center";
+import { createPendingEnable } from "../pending-enable";
 import { createChannelFactory, createNotificationChannelFactory } from "../realtime-channels";
 import { createRealtimeHub } from "../realtime-hub";
 import { planRefresh, REFRESH_ALARM_NAME, type RefreshOutcome } from "../refresh-schedule";
@@ -121,6 +122,20 @@ export function startBackground(): void {
     listOrigins: async () => Object.keys(await store.list()),
   });
 
+  const pending = createPendingEnable(browser.storage.local);
+
+  async function enableAfterGrant(pattern: string): Promise<void> {
+    const origin = pattern.replace(/\/\*$/, "");
+    const entry = await pending.take(origin);
+    if (entry === null) {
+      return;
+    }
+    const result = await enablement.enable(entry);
+    if (!result.ok) {
+      await browser.permissions.remove({ origins: [`${origin}/*`] }).catch(() => false);
+    }
+  }
+
   async function scheduleRefresh(outcome: RefreshOutcome): Promise<void> {
     const when = planRefresh(outcome, Date.now());
     if (when === null) {
@@ -201,6 +216,11 @@ export function startBackground(): void {
   browser.contextMenus.onClicked.addListener(createContextMenuClickListener({ commentOnElement }));
   browser.permissions.onRemoved.addListener(() => {
     ignoreFailure(enablement.reconcile());
+  });
+  browser.permissions.onAdded.addListener((permissions) => {
+    for (const pattern of permissions.origins ?? []) {
+      ignoreFailure(enableAfterGrant(pattern));
+    }
   });
   browser.runtime.onStartup.addListener(() => {
     ignoreFailure(keepSessionFresh());

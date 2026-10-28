@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { MENU_ITEM_CLASS } from "../form-controls";
 import { sendMessage } from "../message-client";
 import { type SelectionPlacement } from "../messages";
 import { ERROR_MESSAGES, type ErrorCode } from "@sitenote/widget";
@@ -37,8 +38,8 @@ export function SelectionPlacementControl() {
   }
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <label title={ABOVE_HINT} className="flex items-center gap-1 text-xs text-neutral-600">
+    <div className="flex flex-col gap-1">
+      <label title={ABOVE_HINT} className={`${MENU_ITEM_CLASS} cursor-pointer`}>
         <input
           type="checkbox"
           checked={placement === "above"}
@@ -50,7 +51,7 @@ export function SelectionPlacementControl() {
         Button above
       </label>
       {error === null ? null : (
-        <p role="alert" className="text-xs text-red-800">
+        <p role="alert" className="px-2 text-xs text-red-800">
           {ERROR_MESSAGES[error]}
         </p>
       )}

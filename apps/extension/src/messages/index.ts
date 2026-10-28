@@ -317,3 +317,11 @@ export const pageOpenThreadStateSchema = z.object({ opened: z.boolean() });
 export type PageOpenThreadState = z.infer<typeof pageOpenThreadStateSchema>;
 
 export const pageOpenThreadResponseSchema = resultSchema(pageOpenThreadStateSchema);
+
+export const pageOpenSidebarSchema = z.object({ type: z.literal("page.openSidebar") });
+
+export const pageOpenSidebarStateSchema = z.object({ opened: z.boolean() });
+
+export type PageOpenSidebarState = z.infer<typeof pageOpenSidebarStateSchema>;
+
+export const pageOpenSidebarResponseSchema = resultSchema(pageOpenSidebarStateSchema);
