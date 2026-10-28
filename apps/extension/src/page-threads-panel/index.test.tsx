@@ -70,7 +70,7 @@ describe("PageThreadsPanel", () => {
     expect(screen.getByRole("status").textContent).toBe("Loading comments...");
 
     answer(success([]));
-    expect(await screen.findByText(/No comments on this page yet/)).toBeTruthy();
+    expect(await screen.findByText(/No comments yet/)).toBeTruthy();
     expect(mocks.listPageThreads).toHaveBeenCalledWith(TAB_ID);
   });
 
@@ -175,10 +175,9 @@ describe("PageThreadsPanel", () => {
     render(<PageThreadsPanel tabId={TAB_ID} onCount={vi.fn()} />);
 
     expect(
-      await screen.findByText(
-        "No comments on this page yet. Turn on Comment mode or right-click an element.",
-      ),
+      await screen.findByText("No comments yet. Turn on Comment mode or right-click an element."),
     ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Comments on this page" })).toBeTruthy();
     expect(screen.queryByRole("list")).toBeNull();
   });
 });

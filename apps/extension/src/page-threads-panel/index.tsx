@@ -97,9 +97,10 @@ export function PageThreadsPanel({ tabId, onCount, close = closePopup }: PageThr
 
   return (
     <div className="flex flex-col gap-3 border-t border-neutral-200 pt-4">
+      <h2 className="text-sm font-semibold text-neutral-900">Comments on this page</h2>
       {view.threads.length === 0 ? (
         <p className="text-sm text-neutral-600">
-          No comments on this page yet. Turn on Comment mode or right-click an element.
+          No comments yet. Turn on Comment mode or right-click an element.
         </p>
       ) : (
         <ul aria-label="Comments on this page" className="flex flex-col gap-2">
