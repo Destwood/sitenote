@@ -2,24 +2,24 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   ERROR_CLASS,
+  LINK_BUTTON_CLASS,
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
   INPUT_CLASS,
 } from "../form-controls";
 import { sendMessage, toggleCommentMode } from "../message-client";
+import { createPendingEnable } from "../pending-enable";
 import { ERROR_MESSAGES, type ErrorCode } from "@sitenote/widget";
-import {
-  getTargetTab,
-  hasOriginAccess,
-  removeOriginAccess,
-  requestOriginAccess,
-  type TargetTab,
-} from "../tab-access";
+import { getTargetTab, hasOriginAccess, requestOriginAccess, type TargetTab } from "../tab-access";
 import type { SiteInfo, WorkspaceInfo } from "@sitenote/widget";
+import { browser } from "wxt/browser";
 
 export const LAST_WORKSPACE_KEY = "sitenote.lastWorkspace";
 const PERMISSION_DENIED_MESSAGE = "Sitenote needs access to this site to show comments on it.";
 const GUEST_HINT = "Guests can enable only sites that an owner or member has already added.";
+const ENABLE_POLL_ATTEMPTS = 10;
+const ENABLE_POLL_INTERVAL_MS = 300;
+const pending = createPendingEnable(browser.storage.local);
 
 type View =
   | { kind: "loading" }
@@ -61,6 +61,10 @@ function pickWorkspace(workspaces: readonly WorkspaceInfo[]): string {
 
 function asTarget(tab: TargetTab | null): Target | null {
   return tab?.origin == null ? null : { id: tab.id, origin: tab.origin };
+}
+
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function loadView(tab: Target): Promise<View> {
@@ -116,6 +120,30 @@ export function SitePanel({ webUrl, onStateChange }: SitePanelProps) {
     onStateChange?.(view.kind === "enabled", view.kind === "enabled" ? view.tab.id : null);
   }, [view, onStateChange]);
 
+  async function enableAfterPrompt(tab: Target) {
+    await pending.set({ tabId: tab.id, origin: tab.origin, workspaceId });
+    const granted = await requestOriginAccess(tab.origin);
+    if (!granted) {
+      await pending.clear();
+      setFailed(PERMISSION_DENIED_MESSAGE);
+      setBusy(false);
+      return;
+    }
+    for (let attempt = 0; attempt < ENABLE_POLL_ATTEMPTS; attempt += 1) {
+      await sleep(ENABLE_POLL_INTERVAL_MS);
+      const site = await sendMessage({ type: "sites.forOrigin", origin: tab.origin });
+      if (site.ok && site.data !== null) {
+        saveLastWorkspace(workspaceId);
+        await load();
+        setBusy(false);
+        return;
+      }
+    }
+    await pending.clear();
+    setFailed(ERROR_MESSAGES.unknown);
+    setBusy(false);
+  }
+
   async function enable(tab: Target) {
     if (busy || workspaceId === "") {
       return;
@@ -123,7 +151,10 @@ export function SitePanel({ webUrl, onStateChange }: SitePanelProps) {
     setBusy(true);
     setFailed(null);
     setNotice(null);
-    const alreadyGranted = await hasOriginAccess(tab.origin);
+    if (!(await hasOriginAccess(tab.origin))) {
+      await enableAfterPrompt(tab);
+      return;
+    }
     const granted = await requestOriginAccess(tab.origin);
     if (!granted) {
       setFailed(PERMISSION_DENIED_MESSAGE);
@@ -137,9 +168,6 @@ export function SitePanel({ webUrl, onStateChange }: SitePanelProps) {
       workspaceId,
     });
     if (!result.ok) {
-      if (!alreadyGranted) {
-        await removeOriginAccess(tab.origin);
-      }
       setFailed(ERROR_MESSAGES[result.error.code]);
       setBusy(false);
       return;
@@ -251,6 +279,14 @@ export function SitePanel({ webUrl, onStateChange }: SitePanelProps) {
           <p data-testid="site-state" className="text-sm font-semibold text-neutral-900">
             Enabled in {view.site.workspaceName}
           </p>
+          <button
+            type="button"
+            onClick={() => void toggle(tab)}
+            disabled={busy}
+            className={`${PRIMARY_BUTTON_CLASS} w-full py-3 text-base`}
+          >
+            Comment mode
+          </button>
           <label className="flex items-center gap-2 text-sm text-neutral-900">
             <input
               type="checkbox"
@@ -263,17 +299,9 @@ export function SitePanel({ webUrl, onStateChange }: SitePanelProps) {
           </label>
           <button
             type="button"
-            onClick={() => void toggle(tab)}
-            disabled={busy}
-            className={PRIMARY_BUTTON_CLASS}
-          >
-            Comment mode
-          </button>
-          <button
-            type="button"
             onClick={() => void disable(tab)}
             disabled={busy}
-            className={SECONDARY_BUTTON_CLASS}
+            className={`${LINK_BUTTON_CLASS} self-start`}
           >
             Disable on this site
           </button>

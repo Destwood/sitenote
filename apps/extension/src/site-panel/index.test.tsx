@@ -12,7 +12,8 @@ const mocks = vi.hoisted(() => ({
   getTargetTab: vi.fn(),
   hasOriginAccess: vi.fn(),
   requestOriginAccess: vi.fn(),
-  removeOriginAccess: vi.fn(),
+  pendingSet: vi.fn(),
+  pendingClear: vi.fn(),
 }));
 
 vi.mock("../message-client", () => ({
@@ -24,8 +25,17 @@ vi.mock("../tab-access", () => ({
   getTargetTab: mocks.getTargetTab,
   hasOriginAccess: mocks.hasOriginAccess,
   requestOriginAccess: mocks.requestOriginAccess,
-  removeOriginAccess: mocks.removeOriginAccess,
 }));
+
+vi.mock("../pending-enable", () => ({
+  createPendingEnable: () => ({
+    set: mocks.pendingSet,
+    take: vi.fn(),
+    clear: mocks.pendingClear,
+  }),
+}));
+
+vi.mock("wxt/browser", () => ({ browser: { storage: { local: {} } } }));
 
 const ORIGIN = "https://example.test";
 const NORTHWIND: WorkspaceInfo = {
@@ -62,7 +72,6 @@ beforeEach(() => {
   mocks.getTargetTab.mockResolvedValue({ id: 7, origin: ORIGIN });
   mocks.hasOriginAccess.mockResolvedValue(false);
   mocks.requestOriginAccess.mockResolvedValue(true);
-  mocks.removeOriginAccess.mockResolvedValue(undefined);
 });
 
 describe("SitePanel unavailable pages", () => {
@@ -144,16 +153,15 @@ describe("SitePanel when the site is not enabled", () => {
     expect(screen.queryByRole("button", { name: "Enable on this site" })).toBeNull();
   });
 
-  it("requests the permission, enables the site and shows the enabled state", async () => {
+  it("hands the enable to the background and waits until the site is enabled", async () => {
     const user = userEvent.setup();
-    let enabled = false;
+    let polls = 0;
     route({
-      "sites.forOrigin": () => success(enabled ? SITE : null),
-      "workspaces.list": () => success([NORTHWIND, AGENCY]),
-      "sites.enable": () => {
-        enabled = true;
-        return success(null);
+      "sites.forOrigin": () => {
+        polls += 1;
+        return success(polls > 1 ? SITE : null);
       },
+      "workspaces.list": () => success([NORTHWIND, AGENCY]),
     });
     render(<SitePanel webUrl="https://web.test" />);
     await screen.findByLabelText("Workspace");
@@ -161,15 +169,33 @@ describe("SitePanel when the site is not enabled", () => {
 
     await user.click(screen.getByRole("button", { name: "Enable on this site" }));
 
-    expect((await screen.findByTestId("site-state")).textContent).toBe("Enabled in Northwind");
-    expect(mocks.requestOriginAccess).toHaveBeenCalledWith(ORIGIN);
-    expect(mocks.sendMessage).toHaveBeenCalledWith({
-      type: "sites.enable",
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("site-state").textContent).toBe("Enabled in Northwind");
+    });
+    expect(mocks.pendingSet).toHaveBeenCalledWith({
       tabId: 7,
       origin: ORIGIN,
       workspaceId: AGENCY.id,
     });
+    expect(mocks.requestOriginAccess).toHaveBeenCalledWith(ORIGIN);
+    expect(mocks.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "sites.enable" }),
+    );
+    expect(mocks.pendingClear).not.toHaveBeenCalled();
     expect(localStorage.getItem(LAST_WORKSPACE_KEY)).toBe(AGENCY.id);
+  });
+
+  it("shows a fixed message and clears the pending enable when the site never gets enabled", async () => {
+    const user = userEvent.setup();
+    notEnabled();
+    render(<SitePanel webUrl="https://web.test" />);
+
+    await user.click(await screen.findByRole("button", { name: "Enable on this site" }));
+
+    expect(await screen.findByRole("alert", {}, { timeout: 5000 })).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toBe("Something went wrong. Try again.");
+    expect(mocks.pendingClear).toHaveBeenCalledOnce();
+    expect(localStorage.getItem(LAST_WORKSPACE_KEY)).toBeNull();
   });
 
   it("does nothing else when the user declines the permission", async () => {
@@ -181,14 +207,42 @@ describe("SitePanel when the site is not enabled", () => {
     await user.click(await screen.findByRole("button", { name: "Enable on this site" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain("needs access to this site");
+    expect(mocks.pendingClear).toHaveBeenCalledOnce();
     expect(mocks.sendMessage).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: "sites.enable" }),
     );
     expect((await screen.findByTestId("site-state")).textContent).toBe("Not enabled");
   });
 
-  it("shows the fixed message of the error and gives back a permission it just got", async () => {
+  it("enables a site that already has permission right away", async () => {
     const user = userEvent.setup();
+    mocks.hasOriginAccess.mockResolvedValue(true);
+    let enabled = false;
+    route({
+      "sites.forOrigin": () => success(enabled ? SITE : null),
+      "workspaces.list": () => success([NORTHWIND]),
+      "sites.enable": () => {
+        enabled = true;
+        return success(null);
+      },
+    });
+    render(<SitePanel webUrl="https://web.test" />);
+
+    await user.click(await screen.findByRole("button", { name: "Enable on this site" }));
+
+    expect((await screen.findByTestId("site-state")).textContent).toBe("Enabled in Northwind");
+    expect(mocks.sendMessage).toHaveBeenCalledWith({
+      type: "sites.enable",
+      tabId: 7,
+      origin: ORIGIN,
+      workspaceId: NORTHWIND.id,
+    });
+    expect(mocks.pendingSet).not.toHaveBeenCalled();
+  });
+
+  it("shows the fixed message when enabling an already granted site fails", async () => {
+    const user = userEvent.setup();
+    mocks.hasOriginAccess.mockResolvedValue(true);
     route({
       "sites.forOrigin": () => success(null),
       "workspaces.list": () => success([AGENCY]),
@@ -201,26 +255,7 @@ describe("SitePanel when the site is not enabled", () => {
     expect((await screen.findByRole("alert")).textContent).toBe(
       "You do not have permission to do this.",
     );
-    expect(mocks.removeOriginAccess).toHaveBeenCalledWith(ORIGIN);
     expect(localStorage.getItem(LAST_WORKSPACE_KEY)).toBeNull();
-  });
-
-  it("keeps a permission the user already had when enabling fails", async () => {
-    const user = userEvent.setup();
-    mocks.hasOriginAccess.mockResolvedValue(true);
-    route({
-      "sites.forOrigin": () => success(null),
-      "workspaces.list": () => success([NORTHWIND]),
-      "sites.enable": () => failure("page_unavailable"),
-    });
-    render(<SitePanel webUrl="https://web.test" />);
-
-    await user.click(await screen.findByRole("button", { name: "Enable on this site" }));
-
-    expect((await screen.findByRole("alert")).textContent).toBe(
-      "Sitenote is not available on this page.",
-    );
-    expect(mocks.removeOriginAccess).not.toHaveBeenCalled();
   });
 });
 
