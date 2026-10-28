@@ -926,3 +926,9 @@ All versions are pinned exactly. No other runtime dependency was added.
 - **Chosen:** slowMo 250 ms, typed text with a 55 ms key delay, pauses of 0.9 s between steps and 2.2 s on key frames, only in the media script.
 - **Alternatives:** slowing playback with `playbackRate` on the landing video (choppy frames), slowMo for the whole e2e suite (slower CI).
 - **Why:** manual QA found the video unreadable at machine speed.
+
+## D-138 Popup polish
+
+- **Chosen:** when the site has no permission yet, the popup stores a pending enable (tab, origin, workspace) in `storage.local` before the permission prompt, and the background finishes the enable on `permissions.onAdded`, because the browser prompt closes the popup before `sites.enable` can be sent. The popup only waits for the site to show as enabled. The account row is one line: a small avatar, the display name linking to `/app` (the email is its tooltip) and a link-style "Sign out". The enabled site view puts "Comment mode" first as a full-width primary button, and "Disable on this site" last as a link. The allowed sites list comes from `permissions.getAll` and sits collapsed behind an "Allowed sites" button on the Comments tab, with a remove action per site.
+- **Alternatives:** asking the user to click "Enable" again after granting (the old two-click flow), a profile page for the account row (there is none on the web), keeping "Disable" as a secondary button beside "Comment mode", a separate options page for allowed sites.
+- **Why:** in manual QA the first click on "Enable" only granted the permission and the popup closed, so the user had to click twice. The dashboard is the only place that shows the account, so the name links there and the email moves to the tooltip. Comment mode is the action people use most, and disabling a site is rare, so it is demoted. Comment mode already ends right after a pick (D-132), no change.
