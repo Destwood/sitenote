@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getTargetTab,
   hasOriginAccess,
+  listOriginAccess,
   originOfTabUrl,
   removeOriginAccess,
   requestOriginAccess,
@@ -14,12 +15,18 @@ const mocks = vi.hoisted(() => ({
   contains: vi.fn(),
   request: vi.fn(),
   remove: vi.fn(),
+  getAll: vi.fn(),
 }));
 
 vi.mock("wxt/browser", () => ({
   browser: {
     tabs: { query: mocks.query, get: mocks.get },
-    permissions: { contains: mocks.contains, request: mocks.request, remove: mocks.remove },
+    permissions: {
+      contains: mocks.contains,
+      request: mocks.request,
+      remove: mocks.remove,
+      getAll: mocks.getAll,
+    },
   },
 }));
 
@@ -29,6 +36,7 @@ beforeEach(() => {
   mocks.contains.mockReset();
   mocks.request.mockReset();
   mocks.remove.mockReset();
+  mocks.getAll.mockReset();
 });
 
 describe("originOfTabUrl", () => {
@@ -108,6 +116,35 @@ describe("origin access", () => {
     expect(mocks.contains).toHaveBeenCalledWith(pattern);
     expect(mocks.request).toHaveBeenCalledWith(pattern);
     expect(mocks.remove).toHaveBeenCalledWith(pattern);
+  });
+
+  it("lists the granted site origins sorted, leaving out other permissions", async () => {
+    mocks.getAll.mockResolvedValue({
+      origins: [
+        "https://zeta.test/*",
+        "<all_urls>",
+        "https://alpha.test:8443/*",
+        "http://127.0.0.1:4173/*",
+        "https://*.example.test/*",
+        "https://nested.test/path/*",
+        "https://gamma.test/",
+      ],
+      permissions: ["storage"],
+    });
+
+    expect(await listOriginAccess()).toEqual([
+      "http://127.0.0.1:4173",
+      "https://alpha.test:8443",
+      "https://zeta.test",
+    ]);
+  });
+
+  it("returns an empty list when there are no origins or the lookup fails", async () => {
+    mocks.getAll.mockResolvedValueOnce({ permissions: ["storage"] });
+    expect(await listOriginAccess()).toEqual([]);
+
+    mocks.getAll.mockRejectedValueOnce(new Error("unavailable"));
+    expect(await listOriginAccess()).toEqual([]);
   });
 
   it("treats a declined request and failures as no access", async () => {

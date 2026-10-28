@@ -62,3 +62,17 @@ export async function requestOriginAccess(origin: string): Promise<boolean> {
 export async function removeOriginAccess(origin: string): Promise<void> {
   await browser.permissions.remove(patternOf(origin)).catch(() => false);
 }
+
+const ORIGIN_PATTERN = /^https?:\/\/[^*/]+\/\*$/;
+
+export async function listOriginAccess(): Promise<string[]> {
+  try {
+    const { origins = [] } = await browser.permissions.getAll();
+    return origins
+      .filter((pattern) => ORIGIN_PATTERN.test(pattern))
+      .map((pattern) => pattern.slice(0, -"/*".length))
+      .sort();
+  } catch {
+    return [];
+  }
+}
