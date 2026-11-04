@@ -11,6 +11,7 @@ import {
   COMMENT_CURSOR_CSS,
   PREFERENCE_FAILED_MESSAGE,
   PENDING_ID,
+  RECORDING_ATTACHED_MESSAGE,
   SCREENSHOT_FAILED_MESSAGE,
   THREAD_NOT_HERE_MESSAGE,
   UNSUPPORTED_SELECTION_MESSAGE,
@@ -206,6 +207,7 @@ function fakeBackend(
     captureScreenshot: (rect, devicePixelRatio) =>
       respond("captureScreenshot", [rect, devicePixelRatio]),
     getScreenshotUrl: (threadId) => respond("getScreenshotUrl", [threadId]),
+    getRecordingUrl: (threadId) => respond("getRecordingUrl", [threadId]),
     collectContext: () => respond("collectContext", []),
     getPreference: (siteId) => respond("getPreference", [siteId]),
     setPreference: (siteId, showResolved) => respond("setPreference", [siteId, showResolved]),
@@ -606,6 +608,29 @@ describe("comment mode", () => {
 
     expect(state().hover).toBeNull();
     expect(state().commentMode).toBe(false);
+  });
+});
+
+describe("entering comment mode with a notice", () => {
+  it("turns comment mode on and shows the notice as an info toast", async () => {
+    const { controller: api, state } = await setup();
+
+    expect(api.enterCommentMode(RECORDING_ATTACHED_MESSAGE)).toBe(true);
+
+    expect(state().commentMode).toBe(true);
+    expect(document.head.querySelector("style")?.textContent).toBe(COMMENT_CURSOR_CSS);
+    expect(state().toasts.map((toast) => [toast.message, toast.variant])).toEqual([
+      [RECORDING_ATTACHED_MESSAGE, "info"],
+    ]);
+  });
+
+  it("returns false and changes nothing when the site is not enabled", async () => {
+    const { controller: api, state } = await setup([], { getSiteInfo: () => success(null) });
+
+    expect(state().status).toBe("disabled");
+    expect(api.enterCommentMode(RECORDING_ATTACHED_MESSAGE)).toBe(false);
+    expect(state().commentMode).toBe(false);
+    expect(state().toasts).toHaveLength(0);
   });
 });
 
@@ -1662,5 +1687,71 @@ describe("screenshots of existing threads", () => {
         url: "https://storage.test/s.webp?token=2",
       });
     });
+  });
+});
+
+describe("recordings of existing threads", () => {
+  const RECORDING = { path: "ws/thread.webm", durationMs: 9_000, size: 2048 };
+  const recorded = thread({ context: { ...CONTEXT, recording: RECORDING } });
+
+  it("calls the signed url when a thread with a recording is opened", async () => {
+    const {
+      controller: api,
+      state,
+      calls,
+    } = await setup([recorded], {
+      getRecordingUrl: () => success("https://storage.test/r.webm?token=1"),
+    });
+
+    api.selectThread(THREAD_ID);
+
+    expect(state().recordings.get(THREAD_ID)).toEqual({ status: "loading" });
+    await vi.waitFor(() => {
+      expect(state().recordings.get(THREAD_ID)).toEqual({
+        status: "ready",
+        url: "https://storage.test/r.webm?token=1",
+      });
+    });
+    expect(calls()).toContainEqual({ method: "getRecordingUrl", args: [THREAD_ID] });
+  });
+
+  it("marks the recording unavailable when the url cannot be fetched or is empty", async () => {
+    const failed = await setup([recorded], {
+      getRecordingUrl: () => failure("network"),
+    });
+    failed.controller.selectThread(THREAD_ID);
+    await vi.waitFor(() => {
+      expect(failed.state().recordings.get(THREAD_ID)).toEqual({ status: "unavailable" });
+    });
+    failed.controller.stop();
+
+    const empty = await setup([recorded], {
+      getRecordingUrl: () => success(null),
+    });
+    empty.controller.selectThread(THREAD_ID);
+    await vi.waitFor(() => {
+      expect(empty.state().recordings.get(THREAD_ID)).toEqual({ status: "unavailable" });
+    });
+  });
+
+  it("does not ask for a recording when the thread has none", async () => {
+    const { controller: api, calls } = await setup([thread({ context: CONTEXT })]);
+
+    api.selectThread(THREAD_ID);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(calls().some((call) => call.method === "getRecordingUrl")).toBe(false);
+  });
+
+  it("skips the recording when the backend cannot serve recordings", async () => {
+    const backend = fakeBackend({}, [recorded], [], { options: null, update: vi.fn() });
+    delete backend.getRecordingUrl;
+    const { controller: api, state } = await setup([recorded], {}, { backend });
+
+    api.selectThread(THREAD_ID);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(state().recordings.has(THREAD_ID)).toBe(false);
+    expect(state().activeThreadId).toBe(THREAD_ID);
   });
 });

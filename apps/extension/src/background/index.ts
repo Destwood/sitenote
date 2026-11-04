@@ -18,11 +18,16 @@ import {
   PAGE_PORT_NAME,
   type AuthStateChangedMessage,
   type NotificationsChangedMessage,
+  type OffscreenCommand,
+  type OffscreenResponse,
 } from "../messages";
 import { createNotificationCenter } from "../notification-center";
 import { createPendingEnable } from "../pending-enable";
 import { createChannelFactory, createNotificationChannelFactory } from "../realtime-channels";
 import { createRealtimeHub } from "../realtime-hub";
+import { createRecordingUploader } from "../recording-upload";
+import { createRecordingService, RECORDING_BADGE_COLOR } from "../recording-service";
+import { RECORDING_MAX_MS, RECORDING_STOP_BYTES } from "../recording-store";
 import { planRefresh, REFRESH_ALARM_NAME, type RefreshOutcome } from "../refresh-schedule";
 import { createResolvedPreference } from "../resolved-preference";
 import { cropDataUrl } from "../screenshot-crop";
@@ -69,6 +74,66 @@ export function startBackground(): void {
   const store = createEnablementStore(browser.storage.local);
   const hooks = __SITENOTE_E2E__ ? createTestHooks() : null;
   const captures = createCaptureStore();
+  const sendToOffscreen = (command: OffscreenCommand) =>
+    browser.runtime.sendMessage<OffscreenCommand, OffscreenResponse>(command);
+  const recordingUploads = createRecordingUploader({
+    client,
+    queryPending: async (tabId) => {
+      if (!(await browser.offscreen.hasDocument())) {
+        return null;
+      }
+      const reply = await sendToOffscreen({ type: "offscreen.query", tabId });
+      const status = reply.ok ? reply.data : null;
+      return status?.state === "pending" &&
+        status.blobUrl !== undefined &&
+        status.size !== undefined &&
+        status.durationMs !== undefined
+        ? { blobUrl: status.blobUrl, durationMs: status.durationMs, size: status.size }
+        : null;
+    },
+    fetchBlob: (url) => fetch(url).then((response) => response.blob()),
+    release: async () => {
+      await sendToOffscreen({ type: "offscreen.release" });
+    },
+    ...(hooks === null ? {} : { consumeFailure: hooks.consumeUploadFailure }),
+  });
+
+  const recordings = createRecordingService({
+    tabs: {
+      get: async (tabId) => {
+        try {
+          return await browser.tabs.get(tabId);
+        } catch {
+          return null;
+        }
+      },
+    },
+    getEnabledSite: store.get,
+    offscreen: {
+      hasDocument: () => browser.offscreen.hasDocument(),
+      createDocument: () =>
+        browser.offscreen.createDocument({
+          url: "offscreen.html",
+          reasons: ["USER_MEDIA"],
+          justification: "Record the current tab",
+        }),
+      closeDocument: () => browser.offscreen.closeDocument(),
+    },
+    sendToOffscreen,
+    recordings: recordingUploads,
+    sendToTab: (tabId, message) =>
+      browser.tabs.sendMessage(tabId, message, { frameId: 0 }).then(() => undefined),
+    badge: {
+      set: async (tabId, text) => {
+        await browser.action.setBadgeBackgroundColor({ tabId, color: RECORDING_BADGE_COLOR });
+        await browser.action.setBadgeText({ tabId, text });
+      },
+      clear: (tabId) => browser.action.setBadgeText({ tabId, text: "" }),
+    },
+    maxMs: RECORDING_MAX_MS,
+    stopBytes: RECORDING_STOP_BYTES,
+  });
+
   const data = createDataService({
     client,
     getEnabledSite: store.get,
@@ -77,6 +142,7 @@ export function startBackground(): void {
       store: captures,
       ...(hooks === null ? {} : { consumeFailure: hooks.consumeUploadFailure }),
     }),
+    recordings,
   });
   const screenshots = createScreenshotService({
     store: captures,
@@ -180,6 +246,7 @@ export function startBackground(): void {
     enablement,
     notifications,
     screenshots,
+    recordings,
     preferences: createResolvedPreference(browser.storage.local),
     selectionPlacement: createSelectionPlacementPreference(browser.storage.local),
     getEnabledSite: store.get,
@@ -211,6 +278,9 @@ export function startBackground(): void {
     if (port.name === PAGE_PORT_NAME) {
       hub.attach(createHubPort(port, browser.runtime.id));
     }
+  });
+  browser.tabs.onRemoved.addListener((tabId) => {
+    recordings.onTabRemoved(tabId);
   });
   browser.commands.onCommand.addListener(createCommandListener(toggleCommentMode));
   browser.contextMenus.onClicked.addListener(createContextMenuClickListener({ commentOnElement }));

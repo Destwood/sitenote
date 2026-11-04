@@ -28,6 +28,7 @@ export interface ThreadPanelProps {
   error?: string | undefined;
   mentionCandidates?: readonly PersonView[] | undefined;
   screenshot?: ScreenshotState | undefined;
+  recording?: ScreenshotState | undefined;
   clickUp?: ClickUpTaskState | undefined;
   onSubmit: (submission: ComposerSubmission) => Promise<void>;
   onEditComment: (commentId: string, body: string) => Promise<void>;
@@ -51,6 +52,7 @@ export function ThreadPanel({
   error,
   mentionCandidates,
   screenshot,
+  recording,
   clickUp,
   onSubmit,
   onEditComment,
@@ -185,6 +187,7 @@ export function ThreadPanel({
             context={thread.context}
             hasScreenshot={thread.hasScreenshot}
             screenshot={screenshot}
+            recording={recording}
           />
         </div>
       )}

@@ -137,6 +137,12 @@ describe("createExtensionBackend", () => {
       { type: "threads.screenshotUrl", threadId: THREAD_ID },
     ],
     [
+      "getRecordingUrl",
+      (backend: ReturnType<typeof createExtensionBackend>) =>
+        backend.getRecordingUrl?.(THREAD_ID) ?? Promise.reject(new Error("missing")),
+      { type: "threads.recordingUrl", threadId: THREAD_ID },
+    ],
+    [
       "getPreference",
       (backend: ReturnType<typeof createExtensionBackend>) => backend.getPreference(SITE_ID),
       { type: "preferences.get", siteId: SITE_ID },

@@ -28,7 +28,7 @@ import { createPicker, type PickPoint } from "../comment-picker";
 import { createPinTracker, type Measurements, type TrackedTarget } from "../pin-tracker";
 import { createStore, type Store } from "../store";
 import { createTextHighlighter } from "../text-highlighter";
-import { ERROR_MESSAGES } from "../result";
+import { ERROR_MESSAGES, type MessageResult } from "../result";
 import { upsertComment, upsertThread } from "../view-model";
 import { watchDom } from "../dom-watcher";
 import { watchPageUrl } from "../url-watcher";
@@ -47,6 +47,7 @@ export const CLICKUP_SCREENSHOT_MISSING_MESSAGE =
   "The ClickUp task was created without the screenshot.";
 export const PREFERENCE_FAILED_MESSAGE = "Could not remember this setting for the next visit.";
 export const SCREENSHOT_FAILED_MESSAGE = "Screenshot could not be saved";
+export const RECORDING_ATTACHED_MESSAGE = "Video attached to your next comment";
 export const THREAD_NOT_HERE_MESSAGE = "This comment is on another page or you do not have access.";
 export const COMMENT_CURSOR_CSS = `html, html * { cursor: crosshair !important; } ${SITENOTE_ROOT_TAG} { cursor: auto !important; }`;
 
@@ -63,6 +64,7 @@ export interface ContentState {
   threads: ThreadRecord[];
   members: MemberRecord[];
   screenshots: ReadonlyMap<string, ScreenshotState>;
+  recordings: ReadonlyMap<string, ScreenshotState>;
   resolutions: ReadonlyMap<string, Resolution>;
   positions: Measurements;
   commentMode: boolean;
@@ -96,6 +98,7 @@ export interface ContentController {
   stop: () => void;
   toggleCommentMode: () => boolean;
   exitCommentMode: () => void;
+  enterCommentMode: (notice: string) => boolean;
   commentOnContextTarget: () => boolean;
   toggleSidebar: () => void;
   closeSidebar: () => void;
@@ -151,6 +154,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     threads: [],
     members: [],
     screenshots: new Map(),
+    recordings: new Map(),
     resolutions: new Map(),
     positions: new Map(),
     commentMode: false,
@@ -421,26 +425,43 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     }
   }
 
+  async function loadMedia(
+    field: "screenshots" | "recordings",
+    threadId: string,
+    fetchUrl: (id: string) => Promise<MessageResult<string | null>>,
+  ): Promise<void> {
+    const setMedia = (value: ScreenshotState): void => {
+      store.setState((state) => ({
+        ...state,
+        [field]: new Map(state[field]).set(threadId, value),
+      }));
+    };
+    if (!store.getState()[field].has(threadId)) {
+      setMedia({ status: "loading" });
+    }
+    const result = await fetchUrl(threadId);
+    setMedia(
+      result.ok && result.data !== null
+        ? { status: "ready", url: result.data }
+        : { status: "unavailable" },
+    );
+  }
+
   async function loadScreenshot(threadId: string): Promise<void> {
     const thread = store.getState().threads.find((candidate) => candidate.id === threadId);
     if (thread?.hasScreenshot !== true) {
       return;
     }
-    const setScreenshot = (value: ScreenshotState): void => {
-      store.setState((state) => ({
-        ...state,
-        screenshots: new Map(state.screenshots).set(threadId, value),
-      }));
-    };
-    if (!store.getState().screenshots.has(threadId)) {
-      setScreenshot({ status: "loading" });
+    await loadMedia("screenshots", threadId, (id) => deps.backend.getScreenshotUrl(id));
+  }
+
+  async function loadRecording(threadId: string): Promise<void> {
+    const thread = store.getState().threads.find((candidate) => candidate.id === threadId);
+    const getRecordingUrl = deps.backend.getRecordingUrl;
+    if (thread?.context?.recording === undefined || getRecordingUrl === undefined) {
+      return;
     }
-    const result = await deps.backend.getScreenshotUrl(threadId);
-    setScreenshot(
-      result.ok && result.data !== null
-        ? { status: "ready", url: result.data }
-        : { status: "unavailable" },
-    );
+    await loadMedia("recordings", threadId, (id) => getRecordingUrl(id));
   }
 
   function beginPending(pending: PendingThread): void {
@@ -573,6 +594,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       }
       if (state.activeThreadId !== previous.activeThreadId && state.activeThreadId !== null) {
         void loadScreenshot(state.activeThreadId);
+        void loadRecording(state.activeThreadId);
       }
     });
     const handleContextMenu = (event: MouseEvent): void => {
@@ -772,6 +794,14 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     },
     exitCommentMode: () => {
       setCommentMode(false);
+    },
+    enterCommentMode: (notice) => {
+      if (store.getState().status !== "ready") {
+        return false;
+      }
+      setCommentMode(true);
+      pushToast({ message: notice, variant: "info" });
+      return true;
     },
     commentOnContextTarget: () => {
       const stored = contextTarget;

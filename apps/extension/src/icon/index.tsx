@@ -14,7 +14,8 @@ export type IconName =
   | "table"
   | "comment"
   | "error"
-  | "extension";
+  | "extension"
+  | "record";
 
 const PATHS: Record<IconName, ReactNode> = {
   bell: (
@@ -69,6 +70,12 @@ const PATHS: Record<IconName, ReactNode> = {
   ),
   extension: (
     <path d="M20 11h-2V7a2 2 0 0 0-2-2h-4V3a3 3 0 1 0-6 0v2H3a2 2 0 0 0-2 2v4h2a3 3 0 1 1 0 6H1v4a2 2 0 0 0 2 2h5v-2a3 3 0 1 1 6 0v2h4a2 2 0 0 0 2-2v-4h2a3 3 0 1 0-2-6Z" />
+  ),
+  record: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />
+    </>
   ),
 };
 

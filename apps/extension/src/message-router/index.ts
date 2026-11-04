@@ -6,6 +6,7 @@ import type { EnabledEntry } from "../enablement-store";
 import { requestSchema, type DataByRequestType, type ExtensionRequest } from "../messages";
 import { failure, success, type MessageResult } from "@sitenote/widget";
 import type { NotificationCenter } from "../notification-center";
+import type { RecordingService } from "../recording-service";
 import type { ResolvedPreference } from "../resolved-preference";
 import type { ScreenshotService } from "../screenshot-service";
 import type { SelectionPlacementPreference } from "../selection-placement";
@@ -24,6 +25,7 @@ export interface MessageRouterDeps {
   enablement: SiteEnablement;
   notifications: Pick<NotificationCenter, "list" | "markRead" | "markAllRead">;
   screenshots: ScreenshotService;
+  recordings: RecordingService;
   preferences: ResolvedPreference;
   selectionPlacement: SelectionPlacementPreference;
   getEnabledSite: (origin: string) => Promise<EnabledEntry | null>;
@@ -46,6 +48,7 @@ const PAGE_SCOPED: ReadonlySet<ExtensionRequest["type"]> = new Set([
   "comments.delete",
   "members.list",
   "threads.screenshotUrl",
+  "threads.recordingUrl",
   "screenshot.capture",
   "preferences.get",
   "preferences.set",
@@ -59,8 +62,16 @@ export function senderOriginOf(sender: RouterSender): string | null {
 }
 
 export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
-  const { service, data, enablement, notifications, screenshots, preferences, selectionPlacement } =
-    deps;
+  const {
+    service,
+    data,
+    enablement,
+    notifications,
+    screenshots,
+    recordings,
+    preferences,
+    selectionPlacement,
+  } = deps;
   const extensionPrefix = `chrome-extension://${deps.extensionId}/`;
 
   function classify(sender: RouterSender): SenderKind {
@@ -127,6 +138,17 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
       if (kind === "contentScript" && request.origin !== senderOriginOf(sender)) {
         return failure("forbidden");
       }
+    } else if (
+      kind === "contentScript" &&
+      (request.type === "recording.stop" || request.type === "recording.status")
+    ) {
+      if (
+        request.type === "recording.stop" &&
+        request.tabId !== undefined &&
+        request.tabId !== sender.tab?.id
+      ) {
+        return failure("forbidden");
+      }
     } else if (request.type !== "preferences.getSelectionPlacement" && kind !== "extensionPage") {
       return failure("forbidden_sender");
     }
@@ -149,9 +171,21 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
       case "threads.list":
         return data.listThreads(request);
       case "threads.create":
-        return data.createThread(request);
+        return data.createThread(request, { tabId: sender.tab?.id });
       case "threads.screenshotUrl":
         return data.screenshotUrl(request);
+      case "threads.recordingUrl":
+        return data.recordingUrl(request);
+      case "recording.start":
+        return recordings.start(request);
+      case "recording.stop":
+        return recordings.stop(kind === "contentScript" ? sender.tab?.id : request.tabId);
+      case "recording.status":
+        return recordings.status(kind === "contentScript" ? sender.tab?.id : request.tabId);
+      case "recording.finished":
+        return recordings.onFinished(request);
+      case "recording.heartbeat":
+        return success(null);
       case "screenshot.capture": {
         const tabId = sender.tab?.id;
         const windowId = sender.tab?.windowId;

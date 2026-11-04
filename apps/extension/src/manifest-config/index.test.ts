@@ -78,7 +78,10 @@ describe("createManifest", () => {
       "scripting",
       "activeTab",
       "contextMenus",
+      "tabCapture",
+      "offscreen",
     ]);
+    expect(manifest.minimum_chrome_version).toBe("116");
     expect(manifest.key).toMatch(/^MIIB/);
   });
 

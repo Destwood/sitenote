@@ -1,3 +1,4 @@
+import { SITENOTE_ROOT_TAG } from "@sitenote/core";
 import { createRoot } from "react-dom/client";
 
 import type { WidgetBackend } from "../backend";
@@ -22,6 +23,7 @@ export interface Widget {
   start: ContentController["start"];
   stop: ContentController["stop"];
   toggleCommentMode: ContentController["toggleCommentMode"];
+  enterCommentMode: ContentController["enterCommentMode"];
   commentOnContextTarget: ContentController["commentOnContextTarget"];
   selectThread: ContentController["selectThread"];
   toggleSidebar: ContentController["toggleSidebar"];
@@ -42,12 +44,26 @@ function ownElement(container: HTMLElement | null): HTMLElement | null {
   return root instanceof ShadowRoot && root.host instanceof HTMLElement ? root.host : container;
 }
 
+function isInSitenoteRoot(node: Node): boolean {
+  let current: Node | null = node;
+  while (current !== null) {
+    if (current instanceof Element && current.localName === SITENOTE_ROOT_TAG) {
+      return true;
+    }
+    current = current instanceof ShadowRoot ? current.host : current.parentNode;
+  }
+  return false;
+}
+
 export function createWidget({ backend, document, window }: WidgetOptions): Widget {
   let container: HTMLElement | null = null;
 
   function isOwn(node: Node | null): boolean {
+    if (node === null) {
+      return false;
+    }
     const host = ownElement(container);
-    return host !== null && node !== null && (node === host || host.contains(node));
+    return (host !== null && (node === host || host.contains(node))) || isInSitenoteRoot(node);
   }
 
   const controller = createContentController({
@@ -79,6 +95,7 @@ export function createWidget({ backend, document, window }: WidgetOptions): Widg
     start: controller.start,
     stop: controller.stop,
     toggleCommentMode: controller.toggleCommentMode,
+    enterCommentMode: controller.enterCommentMode,
     commentOnContextTarget: controller.commentOnContextTarget,
     selectThread: controller.selectThread,
     toggleSidebar: controller.toggleSidebar,

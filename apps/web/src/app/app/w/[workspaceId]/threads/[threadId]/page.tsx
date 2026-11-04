@@ -74,6 +74,7 @@ export default async function ThreadPage({ params }: ThreadPageProps) {
               context={detail.context}
               hasScreenshot={detail.hasScreenshot}
               screenshot={detail.screenshot}
+              recording={detail.recording}
             />
           </section>
           <section

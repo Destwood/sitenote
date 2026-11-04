@@ -3,6 +3,7 @@ import type { Enums, SitenoteClient } from "@sitenote/db";
 import type { ScreenshotState } from "@sitenote/ui";
 
 import { toCommentViews, type CommentView } from "../thread-comments";
+import { readRecordingState } from "../thread-recording";
 import { readScreenshotState } from "../thread-screenshot";
 import { FORMER_MEMBER_LABEL } from "../thread-table";
 import { readWorkspaceMembers } from "../workspace-members";
@@ -18,6 +19,7 @@ export interface ThreadDetail {
   context: ThreadContext | null;
   hasScreenshot: boolean;
   screenshot: ScreenshotState | undefined;
+  recording: ScreenshotState | undefined;
   clickUpTaskUrl: string | null;
   comments: CommentView[];
 }
@@ -56,10 +58,12 @@ export async function readThreadDetail(
     throw new Error("Could not read the comments.");
   }
 
-  const screenshot =
-    data.screenshot_path === null
-      ? undefined
-      : await readScreenshotState(supabase, data.screenshot_path);
+  const context = parseThreadContext(data.context);
+  const recordingPath = context?.recording?.path;
+  const [screenshot, recording] = await Promise.all([
+    data.screenshot_path === null ? undefined : readScreenshotState(supabase, data.screenshot_path),
+    recordingPath === undefined ? undefined : readRecordingState(supabase, recordingPath),
+  ]);
   return {
     id: data.id,
     workspaceId: data.workspace_id,
@@ -70,9 +74,10 @@ export async function readThreadDetail(
     authorName:
       members.find((member) => member.userId === data.created_by)?.displayName ??
       FORMER_MEMBER_LABEL,
-    context: parseThreadContext(data.context),
+    context,
     hasScreenshot: data.screenshot_path !== null,
     screenshot,
+    recording,
     clickUpTaskUrl: data.clickup_task_url,
     comments: toCommentViews(commentRows.data, members),
   };

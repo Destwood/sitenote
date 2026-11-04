@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import {
   CONTEXT_UNAVAILABLE_TEXT,
   ContextSection,
+  formatDuration,
+  formatSizeMb,
   formatSystem,
   formatViewport,
   safeScreenshotUrl,
@@ -239,5 +241,90 @@ describe("ContextSection screenshot", () => {
     );
     expect(screen.getByText("Screenshot could not be loaded.")).toBeTruthy();
     expect(screen.queryByRole("link")).toBeNull();
+  });
+});
+
+describe("ContextSection recording", () => {
+  const recording = { path: "ws/thread.webm", durationMs: 65_000, size: 1_572_864 };
+
+  it("shows no recording block when the context has no recording", () => {
+    render(
+      <ContextSection
+        context={context()}
+        hasScreenshot={false}
+        recording={{ status: "ready", url: "https://x.test/r.webm" }}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Screen recording")).toBeNull();
+    expect(screen.queryByText("Loading video...")).toBeNull();
+  });
+
+  it("shows a loading state while the recording url is requested", () => {
+    const { rerender } = render(
+      <ContextSection context={context({ recording })} hasScreenshot={false} />,
+    );
+    expect(screen.getByRole("status").textContent).toBe("Loading video...");
+
+    rerender(
+      <ContextSection
+        context={context({ recording })}
+        hasScreenshot={false}
+        recording={{ status: "loading" }}
+      />,
+    );
+    expect(screen.getByRole("status").textContent).toBe("Loading video...");
+  });
+
+  it("plays the signed recording with controls and a duration and size caption", () => {
+    render(
+      <ContextSection
+        context={context({ recording })}
+        hasScreenshot={false}
+        recording={{ status: "ready", url: "https://x.test/r.webm?token=1" }}
+      />,
+    );
+
+    const video = screen.getByLabelText("Screen recording");
+    expect(video.tagName).toBe("VIDEO");
+    expect(video.hasAttribute("controls")).toBe(true);
+    expect(video.getAttribute("preload")).toBe("metadata");
+    expect(video.getAttribute("src")).toBe("https://x.test/r.webm?token=1");
+    expect(screen.getByText("1:05 · 1.5 MB")).toBeTruthy();
+  });
+
+  it("reports an unavailable recording and refuses unsafe urls", () => {
+    const { rerender } = render(
+      <ContextSection
+        context={context({ recording })}
+        hasScreenshot={false}
+        recording={{ status: "unavailable" }}
+      />,
+    );
+    expect(screen.getByText("Video could not be loaded.")).toBeTruthy();
+
+    rerender(
+      <ContextSection
+        context={context({ recording })}
+        hasScreenshot={false}
+        recording={{ status: "ready", url: "javascript:alert(1)" }}
+      />,
+    );
+    expect(screen.getByText("Video could not be loaded.")).toBeTruthy();
+    expect(screen.queryByLabelText("Screen recording")).toBeNull();
+  });
+});
+
+describe("recording formatters", () => {
+  it("formats the duration as minutes and seconds", () => {
+    expect(formatDuration(0)).toBe("0:00");
+    expect(formatDuration(9_400)).toBe("0:09");
+    expect(formatDuration(59_600)).toBe("1:00");
+    expect(formatDuration(125_000)).toBe("2:05");
+  });
+
+  it("formats the size in megabytes", () => {
+    expect(formatSizeMb(0)).toBe("0.0 MB");
+    expect(formatSizeMb(1_572_864)).toBe("1.5 MB");
   });
 });

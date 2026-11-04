@@ -109,6 +109,7 @@ export default async function ThreadLinkPage({ params }: ThreadLinkPageProps) {
           context={detail.context}
           hasScreenshot={detail.hasScreenshot}
           screenshot={detail.screenshot}
+          recording={detail.recording}
         />
       </section>
       <section

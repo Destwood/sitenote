@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { failure, success, type MessageResult, type PageThreadSummary } from "@sitenote/widget";
-import { createToggleListener } from ".";
+import { createToggleListener, restoreRecording, type RecordingControls } from ".";
 import type {
   CommentModeState,
   CommentOnElementState,
@@ -15,6 +15,17 @@ const COMMENT_ON_ELEMENT = { type: "commentMode.commentOnElement" };
 const LIST_THREADS = { type: "page.listThreads" };
 const OPEN_THREAD = { type: "page.openThread", threadId: "30000000-0000-4000-8000-000000000001" };
 const OPEN_SIDEBAR = { type: "page.openSidebar" };
+const RECORDING_STARTED = {
+  type: "recording.state",
+  recording: true,
+  startedAt: 1_700_000_000_000,
+};
+const RECORDING_STOPPED = { type: "recording.state", recording: false };
+const RECORDING_READY = { type: "recording.ready", durationMs: 42_000 };
+
+function recordingControls(): RecordingControls {
+  return { show: vi.fn(), hide: vi.fn(), attach: vi.fn(() => success(null)) };
+}
 
 function listenerWith(
   toggle: () => MessageResult<CommentModeState> = () => success({ active: true }),
@@ -23,6 +34,7 @@ function listenerWith(
   openThread: (threadId: string) => MessageResult<PageOpenThreadState> = () =>
     success({ opened: true }),
   openSidebar: () => MessageResult<PageOpenSidebarState> = () => success({ opened: true }),
+  recording: RecordingControls = recordingControls(),
 ) {
   return createToggleListener({
     extensionId: EXTENSION_ID,
@@ -31,6 +43,7 @@ function listenerWith(
     listThreads,
     openThread,
     openSidebar,
+    recording,
   });
 }
 
@@ -130,6 +143,68 @@ describe("createToggleListener", () => {
     expect(respond).toHaveBeenCalledExactlyOnceWith(success({ opened: true }));
   });
 
+  it("shows the recording pill from the extension and hides it when the recording stops", () => {
+    const recording = recordingControls();
+    const respond = vi.fn();
+    const listener = listenerWith(undefined, undefined, undefined, undefined, undefined, recording);
+
+    listener(RECORDING_STARTED, { id: EXTENSION_ID }, respond);
+    listener(RECORDING_STOPPED, { id: EXTENSION_ID }, respond);
+
+    expect(recording.show).toHaveBeenCalledExactlyOnceWith(1_700_000_000_000);
+    expect(recording.hide).toHaveBeenCalledTimes(1);
+    expect(respond).not.toHaveBeenCalled();
+  });
+
+  it("hides the pill when a recording state has no start time", () => {
+    const recording = recordingControls();
+
+    listenerWith(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      recording,
+    )({ type: "recording.state", recording: true }, { id: EXTENSION_ID }, vi.fn());
+
+    expect(recording.show).not.toHaveBeenCalled();
+    expect(recording.hide).toHaveBeenCalledTimes(1);
+  });
+
+  it("attaches a finished video to the page and answers with the result", () => {
+    const recording = recordingControls();
+    const respond = vi.fn();
+
+    listenerWith(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      recording,
+    )(RECORDING_READY, { id: EXTENSION_ID }, respond);
+
+    expect(recording.attach).toHaveBeenCalledTimes(1);
+    expect(respond).toHaveBeenCalledExactlyOnceWith(success(null));
+  });
+
+  it("passes a failed attach through", () => {
+    const respond = vi.fn();
+    const recording = { ...recordingControls(), attach: vi.fn(() => failure("page_unavailable")) };
+
+    listenerWith(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      recording,
+    )(RECORDING_READY, { id: EXTENSION_ID }, respond);
+
+    expect(respond).toHaveBeenCalledExactlyOnceWith(failure("page_unavailable"));
+  });
+
   it.each([
     ["another extension", { id: "other" }],
     ["no sender id", {}],
@@ -138,33 +213,28 @@ describe("createToggleListener", () => {
     const toggle = vi.fn(() => success({ active: true }));
     const commentOnElement = vi.fn(() => success({ started: true }));
     const openSidebar = vi.fn(() => success({ opened: true }));
+    const recording = recordingControls();
     const respond = vi.fn();
+    const listener = listenerWith(
+      toggle,
+      commentOnElement,
+      undefined,
+      undefined,
+      openSidebar,
+      recording,
+    );
 
-    listenerWith(
-      toggle,
-      commentOnElement,
-      undefined,
-      undefined,
-      openSidebar,
-    )(TOGGLE, sender, respond);
-    listenerWith(
-      toggle,
-      commentOnElement,
-      undefined,
-      undefined,
-      openSidebar,
-    )(COMMENT_ON_ELEMENT, sender, respond);
-    listenerWith(
-      toggle,
-      commentOnElement,
-      undefined,
-      undefined,
-      openSidebar,
-    )(OPEN_SIDEBAR, sender, respond);
+    listener(TOGGLE, sender, respond);
+    listener(COMMENT_ON_ELEMENT, sender, respond);
+    listener(OPEN_SIDEBAR, sender, respond);
+    listener(RECORDING_STARTED, sender, respond);
+    listener(RECORDING_READY, sender, respond);
 
     expect(toggle).not.toHaveBeenCalled();
     expect(commentOnElement).not.toHaveBeenCalled();
     expect(openSidebar).not.toHaveBeenCalled();
+    expect(recording.show).not.toHaveBeenCalled();
+    expect(recording.attach).not.toHaveBeenCalled();
     expect(respond).not.toHaveBeenCalled();
   });
 
@@ -176,6 +246,7 @@ describe("createToggleListener", () => {
     const toggle = vi.fn(() => success({ active: true }));
     const commentOnElement = vi.fn(() => success({ started: true }));
     const openSidebar = vi.fn(() => success({ opened: true }));
+    const recording = recordingControls();
     const respond = vi.fn();
 
     listenerWith(
@@ -184,11 +255,39 @@ describe("createToggleListener", () => {
       undefined,
       undefined,
       openSidebar,
+      recording,
     )(message, { id: EXTENSION_ID }, respond);
 
     expect(toggle).not.toHaveBeenCalled();
     expect(commentOnElement).not.toHaveBeenCalled();
     expect(openSidebar).not.toHaveBeenCalled();
+    expect(recording.show).not.toHaveBeenCalled();
+    expect(recording.attach).not.toHaveBeenCalled();
     expect(respond).not.toHaveBeenCalled();
+  });
+});
+
+describe("restoreRecording", () => {
+  it("shows the pill when the page loads during a recording", async () => {
+    const show = vi.fn();
+
+    await restoreRecording(
+      () => Promise.resolve(success({ state: "recording", startedAt: 1_700_000_000_000 })),
+      show,
+    );
+
+    expect(show).toHaveBeenCalledExactlyOnceWith(1_700_000_000_000);
+  });
+
+  it.each([
+    ["idle", () => Promise.resolve(success({ state: "idle" as const }))],
+    ["pending", () => Promise.resolve(success({ state: "pending" as const, durationMs: 10 }))],
+    ["failed", () => Promise.resolve(failure("unavailable"))],
+  ])("does not show the pill when the state is %s", async (_name, readStatus) => {
+    const show = vi.fn();
+
+    await restoreRecording(readStatus, show);
+
+    expect(show).not.toHaveBeenCalled();
   });
 });

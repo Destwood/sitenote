@@ -18,6 +18,7 @@ describe("Icon", () => {
     "comment",
     "error",
     "extension",
+    "record",
   ])("draws %s as a decorative 24px outline svg", (name) => {
     const { container } = render(<Icon name={name} />);
 

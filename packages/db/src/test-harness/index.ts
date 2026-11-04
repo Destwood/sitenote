@@ -40,6 +40,7 @@ export interface Scenario {
   otherSite: Tables<"sites">;
   users: TestUser[];
   storagePaths: string[];
+  recordingPaths: string[];
 }
 
 interface ErrorLike {
@@ -284,12 +285,16 @@ export async function createScenario(): Promise<Scenario> {
     otherSite,
     users: [owner, member, outsider, guest, stranger],
     storagePaths: [],
+    recordingPaths: [],
   };
 }
 
 export async function destroyScenario(scenario: Scenario): Promise<void> {
   if (scenario.storagePaths.length > 0) {
     await scenario.admin.storage.from("screenshots").remove(scenario.storagePaths);
+  }
+  if (scenario.recordingPaths.length > 0) {
+    await scenario.admin.storage.from("recordings").remove(scenario.recordingPaths);
   }
   await deleteTestUsers(scenario.admin, scenario.users);
 }

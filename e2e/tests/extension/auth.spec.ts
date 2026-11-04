@@ -70,6 +70,8 @@ test("the e2e build asks for the documented permissions and the fixture, example
     "scripting",
     "activeTab",
     "contextMenus",
+    "tabCapture",
+    "offscreen",
   ]);
   expect(manifest.optional_host_permissions).toEqual(["http://*/*", "https://*/*"]);
   expect(manifest.host_permissions).toEqual([

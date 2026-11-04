@@ -62,6 +62,8 @@ const pageUrlSchema = z.string().check(z.refine((value) => parsePageUrl(value)?.
 const bodySchema = z.string().check(z.trim(), z.minLength(1), z.maxLength(COMMENT_MAX_LENGTH));
 const mentionsSchema = z.array(idSchema).check(z.maxLength(MENTIONS_MAX));
 const tabIdSchema = z.int().check(z.nonnegative());
+const nonNegativeIntSchema = z.int().check(z.nonnegative());
+const streamIdSchema = z.string().check(z.minLength(1), z.maxLength(512));
 const devicePixelRatioSchema = z.number().check(z.gt(0), z.lte(16));
 const notificationLimitSchema = z.int().check(z.minimum(1), z.maximum(NOTIFICATIONS_PAGE_MAX));
 const notificationIdsSchema = z
@@ -82,6 +84,7 @@ export const dataRequestSchema = z.discriminatedUnion("type", [
     mentions: mentionsSchema,
   }),
   z.object({ type: z.literal("threads.screenshotUrl"), threadId: idSchema }),
+  z.object({ type: z.literal("threads.recordingUrl"), threadId: idSchema }),
   z.object({
     type: z.literal("screenshot.capture"),
     rect: captureRectSchema,
@@ -131,6 +134,22 @@ export const dataRequestSchema = z.discriminatedUnion("type", [
     origin: originSchema,
     enabled: z.boolean(),
   }),
+  z.object({
+    type: z.literal("recording.start"),
+    tabId: tabIdSchema,
+    streamId: streamIdSchema,
+  }),
+  z.object({ type: z.literal("recording.stop"), tabId: z.optional(tabIdSchema) }),
+  z.object({ type: z.literal("recording.status"), tabId: z.optional(tabIdSchema) }),
+  z.object({
+    type: z.literal("recording.finished"),
+    tabId: tabIdSchema,
+    blobUrl: z.string(),
+    durationMs: nonNegativeIntSchema,
+    size: nonNegativeIntSchema,
+    reason: z.enum(["user", "time", "size", "ended", "error"]),
+  }),
+  z.object({ type: z.literal("recording.heartbeat") }),
 ]);
 
 export type DataRequest = z.infer<typeof dataRequestSchema>;
@@ -170,6 +189,44 @@ export const notificationsChangedSchema = z.object({
 
 export type NotificationsChangedMessage = z.infer<typeof notificationsChangedSchema>;
 
+export const recordingStatusSchema = z.object({
+  state: z.enum(["idle", "recording", "pending"]),
+  startedAt: z.optional(z.number()),
+  durationMs: z.optional(nonNegativeIntSchema),
+});
+
+export type RecordingStatus = z.infer<typeof recordingStatusSchema>;
+
+export const recordingStateSchema = z.object({
+  type: z.literal("recording.state"),
+  recording: z.boolean(),
+  startedAt: z.optional(z.number()),
+});
+
+export type RecordingStateMessage = z.infer<typeof recordingStateSchema>;
+
+export const recordingReadySchema = z.object({
+  type: z.literal("recording.ready"),
+  durationMs: nonNegativeIntSchema,
+});
+
+export type RecordingReadyMessage = z.infer<typeof recordingReadySchema>;
+
+export const offscreenCommandSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("offscreen.start"),
+    tabId: tabIdSchema,
+    streamId: streamIdSchema,
+    maxMs: z.int().check(z.positive()),
+    stopBytes: z.int().check(z.positive()),
+  }),
+  z.object({ type: z.literal("offscreen.stop"), discard: z.boolean() }),
+  z.object({ type: z.literal("offscreen.query"), tabId: z.optional(tabIdSchema) }),
+  z.object({ type: z.literal("offscreen.release") }),
+]);
+
+export type OffscreenCommand = z.infer<typeof offscreenCommandSchema>;
+
 const errorResponseSchema = z.object({
   ok: z.literal(false),
   error: z.object({ code: z.enum(ERROR_CODES), message: z.string() }),
@@ -188,6 +245,7 @@ export interface DataByType {
   "threads.list": ThreadRecord[];
   "threads.create": ThreadRecord;
   "threads.screenshotUrl": string | null;
+  "threads.recordingUrl": string | null;
   "screenshot.capture": CapturedScreenshot;
   "preferences.get": Preferences;
   "preferences.set": null;
@@ -207,6 +265,11 @@ export interface DataByType {
   "sites.setErrorCapture": null;
   "clickup.status": boolean;
   "clickup.createTask": ClickUpTaskResult;
+  "recording.start": RecordingStatus;
+  "recording.stop": null;
+  "recording.status": RecordingStatus;
+  "recording.finished": null;
+  "recording.heartbeat": null;
 }
 
 export type DataByRequestType = AuthDataByType & DataByType;
@@ -227,6 +290,7 @@ export const RESPONSE_SCHEMAS: {
   "threads.list": resultSchema(z.array(threadRecordSchema)),
   "threads.create": resultSchema(threadRecordSchema),
   "threads.screenshotUrl": resultSchema(z.nullable(httpUrlSchema)),
+  "threads.recordingUrl": resultSchema(z.nullable(httpUrlSchema)),
   "screenshot.capture": resultSchema(capturedScreenshotSchema),
   "preferences.get": resultSchema(preferencesSchema),
   "preferences.set": resultSchema(z.null()),
@@ -246,6 +310,11 @@ export const RESPONSE_SCHEMAS: {
   "sites.setErrorCapture": resultSchema(z.null()),
   "clickup.status": resultSchema(z.boolean()),
   "clickup.createTask": resultSchema(clickUpTaskResultSchema),
+  "recording.start": resultSchema(recordingStatusSchema),
+  "recording.stop": resultSchema(z.null()),
+  "recording.status": resultSchema(recordingStatusSchema),
+  "recording.finished": resultSchema(z.null()),
+  "recording.heartbeat": resultSchema(z.null()),
 };
 
 export const pageSubscribeSchema = z.object({
@@ -325,3 +394,14 @@ export const pageOpenSidebarStateSchema = z.object({ opened: z.boolean() });
 export type PageOpenSidebarState = z.infer<typeof pageOpenSidebarStateSchema>;
 
 export const pageOpenSidebarResponseSchema = resultSchema(pageOpenSidebarStateSchema);
+
+export const offscreenStatusSchema = z.extend(recordingStatusSchema, {
+  blobUrl: z.optional(z.string()),
+  size: z.optional(nonNegativeIntSchema),
+});
+
+export type OffscreenStatus = z.infer<typeof offscreenStatusSchema>;
+
+export const offscreenResponseSchema = resultSchema(offscreenStatusSchema);
+
+export type OffscreenResponse = MessageResult<OffscreenStatus>;

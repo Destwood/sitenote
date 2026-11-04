@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AuthService } from "../auth-service";
 import type { DataService } from "../data-service";
 import type { NotificationCenter } from "../notification-center";
+import type { RecordingService } from "../recording-service";
 import type { ResolvedPreference } from "../resolved-preference";
 import type { ScreenshotService } from "../screenshot-service";
 import type { SelectionPlacementPreference } from "../selection-placement";
@@ -67,6 +68,7 @@ function createFakes() {
     listThreads: vi.fn(() => Promise.resolve(success([]))),
     createThread: vi.fn(),
     screenshotUrl: vi.fn(() => Promise.resolve(success(null))),
+    recordingUrl: vi.fn(() => Promise.resolve(success(null))),
     setThreadStatus: vi.fn(),
     clickUpStatus: vi.fn(() => Promise.resolve(success(true))),
     clickUpCreateTask: vi.fn(),
@@ -94,6 +96,15 @@ function createFakes() {
       Promise.resolve(success({ captureId: CAPTURE_ID, width: 10, height: 20 })),
     ),
   };
+  const recordings: RecordingService = {
+    start: vi.fn(() => Promise.resolve(success({ state: "recording" as const, startedAt: 1 }))),
+    stop: vi.fn(() => Promise.resolve(success(null))),
+    status: vi.fn(() => Promise.resolve(success({ state: "idle" as const }))),
+    onFinished: vi.fn(() => Promise.resolve(success(null))),
+    discard: vi.fn(),
+    attach: vi.fn(() => Promise.resolve(null)),
+    onTabRemoved: vi.fn(),
+  };
   const preferences = {
     load: vi.fn<ResolvedPreference["load"]>(() => Promise.resolve(true)),
     save: vi.fn<ResolvedPreference["save"]>(() => Promise.resolve()),
@@ -113,6 +124,7 @@ function createFakes() {
     enablement,
     notifications,
     screenshots,
+    recordings,
     preferences,
     selectionPlacement,
   };
@@ -561,6 +573,7 @@ describe("createMessageRouter content script requests", () => {
     expect(data.listThreads).toHaveBeenCalledWith(LIST);
     expect(data.createThread).toHaveBeenCalledWith(
       expect.objectContaining({ body: "Looks wrong", siteId: SITE_ID, captureId: CAPTURE_ID }),
+      { tabId: 4 },
     );
     expect(data.setThreadStatus).toHaveBeenCalledWith(
       expect.objectContaining({ threadId: THREAD_ID, status: "resolved" }),
@@ -605,5 +618,135 @@ describe("createMessageRouter content script requests", () => {
 
     expect(await route(LIST, POPUP_TAB)).toEqual(failure("forbidden"));
     expect(data.listThreads).not.toHaveBeenCalled();
+  });
+
+  it("serves the signed recording url of a thread to a content script only", async () => {
+    const { route, data } = setup();
+    const request = { type: "threads.recordingUrl", threadId: THREAD_ID };
+
+    await route(request, CONTENT);
+    expect(await route(request, POPUP)).toEqual(failure("forbidden_sender"));
+
+    expect(data.recordingUrl).toHaveBeenCalledExactlyOnceWith(request);
+  });
+
+  it("passes the tab of a content script to thread creation", async () => {
+    const { route, data } = setup();
+
+    await route(
+      {
+        type: "threads.create",
+        siteId: SITE_ID,
+        pageUrl: PAGE_URL,
+        anchor: ANCHOR,
+        context: CONTEXT,
+        body: "Hi",
+        mentions: [],
+      },
+      CONTENT,
+    );
+
+    expect(data.createThread).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ body: "Hi" }),
+      { tabId: 4 },
+    );
+  });
+});
+
+describe("createMessageRouter recordings", () => {
+  const START = { type: "recording.start", tabId: 4, streamId: "stream-1" };
+  const FINISHED = {
+    type: "recording.finished",
+    tabId: 4,
+    blobUrl: "blob:x",
+    durationMs: 0,
+    size: 0,
+    reason: "user",
+  };
+
+  it("starts, finishes and beats from an extension page", async () => {
+    const { route, recordings } = setup();
+
+    expect(await route(START, POPUP)).toEqual(success({ state: "recording", startedAt: 1 }));
+    expect(await route(FINISHED, POPUP)).toEqual(success(null));
+    expect(await route({ type: "recording.heartbeat" }, POPUP)).toEqual(success(null));
+
+    expect(recordings.start).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ tabId: 4, streamId: "stream-1" }),
+    );
+    expect(recordings.onFinished).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ tabId: 4, reason: "user" }),
+    );
+  });
+
+  it("accepts the finish and beats from the offscreen recorder page", async () => {
+    const { route, recordings } = setup();
+    const OFFSCREEN = {
+      id: EXTENSION_ID,
+      url: `chrome-extension://${EXTENSION_ID}/offscreen.html`,
+    };
+
+    expect(await route(FINISHED, OFFSCREEN)).toEqual(success(null));
+    expect(await route({ type: "recording.heartbeat" }, OFFSCREEN)).toEqual(success(null));
+
+    expect(recordings.onFinished).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ tabId: 4, blobUrl: "blob:x" }),
+    );
+  });
+
+  it("refuses to start, finish or beat from a content script", async () => {
+    const { route, recordings } = setup();
+
+    expect(await route(START, CONTENT)).toEqual(failure("forbidden_sender"));
+    expect(await route(FINISHED, CONTENT)).toEqual(failure("forbidden_sender"));
+    expect(await route({ type: "recording.heartbeat" }, CONTENT)).toEqual(
+      failure("forbidden_sender"),
+    );
+    expect(recordings.start).not.toHaveBeenCalled();
+    expect(recordings.onFinished).not.toHaveBeenCalled();
+  });
+
+  it("refuses recording requests from a foreign sender", async () => {
+    const { route, recordings } = setup();
+
+    expect(
+      await route({ type: "recording.status" }, { id: "pnmlpmcmdnkjhkdfmcnpbkalfmnkgnoj" }),
+    ).toEqual(failure("forbidden_sender"));
+    expect(recordings.status).not.toHaveBeenCalled();
+  });
+
+  it("reports the status of the sender's own tab to a content script", async () => {
+    const { route, recordings } = setup();
+
+    await route({ type: "recording.status", tabId: 99 }, CONTENT);
+    await route({ type: "recording.status" }, CONTENT);
+
+    expect(recordings.status).toHaveBeenCalledTimes(2);
+    expect(recordings.status).toHaveBeenNthCalledWith(1, 4);
+    expect(recordings.status).toHaveBeenNthCalledWith(2, 4);
+  });
+
+  it("stops the sender's own tab from a content script and refuses another tab", async () => {
+    const { route, recordings } = setup();
+
+    expect(await route({ type: "recording.stop" }, CONTENT)).toEqual(success(null));
+    expect(await route({ type: "recording.stop", tabId: 4 }, CONTENT)).toEqual(success(null));
+    expect(await route({ type: "recording.stop", tabId: 5 }, CONTENT)).toEqual(
+      failure("forbidden"),
+    );
+
+    expect(recordings.stop).toHaveBeenCalledTimes(2);
+    expect(recordings.stop).toHaveBeenNthCalledWith(1, 4);
+    expect(recordings.stop).toHaveBeenNthCalledWith(2, 4);
+  });
+
+  it("lets an extension page stop and read the recording of any tab", async () => {
+    const { route, recordings } = setup();
+
+    expect(await route({ type: "recording.stop", tabId: 7 }, POPUP)).toEqual(success(null));
+    await route({ type: "recording.status", tabId: 7 }, POPUP);
+
+    expect(recordings.stop).toHaveBeenCalledWith(7);
+    expect(recordings.status).toHaveBeenCalledWith(7);
   });
 });

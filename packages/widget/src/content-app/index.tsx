@@ -156,6 +156,7 @@ export function ContentApp({ controller }: ContentAppProps) {
         error={state.panelError}
         mentionCandidates={mentionCandidates}
         screenshot={state.screenshots.get(activeView.id)}
+        recording={state.recordings.get(activeView.id)}
         clickUp={{
           taskUrl: activeRecord.clickUpTaskUrl ?? null,
           canCreate: state.clickUpConfigured,
