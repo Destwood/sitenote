@@ -26,6 +26,7 @@ import {
   recordingStateSchema,
   requestSchema,
 } from ".";
+import { RECORDING_STEPS_MAX } from "@sitenote/core";
 
 const SIGNED_IN = {
   status: "signedIn",
@@ -732,6 +733,60 @@ describe("recording messages", () => {
     );
     expect(
       offscreenResponseSchema.safeParse(success({ state: "paused", blobUrl: "blob:x" })).success,
+    ).toBe(false);
+  });
+});
+
+describe("recording steps messages", () => {
+  const STEP = { t: 1200, kind: "click", selector: "button.save", label: "Save" } as const;
+
+  it("accepts a step request and rejects a malformed one", () => {
+    expect(dataRequestSchema.safeParse({ type: "recording.step", step: STEP }).success).toBe(true);
+    for (const step of [
+      { ...STEP, kind: "scroll" },
+      { ...STEP, t: -1 },
+      { ...STEP, selector: "s".repeat(121) },
+      { ...STEP, label: undefined },
+    ]) {
+      expect(dataRequestSchema.safeParse({ type: "recording.step", step }).success).toBe(false);
+    }
+    expect(dataRequestSchema.safeParse({ type: "recording.step" }).success).toBe(false);
+  });
+
+  it("validates the step response as null", () => {
+    expect(RESPONSE_SCHEMAS["recording.step"].safeParse(success(null)).success).toBe(true);
+    expect(RESPONSE_SCHEMAS["recording.step"].safeParse(success(1)).success).toBe(false);
+  });
+
+  it("accepts the offscreen step command and rejects a malformed one", () => {
+    expect(
+      offscreenCommandSchema.safeParse({ type: "offscreen.step", tabId: 4, step: STEP }).success,
+    ).toBe(true);
+    expect(
+      offscreenCommandSchema.safeParse({ type: "offscreen.step", tabId: -1, step: STEP }).success,
+    ).toBe(false);
+    expect(
+      offscreenCommandSchema.safeParse({
+        type: "offscreen.step",
+        tabId: 4,
+        step: { ...STEP, t: 1.5 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("answers a pending recording with its steps up to the limit", () => {
+    const pending = { state: "pending", durationMs: 5000, blobUrl: "blob:x", size: 1024 };
+    expect(offscreenResponseSchema.safeParse(success({ ...pending, steps: [STEP] })).success).toBe(
+      true,
+    );
+    expect(
+      offscreenResponseSchema.safeParse(
+        success({ ...pending, steps: Array.from({ length: RECORDING_STEPS_MAX + 1 }, () => STEP) }),
+      ).success,
+    ).toBe(false);
+    expect(
+      offscreenResponseSchema.safeParse(success({ ...pending, steps: [{ ...STEP, kind: "x" }] }))
+        .success,
     ).toBe(false);
   });
 });

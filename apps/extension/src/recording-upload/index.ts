@@ -1,4 +1,4 @@
-import type { RecordingRef } from "@sitenote/core";
+import type { RecordingRef, RecordingStep } from "@sitenote/core";
 import type { SitenoteClient } from "@sitenote/db";
 
 import { RECORDING_MAX_BYTES } from "../recording-store";
@@ -11,6 +11,7 @@ export interface PendingRecordingInfo {
   blobUrl: string;
   durationMs: number;
   size: number;
+  steps?: RecordingStep[];
 }
 
 export interface ThreadRecordings {
@@ -48,7 +49,14 @@ export function createRecordingUploader(deps: RecordingUploaderDeps): ThreadReco
         if (result.error !== null && !isDuplicate(result.error)) {
           return null;
         }
-        return { path, durationMs: pending.durationMs, size: blob.size };
+        return {
+          path,
+          durationMs: pending.durationMs,
+          size: blob.size,
+          ...(pending.steps === undefined || pending.steps.length === 0
+            ? {}
+            : { steps: pending.steps }),
+        };
       } catch {
         return null;
       }

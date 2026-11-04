@@ -6,16 +6,27 @@ import {
   CONSOLE_SOURCE_MAX,
   CONSOLE_STACK_MAX,
   CONTEXT_MAX_BYTES,
+  CONTEXT_NAME_MAX,
+  CONTEXT_TITLE_MAX,
+  CONTEXT_URL_MAX,
+  CONTEXT_USER_AGENT_MAX,
   RECORDING_PATH_MAX,
+  RECORDING_STEPS_MAX,
+  STEP_LABEL_MAX,
+  STEP_SELECTOR_MAX,
+  STEP_URL_MAX,
   consoleErrorRecordSchema,
   fitThreadContext,
   parseThreadContext,
+  recordingStepSchema,
+  sanitizeStep,
   sanitizeText,
   threadContextSchema,
   withRecording,
   withoutConsoleErrors,
   type ConsoleErrorRecord,
   type RecordingRef,
+  type RecordingStep,
   type ThreadContext,
 } from ".";
 
@@ -25,6 +36,25 @@ const RECORDING: RecordingRef = {
   durationMs: 4200,
   size: 81920,
 };
+const STEP: RecordingStep = { t: 1200, kind: "click", selector: "button.save", label: "Save" };
+const WIDE = "字";
+const WORST_STEP: RecordingStep = {
+  t: Number.MAX_SAFE_INTEGER,
+  kind: "navigate",
+  selector: WIDE.repeat(STEP_SELECTOR_MAX),
+  label: WIDE.repeat(STEP_LABEL_MAX),
+  url: WIDE.repeat(STEP_URL_MAX),
+};
+const WORST_RECORDING: RecordingRef = {
+  path: WIDE.repeat(RECORDING_PATH_MAX),
+  durationMs: Number.MAX_SAFE_INTEGER,
+  size: Number.MAX_SAFE_INTEGER,
+  steps: Array.from({ length: RECORDING_STEPS_MAX }, () => WORST_STEP),
+};
+
+function byteSize(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).length;
+}
 
 function record(overrides: Partial<ConsoleErrorRecord> = {}): ConsoleErrorRecord {
   return { kind: "error", message: "Boom", at: AT, ...overrides };
@@ -228,7 +258,7 @@ describe("fitThreadContext", () => {
       }),
     );
     const longest: RecordingRef = {
-      path: "p".repeat(RECORDING_PATH_MAX),
+      path: WIDE.repeat(RECORDING_PATH_MAX),
       durationMs: Number.MAX_SAFE_INTEGER,
       size: Number.MAX_SAFE_INTEGER,
     };
@@ -268,5 +298,177 @@ describe("withRecording", () => {
     const attached = withRecording(original, RECORDING);
     expect(attached).toEqual({ ...original, recording: RECORDING });
     expect(original).not.toHaveProperty("recording");
+  });
+});
+
+describe("recording steps", () => {
+  it("accepts a recording with and without steps", () => {
+    expect(
+      threadContextSchema.safeParse(context({ recording: { ...RECORDING, steps: [STEP] } }))
+        .success,
+    ).toBe(true);
+    expect(
+      threadContextSchema.safeParse(context({ recording: { ...RECORDING, steps: [] } })).success,
+    ).toBe(true);
+    expect(threadContextSchema.safeParse(context({ recording: RECORDING })).success).toBe(true);
+  });
+
+  it("keeps the steps through a parse round trip", () => {
+    const attached = withRecording(context(), { ...RECORDING, steps: [STEP] });
+    expect(parseThreadContext(JSON.parse(JSON.stringify(attached)))?.recording?.steps).toEqual([
+      STEP,
+    ]);
+  });
+
+  it("accepts exactly the step limit and rejects one more", () => {
+    const steps = Array.from({ length: RECORDING_STEPS_MAX }, () => STEP);
+    expect(
+      threadContextSchema.safeParse(context({ recording: { ...RECORDING, steps } })).success,
+    ).toBe(true);
+    expect(
+      threadContextSchema.safeParse(
+        context({ recording: { ...RECORDING, steps: [...steps, STEP] } }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it("accepts steps at the string limits and rejects one character more", () => {
+    const limits = [
+      { selector: "s".repeat(STEP_SELECTOR_MAX) },
+      { label: "l".repeat(STEP_LABEL_MAX) },
+      { url: "u".repeat(STEP_URL_MAX) },
+    ];
+    for (const limit of limits) {
+      expect(recordingStepSchema.safeParse({ ...STEP, ...limit }).success).toBe(true);
+    }
+    const overs = [
+      { selector: "s".repeat(STEP_SELECTOR_MAX + 1) },
+      { label: "l".repeat(STEP_LABEL_MAX + 1) },
+      { url: "u".repeat(STEP_URL_MAX + 1) },
+    ];
+    for (const over of overs) {
+      expect(recordingStepSchema.safeParse({ ...STEP, ...over }).success).toBe(false);
+    }
+  });
+
+  it("rejects an unknown kind, a negative or fractional time and a missing selector", () => {
+    const rejected: unknown[] = [
+      { ...STEP, kind: "scroll" },
+      { ...STEP, t: -1 },
+      { ...STEP, t: 1.5 },
+      { t: 1, kind: "click", label: "Save" },
+      { ...STEP, url: undefined, label: undefined },
+    ];
+    for (const value of rejected) {
+      expect(recordingStepSchema.safeParse(value).success).toBe(false);
+    }
+    expect(recordingStepSchema.safeParse({ ...STEP, url: undefined }).success).toBe(true);
+  });
+
+  it("rejects a recording with a malformed step", () => {
+    const rejected: unknown[] = [
+      { ...context(), recording: { ...RECORDING, steps: [{ ...STEP, kind: "scroll" }] } },
+      { ...context(), recording: { ...RECORDING, steps: "click" } },
+    ];
+    for (const value of rejected) {
+      expect(threadContextSchema.safeParse(value).success).toBe(false);
+    }
+  });
+
+  it("fits the largest recording with steps into the context byte limit", () => {
+    const worst = context({
+      viewport: { width: Number.MAX_SAFE_INTEGER, height: Number.MAX_SAFE_INTEGER },
+      devicePixelRatio: 16,
+      pageTitle: "t".repeat(CONTEXT_TITLE_MAX),
+      url: `https://example.com/${"a".repeat(CONTEXT_URL_MAX - 20)}`,
+      browser: { name: "n".repeat(CONTEXT_NAME_MAX), version: "v".repeat(CONTEXT_NAME_MAX) },
+      os: { name: "o".repeat(CONTEXT_NAME_MAX), version: "w".repeat(CONTEXT_NAME_MAX) },
+      userAgent: "u".repeat(CONTEXT_USER_AGENT_MAX),
+    });
+    const attached = withRecording(worst, WORST_RECORDING);
+    expect(byteSize(attached)).toBeLessThanOrEqual(CONTEXT_MAX_BYTES);
+    expect(threadContextSchema.safeParse(attached).success).toBe(true);
+  });
+
+  it("keeps the largest recording within the limit next to full console errors", () => {
+    const heavy = Array.from({ length: CONSOLE_ERRORS_MAX }, () =>
+      record({
+        message: "m".repeat(CONSOLE_MESSAGE_MAX),
+        source: "s".repeat(CONSOLE_SOURCE_MAX),
+        stack: "k".repeat(CONSOLE_STACK_MAX),
+      }),
+    );
+    const attached = withRecording(
+      fitThreadContext(context({ consoleErrors: heavy })),
+      WORST_RECORDING,
+    );
+    expect(byteSize(attached)).toBeLessThanOrEqual(CONTEXT_MAX_BYTES);
+    expect(parseThreadContext(attached)?.recording?.steps).toHaveLength(RECORDING_STEPS_MAX);
+  });
+
+  it("keeps a maximal wide-character recording valid next to full console errors", () => {
+    const heavy = Array.from({ length: CONSOLE_ERRORS_MAX }, () =>
+      record({
+        message: "m".repeat(CONSOLE_MESSAGE_MAX),
+        source: "s".repeat(CONSOLE_SOURCE_MAX),
+        stack: "k".repeat(CONSOLE_STACK_MAX),
+      }),
+    );
+    const attached = withRecording(
+      fitThreadContext(context({ consoleErrors: heavy })),
+      WORST_RECORDING,
+    );
+    expect(byteSize(attached)).toBeLessThanOrEqual(CONTEXT_MAX_BYTES);
+    expect(threadContextSchema.safeParse(attached).success).toBe(true);
+  });
+
+  it("drops a recording with steps when fitting the context", () => {
+    const fitted = fitThreadContext(context({ recording: { ...RECORDING, steps: [STEP] } }));
+    expect(fitted).not.toHaveProperty("recording");
+  });
+});
+
+describe("sanitizeStep", () => {
+  it("keeps a step that is already within the limits", () => {
+    expect(sanitizeStep(STEP)).toEqual(STEP);
+    expect(sanitizeStep({ ...STEP, url: "https://example.test/a" })).toEqual({
+      ...STEP,
+      url: "https://example.test/a",
+    });
+  });
+
+  it("truncates the selector, label and url to their limits", () => {
+    const sanitized = sanitizeStep({
+      t: 1,
+      kind: "navigate",
+      selector: "s".repeat(STEP_SELECTOR_MAX + 5),
+      label: "l".repeat(STEP_LABEL_MAX + 5),
+      url: "u".repeat(STEP_URL_MAX + 5),
+    });
+    expect(sanitized.selector).toBe("s".repeat(STEP_SELECTOR_MAX));
+    expect(sanitized.label).toBe("l".repeat(STEP_LABEL_MAX));
+    expect(sanitized.url).toBe("u".repeat(STEP_URL_MAX));
+    expect(recordingStepSchema.safeParse(sanitized).success).toBe(true);
+  });
+
+  it("never splits a surrogate pair when truncating", () => {
+    const sanitized = sanitizeStep({ ...STEP, label: "😀".repeat(STEP_LABEL_MAX) });
+    expect(sanitized.label).toBe("😀".repeat(STEP_LABEL_MAX / 2));
+    expect(recordingStepSchema.safeParse(sanitized).success).toBe(true);
+  });
+
+  it("collapses the whitespace of the label and trims it", () => {
+    expect(sanitizeStep({ ...STEP, label: "  Save \n\t draft  " }).label).toBe("Save draft");
+  });
+
+  it("removes NUL characters and replaces lone surrogates", () => {
+    expect(sanitizeStep({ ...STEP, selector: "a\u0000b\uD800", label: "x\uDC00" })).toMatchObject({
+      selector: "ab�",
+      label: "x�",
+    });
+  });
+
+  it("leaves out an url that was not given", () => {
+    expect(sanitizeStep({ ...STEP, url: undefined })).not.toHaveProperty("url");
   });
 });

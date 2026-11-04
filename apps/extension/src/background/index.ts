@@ -88,7 +88,12 @@ export function startBackground(): void {
         status.blobUrl !== undefined &&
         status.size !== undefined &&
         status.durationMs !== undefined
-        ? { blobUrl: status.blobUrl, durationMs: status.durationMs, size: status.size }
+        ? {
+            blobUrl: status.blobUrl,
+            durationMs: status.durationMs,
+            size: status.size,
+            ...(status.steps === undefined ? {} : { steps: status.steps }),
+          }
         : null;
     },
     fetchBlob: (url) => fetch(url).then((response) => response.blob()),

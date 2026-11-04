@@ -1,5 +1,6 @@
 import { browser } from "wxt/browser";
 
+import { RECORDING_STEPS_MAX, sanitizeStep, type RecordingStep } from "@sitenote/core";
 import { failure, success, type MessageResult } from "@sitenote/widget";
 
 import {
@@ -72,6 +73,7 @@ interface Session {
   stream: MediaStream;
   chunks: Blob[];
   bytes: number;
+  steps: RecordingStep[];
   stopping: boolean;
   discard: boolean;
   reason: StopReason;
@@ -79,6 +81,23 @@ interface Session {
   heartbeatTimer: TimerId;
   settle: () => void;
   done: Promise<void>;
+}
+
+function appendStep(steps: RecordingStep[], step: RecordingStep): void {
+  const sanitized = sanitizeStep(step);
+  const last = steps.at(-1);
+  if (steps.length >= RECORDING_STEPS_MAX) {
+    return;
+  }
+  if (
+    last?.kind === sanitized.kind &&
+    last.selector === sanitized.selector &&
+    last.label === sanitized.label &&
+    last.url === sanitized.url
+  ) {
+    return;
+  }
+  steps.push(sanitized);
 }
 
 function captureConstraints(streamId: string): MediaStreamConstraints {
@@ -119,8 +138,21 @@ export function createOffscreenRecorder(deps: OffscreenRecorderDeps): OffscreenR
     const status = store.query(tabId);
     const { pending } = store.snapshot();
     return status.state === "pending" && pending !== null
-      ? { ...status, blobUrl: pending.blobUrl, size: pending.size }
+      ? {
+          ...status,
+          blobUrl: pending.blobUrl,
+          size: pending.size,
+          ...(pending.steps.length === 0 ? {} : { steps: pending.steps }),
+        }
       : status;
+  }
+
+  function addStep(tabId: number, step: RecordingStep): void {
+    const current = session;
+    if (current?.tabId !== tabId || current.stopping) {
+      return;
+    }
+    appendStep(current.steps, step);
   }
 
   function releasePending(): void {
@@ -163,6 +195,7 @@ export function createOffscreenRecorder(deps: OffscreenRecorderDeps): OffscreenR
         blobUrl,
         durationMs,
         size: blob.size,
+        steps: current.steps,
       });
       if (replaced !== null) {
         deps.revokeObjectURL(replaced.blobUrl);
@@ -256,6 +289,7 @@ export function createOffscreenRecorder(deps: OffscreenRecorderDeps): OffscreenR
         stream,
         chunks: [],
         bytes: 0,
+        steps: [],
         stopping: false,
         discard: false,
         reason: "user",
@@ -302,6 +336,9 @@ export function createOffscreenRecorder(deps: OffscreenRecorderDeps): OffscreenR
         );
       case "offscreen.release":
         releasePending();
+        return Promise.resolve(success(documentStatus()));
+      case "offscreen.step":
+        addStep(command.tabId, command.step);
         return Promise.resolve(success(documentStatus()));
     }
   }

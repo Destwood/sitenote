@@ -11,14 +11,29 @@ export const CONTEXT_USER_AGENT_MAX = 512;
 export const CONTEXT_NAME_MAX = 100;
 export const CONTEXT_MAX_BYTES = 48000;
 export const RECORDING_PATH_MAX = 200;
+export const RECORDING_STEPS_MAX = 40;
+export const STEP_SELECTOR_MAX = 100;
+export const STEP_LABEL_MAX = 40;
+export const STEP_URL_MAX = 100;
 
 const nonNegativeInteger = z.int().check(z.gte(0));
 const shortText = z.string().check(z.maxLength(CONTEXT_NAME_MAX));
+
+export const recordingStepSchema = z.object({
+  t: nonNegativeInteger,
+  kind: z.enum(["click", "input", "submit", "navigate"]),
+  selector: z.string().check(z.maxLength(STEP_SELECTOR_MAX)),
+  label: z.string().check(z.maxLength(STEP_LABEL_MAX)),
+  url: z.optional(z.string().check(z.maxLength(STEP_URL_MAX))),
+});
+
+export type RecordingStep = z.infer<typeof recordingStepSchema>;
 
 export const recordingRefSchema = z.object({
   path: z.string().check(z.maxLength(RECORDING_PATH_MAX)),
   durationMs: nonNegativeInteger,
   size: nonNegativeInteger,
+  steps: z.optional(z.array(recordingStepSchema).check(z.maxLength(RECORDING_STEPS_MAX))),
 });
 
 export type RecordingRef = z.infer<typeof recordingRefSchema>;
@@ -40,11 +55,20 @@ function byteLength(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value)).length;
 }
 
+const WIDEST_CHARACTER = "字";
+const RECORDING_STEP_SAMPLE: RecordingStep = {
+  t: Number.MAX_SAFE_INTEGER,
+  kind: "navigate",
+  selector: WIDEST_CHARACTER.repeat(STEP_SELECTOR_MAX),
+  label: WIDEST_CHARACTER.repeat(STEP_LABEL_MAX),
+  url: WIDEST_CHARACTER.repeat(STEP_URL_MAX),
+};
 const RECORDING_MAX_BYTES = byteLength({
   recording: {
-    path: "x".repeat(RECORDING_PATH_MAX),
+    path: WIDEST_CHARACTER.repeat(RECORDING_PATH_MAX),
     durationMs: Number.MAX_SAFE_INTEGER,
     size: Number.MAX_SAFE_INTEGER,
+    steps: Array.from({ length: RECORDING_STEPS_MAX }, () => RECORDING_STEP_SAMPLE),
   },
 });
 const FITTED_MAX_BYTES = CONTEXT_MAX_BYTES - RECORDING_MAX_BYTES;
@@ -90,6 +114,28 @@ function sanitizeRecord(record: ConsoleErrorRecord): ConsoleErrorRecord {
     ...(column === undefined ? {} : { column }),
     ...(stack === undefined ? {} : { stack: sanitizeText(stack) }),
     at: record.at,
+  };
+}
+
+function truncate(value: string, max: number): string {
+  let kept = "";
+  for (const character of value) {
+    if (kept.length + character.length > max) {
+      break;
+    }
+    kept += character;
+  }
+  return kept;
+}
+
+export function sanitizeStep(step: RecordingStep): RecordingStep {
+  const { url } = step;
+  return {
+    t: step.t,
+    kind: step.kind,
+    selector: truncate(sanitizeText(step.selector), STEP_SELECTOR_MAX),
+    label: truncate(sanitizeText(step.label).replace(/\s+/g, " ").trim(), STEP_LABEL_MAX),
+    ...(url === undefined ? {} : { url: truncate(sanitizeText(url), STEP_URL_MAX) }),
   };
 }
 

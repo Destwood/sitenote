@@ -1,3 +1,5 @@
+import type { RecordingStep } from "@sitenote/core";
+
 import type { RecordingStatus } from "../messages";
 
 export const RECORDING_MAX_MS = 120_000;
@@ -21,6 +23,7 @@ export interface FinishedRecording {
   blobUrl: string;
   durationMs: number;
   size: number;
+  steps: RecordingStep[];
 }
 
 export interface PendingRecording extends FinishedRecording {

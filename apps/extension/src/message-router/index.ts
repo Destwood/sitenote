@@ -54,6 +54,7 @@ const PAGE_SCOPED: ReadonlySet<ExtensionRequest["type"]> = new Set([
   "preferences.set",
   "clickup.status",
   "clickup.createTask",
+  "recording.step",
 ]);
 
 export function senderOriginOf(sender: RouterSender): string | null {
@@ -186,6 +187,13 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
         return recordings.onFinished(request);
       case "recording.heartbeat":
         return success(null);
+      case "recording.step": {
+        const tabId = sender.tab?.id;
+        if (tabId === undefined) {
+          return failure("forbidden_sender");
+        }
+        return recordings.addStep(tabId, request.step);
+      }
       case "screenshot.capture": {
         const tabId = sender.tab?.id;
         const windowId = sender.tab?.windowId;

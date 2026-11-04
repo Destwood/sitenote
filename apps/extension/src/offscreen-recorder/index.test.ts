@@ -1,3 +1,4 @@
+import { RECORDING_STEPS_MAX } from "@sitenote/core";
 import { failure, success } from "@sitenote/widget";
 import { describe, expect, it, vi } from "vitest";
 
@@ -474,5 +475,94 @@ describe("createOffscreenRecorder heartbeat", () => {
     await call({ type: "offscreen.stop", discard: true });
     advance(HEARTBEAT_MS * 2);
     expect(beats()).toHaveLength(2);
+  });
+});
+
+describe("createOffscreenRecorder steps", () => {
+  const CLICK = { t: 10, kind: "click" as const, selector: "#save", label: "Save" };
+
+  it("keeps the steps of the recording tab and hands them over with the pending video", async () => {
+    const { start, call } = setup();
+    await start(4);
+
+    expect(await call({ type: "offscreen.step", tabId: 4, step: CLICK })).toEqual(
+      success({ state: "recording", startedAt: 1_000 }),
+    );
+    await call({ type: "offscreen.stop", discard: false });
+
+    expect(await call({ type: "offscreen.query", tabId: 4 })).toEqual(
+      success({ state: "pending", durationMs: 0, blobUrl: "blob:0", size: 0, steps: [CLICK] }),
+    );
+  });
+
+  it("ignores steps for another tab and while nothing records", async () => {
+    const { start, call } = setup();
+    await call({ type: "offscreen.step", tabId: 4, step: CLICK });
+    await start(4);
+    await call({ type: "offscreen.step", tabId: 5, step: CLICK });
+    await call({ type: "offscreen.stop", discard: false });
+
+    expect(await call({ type: "offscreen.query", tabId: 4 })).toEqual(
+      success({ state: "pending", durationMs: 0, blobUrl: "blob:0", size: 0 }),
+    );
+  });
+
+  it("drops an exact repeat of the previous step and keeps the order", async () => {
+    const { start, call } = setup();
+    await start(4);
+    const cancel = { t: 20, kind: "click" as const, selector: "#cancel", label: "Cancel" };
+    for (const step of [CLICK, { ...CLICK, t: 11 }, cancel, CLICK]) {
+      await call({ type: "offscreen.step", tabId: 4, step });
+    }
+    await call({ type: "offscreen.stop", discard: false });
+
+    expect(await call({ type: "offscreen.query", tabId: 4 })).toEqual(
+      success({
+        state: "pending",
+        durationMs: 0,
+        blobUrl: "blob:0",
+        size: 0,
+        steps: [CLICK, cancel, CLICK],
+      }),
+    );
+  });
+
+  it("cleans the labels it keeps and stops at the step limit", async () => {
+    const { start, call } = setup();
+    await start(4);
+    await call({
+      type: "offscreen.step",
+      tabId: 4,
+      step: { t: 1, kind: "click", selector: "#a", label: "  Save \n it  " },
+    });
+    for (let index = 0; index < RECORDING_STEPS_MAX + 5; index += 1) {
+      await call({
+        type: "offscreen.step",
+        tabId: 4,
+        step: { t: index + 2, kind: "click", selector: "#a", label: `s${String(index)}` },
+      });
+    }
+    await call({ type: "offscreen.stop", discard: false });
+
+    const status = await call({ type: "offscreen.query", tabId: 4 });
+    expect(status?.ok === true && status.data.steps).toHaveLength(RECORDING_STEPS_MAX);
+    expect(status?.ok === true && status.data.steps?.[0]).toEqual({
+      t: 1,
+      kind: "click",
+      selector: "#a",
+      label: "Save it",
+    });
+  });
+
+  it("ignores a step that does not parse", async () => {
+    const { start, call } = setup();
+    await start(4);
+
+    expect(await call({ type: "offscreen.step", tabId: 4, step: { ...CLICK, t: -1 } })).toBeNull();
+    await call({ type: "offscreen.stop", discard: false });
+
+    expect(await call({ type: "offscreen.query", tabId: 4 })).toEqual(
+      success({ state: "pending", durationMs: 0, blobUrl: "blob:0", size: 0 }),
+    );
   });
 });

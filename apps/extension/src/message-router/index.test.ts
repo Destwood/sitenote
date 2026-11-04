@@ -103,6 +103,7 @@ function createFakes() {
     onFinished: vi.fn(() => Promise.resolve(success(null))),
     discard: vi.fn(),
     attach: vi.fn(() => Promise.resolve(null)),
+    addStep: vi.fn(() => Promise.resolve(success(null))),
     onTabRemoved: vi.fn(),
   };
   const preferences = {
@@ -724,6 +725,45 @@ describe("createMessageRouter recordings", () => {
     expect(recordings.status).toHaveBeenCalledTimes(2);
     expect(recordings.status).toHaveBeenNthCalledWith(1, 4);
     expect(recordings.status).toHaveBeenNthCalledWith(2, 4);
+  });
+
+  it("records a step of an enabled page with the tab of the content script", async () => {
+    const { route, recordings } = setup();
+    const STEP = { t: 120, kind: "click", selector: "#buy", label: "Buy" };
+
+    expect(await route({ type: "recording.step", step: STEP }, CONTENT)).toEqual(success(null));
+
+    expect(recordings.addStep).toHaveBeenCalledExactlyOnceWith(4, STEP);
+  });
+
+  it("refuses a step from a popup, from an extension page in a tab and from a disabled page", async () => {
+    const STEP = { t: 120, kind: "click", selector: "#buy", label: "Buy" };
+    const { route, recordings } = setup();
+
+    expect(await route({ type: "recording.step", step: STEP }, POPUP)).toEqual(
+      failure("forbidden_sender"),
+    );
+    expect(await route({ type: "recording.step", step: STEP }, POPUP_TAB)).toEqual(
+      failure("forbidden"),
+    );
+    const disabled = setup({ enabled: false });
+    expect(await disabled.route({ type: "recording.step", step: STEP }, CONTENT)).toEqual(
+      failure("forbidden"),
+    );
+    expect(recordings.addStep).not.toHaveBeenCalled();
+    expect(disabled.recordings.addStep).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed step as an invalid request", async () => {
+    const { route, recordings } = setup();
+
+    expect(
+      await route(
+        { type: "recording.step", step: { t: 1, kind: "scroll", selector: "a", label: "" } },
+        CONTENT,
+      ),
+    ).toEqual(failure("invalid_request"));
+    expect(recordings.addStep).not.toHaveBeenCalled();
   });
 
   it("stops the sender's own tab from a content script and refuses another tab", async () => {

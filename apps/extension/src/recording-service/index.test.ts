@@ -4,7 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 import type { EnabledEntry } from "../enablement-store";
 import type { OffscreenCommand, OffscreenResponse } from "../messages";
 import type { ThreadRecordings } from "../recording-upload";
-import { createRecordingService, type RecordingFinished, type RecordingServiceDeps } from ".";
+import {
+  createNoopRecordingService,
+  createRecordingService,
+  type RecordingFinished,
+  type RecordingServiceDeps,
+} from ".";
 
 const ORIGIN = "https://example.test";
 const ENTRY: EnabledEntry = {
@@ -334,6 +339,50 @@ describe("createRecordingService discard and tab removal", () => {
     await vi.waitFor(() => {
       expect(deps.sendToOffscreen).toHaveBeenCalled();
     });
+  });
+
+  it("forwards a step only while its tab is recording", async () => {
+    const STEP = { t: 120, kind: "click" as const, selector: "#buy", label: "Buy" };
+    const { service, commands } = setup({
+      document: true,
+      reply: (command) =>
+        command.type === "offscreen.query" && command.tabId === 4
+          ? success({ state: "recording", startedAt: 1_000 })
+          : success({ state: "pending", durationMs: 5 }),
+    });
+
+    expect(await service.addStep(4, STEP)).toEqual(success(null));
+    expect(await service.addStep(5, STEP)).toEqual(success(null));
+
+    expect(commands.filter((command) => command.type === "offscreen.step")).toEqual([
+      { type: "offscreen.step", tabId: 4, step: STEP },
+    ]);
+  });
+
+  it("neither creates the document nor forwards a step when nothing records", async () => {
+    const STEP = { t: 120, kind: "click" as const, selector: "#buy", label: "Buy" };
+    const { service, deps, commands } = setup();
+
+    expect(await service.addStep(4, STEP)).toEqual(success(null));
+
+    expect(deps.offscreen.createDocument).not.toHaveBeenCalled();
+    expect(commands).toEqual([]);
+  });
+
+  it("swallows a failed step delivery and still answers success", async () => {
+    const STEP = { t: 120, kind: "click" as const, selector: "#buy", label: "Buy" };
+    const { service, deps } = setup({ document: true });
+    vi.mocked(deps.sendToOffscreen)
+      .mockResolvedValueOnce(success({ state: "recording", startedAt: 1_000 }))
+      .mockRejectedValueOnce(new Error("gone"));
+
+    expect(await service.addStep(4, STEP)).toEqual(success(null));
+  });
+
+  it("does nothing on the noop service", async () => {
+    const STEP = { t: 120, kind: "click" as const, selector: "#buy", label: "Buy" };
+
+    expect(await createNoopRecordingService().addStep(4, STEP)).toEqual(success(null));
   });
 
   it("delegates attach to the recordings without discarding", async () => {

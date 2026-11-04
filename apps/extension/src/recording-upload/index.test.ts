@@ -66,6 +66,24 @@ describe("createRecordingUploader attach", () => {
     });
   });
 
+  it("carries the steps of the pending video into its reference", async () => {
+    const STEP = { t: 300, kind: "submit" as const, selector: "form", label: "Pay" };
+    const { uploader } = setup({ pending: { ...PENDING, steps: [STEP] } });
+
+    expect(await uploader.attach(TAB_ID, WORKSPACE_ID, THREAD_ID)).toEqual({
+      path: PATH,
+      durationMs: 5000,
+      size: 9,
+      steps: [STEP],
+    });
+  });
+
+  it("leaves the steps out of the reference when there are none", async () => {
+    const { uploader } = setup({ pending: { ...PENDING, steps: [] } });
+
+    expect(await uploader.attach(TAB_ID, WORKSPACE_ID, THREAD_ID)).not.toHaveProperty("steps");
+  });
+
   it("answers null without fetching or uploading when nothing is pending", async () => {
     const { uploader, deps, upload } = setup({ pending: null });
 
