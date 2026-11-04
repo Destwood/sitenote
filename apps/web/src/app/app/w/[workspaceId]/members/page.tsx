@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
 import { MemberList } from "../../../../../member-list";
+import { PageHeader } from "../../../../../page-header";
 import { createSupabaseServerClient, getAuthenticatedUser } from "../../../../../supabase-server";
 import { parseUuid } from "../../../../../uuid";
 import { readWorkspaceAccess } from "../../../../../workspace-access";
@@ -39,14 +40,14 @@ export default async function MembersPage({ params }: MembersPageProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight">Members</h1>
-        <p className="text-neutral-600">
-          {access.role === "owner"
+      <PageHeader
+        title="Members"
+        description={
+          access.role === "owner"
             ? "Change roles, remove members or leave the workspace."
-            : "Everyone in this workspace. You can leave it at any time."}
-        </p>
-      </header>
+            : "Everyone in this workspace. You can leave it at any time."
+        }
+      />
       <MemberList
         workspaceId={workspaceId}
         members={members}

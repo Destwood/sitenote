@@ -1,33 +1,64 @@
 import Link from "next/link";
 
-import { LINK_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
+import { Avatar } from "../avatar";
+import { BrandLink } from "../brand-mark";
+import { DASH_BUTTON_SECONDARY_CLASS, DASH_LINK_CLASS } from "../dashboard-classes";
 
 interface AppHeaderProps {
   displayName: string;
   canConnectExtension: boolean;
 }
 
+interface AccountActionsProps {
+  canConnectExtension: boolean;
+}
+
+function AccountActions({ canConnectExtension }: AccountActionsProps) {
+  return (
+    <>
+      {canConnectExtension ? (
+        <Link href="/extension/connect" className={DASH_LINK_CLASS}>
+          Connect the extension
+        </Link>
+      ) : null}
+      <form method="post" action="/auth/sign-out">
+        <button type="submit" className={DASH_BUTTON_SECONDARY_CLASS}>
+          Sign out
+        </button>
+      </form>
+    </>
+  );
+}
+
 export function AppHeader({ displayName, canConnectExtension }: AppHeaderProps) {
   return (
-    <header className="flex items-center justify-between gap-4 border-b border-neutral-200 pb-4">
-      <Link href="/" className="text-lg font-bold tracking-tight">
-        Sitenote
-      </Link>
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-neutral-700" data-testid="display-name">
+    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 bg-white px-4 py-3 sm:px-6">
+      <BrandLink />
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-sm font-medium text-neutral-700" data-testid="display-name">
           {displayName}
         </span>
-        {canConnectExtension ? (
-          <Link href="/extension/connect" className={LINK_BUTTON_CLASS}>
-            Connect the extension
-          </Link>
-        ) : null}
-        <form method="post" action="/auth/sign-out">
-          <button type="submit" className={SECONDARY_BUTTON_CLASS}>
-            Sign out
-          </button>
-        </form>
+        <AccountActions canConnectExtension={canConnectExtension} />
       </div>
     </header>
+  );
+}
+
+export function AppAccount({ displayName, canConnectExtension }: AppHeaderProps) {
+  return (
+    <div className="flex flex-col gap-3 border-t border-neutral-200 pt-4">
+      <div className="flex min-w-0 items-center gap-3">
+        <Avatar name={displayName} />
+        <span
+          className="min-w-0 truncate text-sm font-medium text-neutral-900"
+          data-testid="display-name"
+        >
+          {displayName}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <AccountActions canConnectExtension={canConnectExtension} />
+      </div>
+    </div>
   );
 }

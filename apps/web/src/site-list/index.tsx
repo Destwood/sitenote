@@ -1,4 +1,5 @@
 import { ConfirmActionForm } from "../confirm-action-form";
+import { DASH_CARD_CLASS, DASH_EMPTY_CLASS } from "../dashboard-classes";
 import { removeSite } from "../site-actions";
 
 export interface SiteListItem {
@@ -14,6 +15,11 @@ export function removeSiteMessage(origin: string): string {
   return `Remove ${origin}? Its threads and comments are deleted for good.`;
 }
 
+export function siteLetter(origin: string): string {
+  const host = origin.replace(/^[a-z]+:\/\//i, "");
+  return host.charAt(0).toUpperCase() || "?";
+}
+
 interface SiteListProps {
   workspaceId: string;
   sites: readonly SiteListItem[];
@@ -22,25 +28,29 @@ interface SiteListProps {
 
 export function SiteList({ workspaceId, sites, canManage }: SiteListProps) {
   if (sites.length === 0) {
-    return (
-      <p className="rounded-md border border-dashed border-neutral-300 px-4 py-6 text-center text-neutral-600">
-        {NO_SITES_TEXT}
-      </p>
-    );
+    return <p className={DASH_EMPTY_CLASS}>{NO_SITES_TEXT}</p>;
   }
 
   return (
-    <ul className="flex flex-col divide-y divide-neutral-200 rounded-md border border-neutral-200">
+    <ul className={`${DASH_CARD_CLASS} divide-y divide-neutral-200`}>
       {sites.map((site) => (
         <li
           key={site.id}
           className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
         >
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="font-medium break-all">{site.origin}</span>
-            <span className="text-sm text-neutral-600">
-              {site.threadCount === 1 ? "1 thread" : `${String(site.threadCount)} threads`}
+          <div className="flex min-w-0 items-center gap-3">
+            <span
+              aria-hidden
+              className="flex size-8 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-neutral-50 text-sm font-semibold text-neutral-700"
+            >
+              {siteLetter(site.origin)}
             </span>
+            <div className="flex min-w-0 flex-col">
+              <span className="text-sm font-medium break-all text-neutral-900">{site.origin}</span>
+              <span className="text-xs text-neutral-500">
+                {site.threadCount === 1 ? "1 thread" : `${String(site.threadCount)} threads`}
+              </span>
+            </div>
           </div>
           {canManage ? (
             <ConfirmActionForm

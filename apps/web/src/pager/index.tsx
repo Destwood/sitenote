@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { LINK_BUTTON_CLASS } from "../form-controls";
+import { DASH_BUTTON_SECONDARY_CLASS } from "../dashboard-classes";
 
 interface PagerProps {
   page: number;
@@ -15,21 +15,24 @@ export function Pager({ page, pages, previousHref, nextHref }: PagerProps) {
   }
 
   return (
-    <nav aria-label="Pagination" className="flex items-center justify-between gap-3 text-sm">
+    <nav
+      aria-label="Pagination"
+      className="flex items-center justify-between gap-3 border-t border-neutral-200 px-4 py-3 text-sm"
+    >
       {previousHref === null ? (
-        <span className="text-neutral-400">Previous</span>
+        <span className={`${DASH_BUTTON_SECONDARY_CLASS} opacity-50`}>Previous</span>
       ) : (
-        <Link href={previousHref} className={LINK_BUTTON_CLASS}>
+        <Link href={previousHref} className={DASH_BUTTON_SECONDARY_CLASS}>
           Previous
         </Link>
       )}
-      <span className="text-neutral-700">
+      <span className="text-neutral-600">
         Page {page} of {pages}
       </span>
       {nextHref === null ? (
-        <span className="text-neutral-400">Next</span>
+        <span className={`${DASH_BUTTON_SECONDARY_CLASS} opacity-50`}>Next</span>
       ) : (
-        <Link href={nextHref} className={LINK_BUTTON_CLASS}>
+        <Link href={nextHref} className={DASH_BUTTON_SECONDARY_CLASS}>
           Next
         </Link>
       )}

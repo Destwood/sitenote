@@ -10,12 +10,12 @@ import {
 import { describeOAuthError, describeSendCodeError, type AuthFailure } from "../auth-error";
 import { getPublicEnv } from "../env";
 import {
-  ERROR_CLASS,
-  INPUT_CLASS,
-  LINK_BUTTON_CLASS,
-  PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
-} from "../form-controls";
+  PUBLIC_ERROR_CLASS,
+  PUBLIC_INPUT_CLASS,
+  PUBLIC_LINK_BUTTON_CLASS,
+  PUBLIC_PRIMARY_BUTTON_CLASS,
+  PUBLIC_SECONDARY_BUTTON_CLASS,
+} from "../public-styles";
 import { getSupabaseBrowserClient } from "../supabase-browser";
 
 const subscribeToNothing = () => () => undefined;
@@ -132,7 +132,7 @@ export function SignInForm({ next, googleEnabled, initialError }: SignInFormProp
 
   const errorMessage =
     error === null ? null : (
-      <p id="sign-in-error" role="alert" className={ERROR_CLASS}>
+      <p id="sign-in-error" role="alert" className={PUBLIC_ERROR_CLASS}>
         {error}
       </p>
     );
@@ -158,11 +158,15 @@ export function SignInForm({ next, googleEnabled, initialError }: SignInFormProp
                 setEmail(event.target.value);
               }}
               aria-describedby={describedBy}
-              className={INPUT_CLASS}
+              className={PUBLIC_INPUT_CLASS}
             />
           </div>
           {errorMessage}
-          <button type="submit" disabled={busy || !hydrated} className={PRIMARY_BUTTON_CLASS}>
+          <button
+            type="submit"
+            disabled={busy || !hydrated}
+            className={`${PUBLIC_PRIMARY_BUTTON_CLASS} w-full`}
+          >
             {busy ? "Sending link..." : "Email me a sign-in link"}
           </button>
         </form>
@@ -178,11 +182,11 @@ export function SignInForm({ next, googleEnabled, initialError }: SignInFormProp
               type="button"
               onClick={() => void handleResend()}
               disabled={busy || secondsLeft > 0}
-              className={LINK_BUTTON_CLASS}
+              className={PUBLIC_LINK_BUTTON_CLASS}
             >
               {secondsLeft > 0 ? `Resend link in ${String(secondsLeft)}s` : "Resend link"}
             </button>
-            <button type="button" onClick={handleChangeEmail} className={LINK_BUTTON_CLASS}>
+            <button type="button" onClick={handleChangeEmail} className={PUBLIC_LINK_BUTTON_CLASS}>
               Use a different email
             </button>
           </div>
@@ -190,12 +194,16 @@ export function SignInForm({ next, googleEnabled, initialError }: SignInFormProp
       )}
       {googleEnabled && step === "email" ? (
         <div className="flex flex-col gap-3">
-          <p className="text-center text-xs tracking-wide text-neutral-500 uppercase">or</p>
+          <div className="flex items-center gap-3 text-xs tracking-wide text-neutral-500 uppercase">
+            <span aria-hidden="true" className="h-px flex-1 bg-neutral-200" />
+            <p>or</p>
+            <span aria-hidden="true" className="h-px flex-1 bg-neutral-200" />
+          </div>
           <button
             type="button"
             onClick={() => void handleGoogle()}
             disabled={busy || !hydrated}
-            className={SECONDARY_BUTTON_CLASS}
+            className={`${PUBLIC_SECONDARY_BUTTON_CLASS} w-full`}
           >
             Continue with Google
           </button>

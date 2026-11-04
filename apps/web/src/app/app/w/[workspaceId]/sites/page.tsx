@@ -5,6 +5,7 @@ import { createSupabaseServerClient, getAuthenticatedUser } from "../../../../..
 import { parseUuid } from "../../../../../uuid";
 import { readWorkspaceAccess } from "../../../../../workspace-access";
 import { workspacePath } from "../../../../../workspace-paths";
+import { PageHeader } from "../../../../../page-header";
 import { SiteList } from "../../../../../site-list";
 
 export const metadata: Metadata = {
@@ -45,12 +46,10 @@ export default async function SitesPage({ params }: SitesPageProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight">Sites</h1>
-        <p className="text-neutral-600">
-          Every origin where your team has left comments. Removing a site also deletes its threads.
-        </p>
-      </header>
+      <PageHeader
+        title="Sites"
+        description="Every origin where your team has left comments. Removing a site also deletes its threads."
+      />
       <SiteList
         workspaceId={workspaceId}
         sites={sites.data.map((site) => ({

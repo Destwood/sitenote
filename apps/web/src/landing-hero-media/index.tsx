@@ -32,7 +32,7 @@ export function LandingHeroMedia({ media }: LandingHeroMediaProps) {
   const playing = video !== null && (playRequested || !reducedMotion);
 
   return (
-    <div className="relative aspect-video overflow-hidden rounded-xl border border-neutral-200 bg-neutral-100">
+    <div className="relative aspect-video overflow-hidden bg-neutral-100">
       {video !== null && playing ? (
         <video
           src={video}

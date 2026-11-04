@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { AppHeader } from "../../../../app-header";
+import { AppAccount } from "../../../../app-header";
+import { BrandLink } from "../../../../brand-mark";
 import { createSupabaseServerClient, getAuthenticatedUser } from "../../../../supabase-server";
 import { parseUuid } from "../../../../uuid";
 import { readMemberships } from "../../../../workspace-access";
@@ -39,15 +40,18 @@ export default async function WorkspaceLayout({ children, params }: WorkspaceLay
   const displayName = profile.data?.display_name ?? user.email ?? "Account";
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-6 py-8">
-      <AppHeader displayName={displayName} canConnectExtension={!user.isAnonymous} />
-      <div className="flex flex-col gap-6 md:flex-row md:items-start md:gap-8">
-        <aside className="flex flex-col gap-4 md:w-52 md:shrink-0">
-          <WorkspaceSwitcher currentId={workspaceId} workspaces={memberships} />
-          <WorkspaceNav workspaceId={workspaceId} role={current.role} />
-        </aside>
-        <main className="min-w-0 flex-1">{children}</main>
-      </div>
+    <div className="min-h-screen bg-neutral-50 md:flex">
+      <aside className="flex flex-col gap-4 border-b border-neutral-200 bg-white px-4 py-3 md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:gap-5 md:overflow-y-auto md:border-r md:border-b-0 md:px-4 md:py-5">
+        <BrandLink />
+        <WorkspaceSwitcher currentId={workspaceId} workspaces={memberships} />
+        <WorkspaceNav workspaceId={workspaceId} role={current.role} />
+        <div className="mt-auto">
+          <AppAccount displayName={displayName} canConnectExtension={!user.isAnonymous} />
+        </div>
+      </aside>
+      <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 md:py-8">
+        <div className="mx-auto flex max-w-5xl flex-col gap-6">{children}</div>
+      </main>
     </div>
   );
 }

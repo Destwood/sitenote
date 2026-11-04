@@ -22,8 +22,8 @@ export function ThreadFacts({
   const pageHref = safeExternalHref(pageUrl);
 
   return (
-    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm text-neutral-800">
-      <dt className="font-medium text-neutral-700">Page</dt>
+    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm text-neutral-900">
+      <dt className="text-neutral-500">Page</dt>
       <dd className="break-all">
         {pageHref === null ? (
           pageUrl
@@ -38,15 +38,15 @@ export function ThreadFacts({
           </a>
         )}
       </dd>
-      <dt className="font-medium text-neutral-700">Status</dt>
+      <dt className="text-neutral-500">Status</dt>
       <dd>{THREAD_STATUS_LABELS[status]}</dd>
-      <dt className="font-medium text-neutral-700">Started</dt>
+      <dt className="text-neutral-500">Started</dt>
       <dd>
         {authorName}, <time dateTime={createdAt}>{formatUtcDateTime(createdAt)}</time>
       </dd>
       {resolvedAt === null ? null : (
         <>
-          <dt className="font-medium text-neutral-700">Resolved</dt>
+          <dt className="text-neutral-500">Resolved</dt>
           <dd>
             <time dateTime={resolvedAt}>{formatUtcDateTime(resolvedAt)}</time>
           </dd>

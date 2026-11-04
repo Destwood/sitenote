@@ -1,5 +1,11 @@
+import {
+  DASH_BUTTON_PRIMARY_CLASS,
+  DASH_CARD_CLASS,
+  DASH_INPUT_CLASS,
+  DASH_LABEL_CLASS,
+} from "../dashboard-classes";
+import { DashSelect } from "../dash-select";
 import type { WorkspaceMember } from "../workspace-members";
-import { INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "../form-controls";
 import { workspacePath } from "../workspace-paths";
 import type { ThreadFilters, ThreadStatusFilter } from "../thread-filters";
 
@@ -14,7 +20,7 @@ const STATUS_OPTIONS: readonly { value: ThreadStatusFilter; label: string }[] = 
   { value: "all", label: "All" },
 ];
 
-const LABEL_CLASS = "flex flex-col gap-1.5 text-sm font-medium text-neutral-700";
+const LABEL_TEXT_CLASS = "text-xs font-medium text-neutral-500";
 
 interface ThreadFilterFormProps {
   workspaceId: string;
@@ -29,65 +35,63 @@ export function ThreadFilterForm({ workspaceId, filters, sites, members }: Threa
       method="get"
       action={workspacePath(workspaceId, "threads")}
       aria-label="Filter threads"
-      className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6"
+      className={`${DASH_CARD_CLASS} grid items-end gap-3 p-4 sm:grid-cols-2 xl:grid-cols-[repeat(5,minmax(0,1fr))_auto]`}
     >
-      <label className={LABEL_CLASS}>
-        Site
-        <select name="site" defaultValue={filters.site ?? ""} className={INPUT_CLASS}>
+      <label className={DASH_LABEL_CLASS}>
+        <span className={LABEL_TEXT_CLASS}>Site</span>
+        <DashSelect name="site" defaultValue={filters.site ?? ""}>
           <option value="">All sites</option>
           {sites.map((site) => (
             <option key={site.id} value={site.id}>
               {site.origin}
             </option>
           ))}
-        </select>
+        </DashSelect>
       </label>
-      <label className={LABEL_CLASS}>
-        Page path contains
+      <label className={DASH_LABEL_CLASS}>
+        <span className={LABEL_TEXT_CLASS}>Page path contains</span>
         <input
           type="text"
           name="page"
           defaultValue={filters.page}
           autoComplete="off"
-          className={INPUT_CLASS}
+          className={DASH_INPUT_CLASS}
         />
       </label>
-      <label className={LABEL_CLASS}>
-        Status
-        <select name="status" defaultValue={filters.status} className={INPUT_CLASS}>
+      <label className={DASH_LABEL_CLASS}>
+        <span className={LABEL_TEXT_CLASS}>Status</span>
+        <DashSelect name="status" defaultValue={filters.status}>
           {STATUS_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
-        </select>
+        </DashSelect>
       </label>
-      <label className={LABEL_CLASS}>
-        Author
-        <select name="author" defaultValue={filters.author ?? ""} className={INPUT_CLASS}>
+      <label className={DASH_LABEL_CLASS}>
+        <span className={LABEL_TEXT_CLASS}>Author</span>
+        <DashSelect name="author" defaultValue={filters.author ?? ""}>
           <option value="">All authors</option>
           {members.map((member) => (
             <option key={member.userId} value={member.userId}>
               {member.displayName}
             </option>
           ))}
-        </select>
+        </DashSelect>
       </label>
-      <label className={`${LABEL_CLASS} sm:col-span-2`}>
-        Search comments
+      <label className={DASH_LABEL_CLASS}>
+        <span className={LABEL_TEXT_CLASS}>Search comments</span>
         <input
           type="text"
           name="q"
           defaultValue={filters.query}
           autoComplete="off"
-          className={INPUT_CLASS}
+          className={DASH_INPUT_CLASS}
         />
       </label>
-      <div className="flex items-end">
-        <button type="submit" className={PRIMARY_BUTTON_CLASS}>
-          Apply filters
-        </button>
-      </div>
+      <button type="submit" className={`${DASH_BUTTON_PRIMARY_CLASS} w-full xl:w-auto`}>
+        Apply filters
+      </button>
     </form>
   );
 }

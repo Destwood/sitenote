@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 
 import { AppHeader } from "../../app-header";
 import { CreateWorkspaceForm } from "../../create-workspace-form";
-import { ERROR_CLASS } from "../../form-controls";
+import { DASH_ERROR_CLASS } from "../../dashboard-classes";
 import { createSupabaseServerClient, getAuthenticatedUser } from "../../supabase-server";
 import { readMemberships } from "../../workspace-access";
 import { WorkspaceList } from "../../workspace-list";
@@ -26,15 +26,18 @@ export default async function AppPage() {
   const displayName = profile.data?.display_name ?? user.email ?? "Account";
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-8 px-6 py-8">
+    <div className="min-h-screen bg-neutral-50">
       <AppHeader displayName={displayName} canConnectExtension={!user.isAnonymous} />
-      <main className="flex flex-col gap-8">
+      <main className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-8 sm:px-6">
         <section aria-labelledby="workspaces-heading" className="flex flex-col gap-4">
-          <h1 id="workspaces-heading" className="text-2xl font-bold tracking-tight">
+          <h1
+            id="workspaces-heading"
+            className="text-2xl font-semibold tracking-tight text-neutral-900"
+          >
             Your workspaces
           </h1>
           {workspaces === null ? (
-            <p role="alert" className={ERROR_CLASS}>
+            <p role="alert" className={DASH_ERROR_CLASS}>
               We could not load your workspaces. Reload the page to try again.
             </p>
           ) : (
@@ -42,7 +45,7 @@ export default async function AppPage() {
           )}
         </section>
         {user.isAnonymous ? (
-          <p className="rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3 text-neutral-700">
+          <p className="rounded-lg border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700">
             Guests cannot create workspaces. Sign in with your email to create your own.
           </p>
         ) : (
