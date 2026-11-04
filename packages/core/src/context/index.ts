@@ -128,14 +128,35 @@ function truncate(value: string, max: number): string {
   return kept;
 }
 
+const WHITESPACE_RUN = /\s+/g;
+
+function isControlUnit(unit: string): boolean {
+  const code = unit.charCodeAt(0);
+  return code <= 0x1f || (code >= 0x7f && code <= 0x9f);
+}
+
+function stripControls(value: string): string {
+  return sanitizeText(value)
+    .split("")
+    .filter((unit) => !isControlUnit(unit))
+    .join("");
+}
+
+function collapseWhitespace(value: string): string {
+  return value.replace(WHITESPACE_RUN, " ").trim();
+}
+
 export function sanitizeStep(step: RecordingStep): RecordingStep {
   const { url } = step;
   return {
     t: step.t,
     kind: step.kind,
-    selector: truncate(sanitizeText(step.selector), STEP_SELECTOR_MAX),
-    label: truncate(sanitizeText(step.label).replace(/\s+/g, " ").trim(), STEP_LABEL_MAX),
-    ...(url === undefined ? {} : { url: truncate(sanitizeText(url), STEP_URL_MAX) }),
+    selector: truncate(stripControls(step.selector), STEP_SELECTOR_MAX),
+    label: truncate(
+      collapseWhitespace(stripControls(collapseWhitespace(step.label))),
+      STEP_LABEL_MAX,
+    ),
+    ...(url === undefined ? {} : { url: truncate(stripControls(url), STEP_URL_MAX) }),
   };
 }
 

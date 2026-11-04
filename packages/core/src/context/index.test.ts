@@ -471,4 +471,26 @@ describe("sanitizeStep", () => {
   it("leaves out an url that was not given", () => {
     expect(sanitizeStep({ ...STEP, url: undefined })).not.toHaveProperty("url");
   });
+
+  it("strips every control character from the selector and the url", () => {
+    const control = "a\u0001\u001f\u007f\u0080\u009fb";
+    expect(sanitizeStep({ ...STEP, selector: control, url: `/x${control}` })).toMatchObject({
+      selector: "ab",
+      url: "/xab",
+    });
+  });
+
+  it("turns line breaks in the label into spaces and strips the other control characters", () => {
+    expect(sanitizeStep({ ...STEP, label: "Save\nthe\r\ndraft" }).label).toBe("Save the draft");
+    expect(sanitizeStep({ ...STEP, label: "Sa\u0001ve\u0085 now" }).label).toBe("Save now");
+    expect(sanitizeStep({ ...STEP, label: "a \u0007 b" }).label).toBe("a b");
+  });
+
+  it("strips control characters before truncating so the byte budget holds", () => {
+    const sanitized = sanitizeStep({ ...STEP, label: "\u0001".repeat(STEP_LABEL_MAX) + "x" });
+    expect(sanitized.label).toBe("x");
+    expect(sanitizeStep({ ...STEP, selector: "\u0001s".repeat(STEP_SELECTOR_MAX) }).selector).toBe(
+      "s".repeat(STEP_SELECTOR_MAX),
+    );
+  });
 });

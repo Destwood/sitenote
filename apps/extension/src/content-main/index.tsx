@@ -19,6 +19,7 @@ import { createToggleListener, restoreRecording } from "../comment-mode";
 import { createExtensionBackend } from "../extension-backend";
 import { sendMessage } from "../message-client";
 import { createRecordingPill } from "../recording-pill";
+import { createStepRecorder } from "../step-recorder";
 
 export async function startContentScript(ctx: ContentScriptContext, css: string): Promise<void> {
   let ui: ShadowRootContentScriptUi<() => void> | null = null;
@@ -27,6 +28,14 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
   const widget = createWidget({ backend: createExtensionBackend(), document, window });
   const recordingPill = createRecordingPill(ctx, css, () => {
     void sendMessage({ type: "recording.stop" });
+  });
+  const stepRecorder = createStepRecorder({
+    doc: document,
+    win: window,
+    now: () => Date.now(),
+    send: (step) => {
+      void sendMessage({ type: "recording.step", step }).catch(() => undefined);
+    },
   });
 
   function syncHost(state: ContentState): void {
@@ -131,6 +140,7 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
           ? success(null)
           : failure("page_unavailable"),
     },
+    steps: stepRecorder,
   });
   browser.runtime.onMessage.addListener(toggleListener);
   ctx.onInvalidated(() => {
@@ -138,10 +148,17 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
     widget.stop();
     unmountUi();
     recordingPill.hide();
+    stepRecorder.stop();
   });
 
   await widget.start();
   if (widget.store.getState().status === "ready") {
-    await restoreRecording(() => sendMessage({ type: "recording.status" }), recordingPill.show);
+    await restoreRecording(() => sendMessage({ type: "recording.status" }), {
+      show: recordingPill.show,
+      startSteps: (startedAt, options) => {
+        stepRecorder.start(startedAt, options);
+      },
+      now: () => Date.now(),
+    });
   }
 }
