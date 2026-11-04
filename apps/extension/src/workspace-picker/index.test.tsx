@@ -29,27 +29,36 @@ function renderPicker(overrides: Partial<Parameters<typeof WorkspacePicker>[0]> 
 }
 
 function trigger() {
-  return screen.getByRole("button", { name: /Workspace/ });
+  return screen.getByRole("button", { name: "Workspace" });
 }
 
 describe("WorkspacePicker", () => {
-  it("shows the selected workspace on a closed trigger with listbox aria attributes", () => {
+  it("shows only the selected workspace name on a closed trigger with listbox aria attributes", () => {
     renderPicker();
 
     const button = trigger();
     expect(button.textContent).toContain("Northwind");
+    expect(button.textContent).not.toContain("Workspace");
     expect(button.getAttribute("aria-haspopup")).toBe("listbox");
     expect(button.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 
-  it("opens inline and lists every workspace with the selected one marked", async () => {
+  it("renders a workspace name with markup as text and never as markup", () => {
+    renderPicker({ options: [{ id: "w-1", name: "<img src=x onerror=alert(1)>" }] });
+
+    expect(document.querySelector("img")).toBeNull();
+    expect(trigger().textContent).toContain("<img src=x onerror=alert(1)>");
+  });
+
+  it("opens upward over the footer and lists every workspace with the selected one marked", async () => {
     const user = userEvent.setup();
     renderPicker();
 
     await user.click(trigger());
 
     expect(trigger().getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("listbox", { name: "Workspace" }).className).toContain("bottom-full");
     expect(screen.getByRole("listbox", { name: "Workspace" })).toBeTruthy();
     expect(screen.getAllByRole("option")).toHaveLength(3);
     expect(screen.getByRole("option", { name: "Northwind" }).getAttribute("aria-selected")).toBe(
