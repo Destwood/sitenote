@@ -240,6 +240,35 @@ describe("SitePanel when the site is not enabled", () => {
     expect(screen.queryByRole("button", { name: "Enable on this site" })).toBeNull();
   });
 
+  it("opens the dashboard of the workspace selected for the site from the menu", async () => {
+    const user = userEvent.setup();
+    notEnabled();
+    renderPanel();
+    await vi.waitFor(() => {
+      expect(lastControl().options).toHaveLength(2);
+    });
+    chooseWorkspace(AGENCY.id);
+
+    await openMenu(user);
+
+    expect(screen.getByRole("link", { name: "Open dashboard" }).getAttribute("href")).toBe(
+      `https://web.test/app/w/${AGENCY.id}`,
+    );
+  });
+
+  it("opens the plain web app from the menu when the user has no workspace", async () => {
+    const user = userEvent.setup();
+    notEnabled([]);
+    renderPanel();
+    await screen.findByRole("link", { name: "Create one on the web" });
+
+    await openMenu(user);
+
+    expect(screen.getByRole("link", { name: "Open dashboard" }).getAttribute("href")).toBe(
+      "https://web.test/app",
+    );
+  });
+
   it("hands the enable to the background and waits until the site is enabled", async () => {
     const user = userEvent.setup();
     let polls = 0;
@@ -495,6 +524,18 @@ describe("SitePanel when the site is enabled", () => {
     await user.click(screen.getByRole("button", { name: "Allowed sites" }));
 
     expect(mocks.onManageSites).toHaveBeenCalledOnce();
+  });
+
+  it("opens the dashboard of the enabled workspace from the menu", async () => {
+    const user = userEvent.setup();
+    enabled([NORTHWIND, AGENCY]);
+    renderPanel();
+
+    await openMenu(user);
+
+    expect(screen.getByRole("link", { name: "Open dashboard" }).getAttribute("href")).toBe(
+      `https://web.test/app/w/${NORTHWIND.id}`,
+    );
   });
 
   it("toggles comment mode in the tab and reports the new state", async () => {

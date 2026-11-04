@@ -6,11 +6,11 @@ import { SiteMenu } from ".";
 
 vi.mock("../selection-placement-control", () => ({ SelectionPlacementControl: () => null }));
 
-const WEB_URL = "https://web.test";
+const DASHBOARD_URL = "https://web.test/app/w/10000000-0000-4000-8000-000000000001";
 
 function renderMenu(overrides: Partial<Parameters<typeof SiteMenu>[0]> = {}) {
   const props = {
-    webUrl: WEB_URL,
+    dashboardUrl: DASHBOARD_URL,
     captureErrors: true,
     busy: false,
     onToggleCapture: vi.fn(),
@@ -136,13 +136,13 @@ describe("SiteMenu", () => {
     expect(screen.queryByRole("group", { name: "More options" })).toBeNull();
   });
 
-  it("links to the dashboard in a new tab", async () => {
+  it("links to the given dashboard URL in a new tab", async () => {
     const user = userEvent.setup();
     renderMenu();
     await user.click(trigger());
 
     const link = screen.getByRole("link", { name: "Open dashboard" });
-    expect(link.getAttribute("href")).toBe("https://web.test/app");
+    expect(link.getAttribute("href")).toBe(DASHBOARD_URL);
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toContain("noreferrer");
   });
