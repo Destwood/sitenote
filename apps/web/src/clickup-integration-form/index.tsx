@@ -12,11 +12,14 @@ import {
   type ClickUpItem,
 } from "../clickup-api";
 import {
-  ERROR_CLASS,
-  INPUT_CLASS,
-  PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
-} from "../form-controls";
+  DASH_BUTTON_DANGER_CLASS,
+  DASH_BUTTON_PRIMARY_CLASS,
+  DASH_BUTTON_SECONDARY_CLASS,
+  DASH_ERROR_CLASS,
+  DASH_INPUT_CLASS,
+  DASH_LABEL_CLASS,
+} from "../dashboard-classes";
+import { DashSelect } from "../dash-select";
 import { getSupabaseBrowserClient } from "../supabase-browser";
 
 const DISCONNECT_CONFIRMATION = "Disconnect ClickUp? Tasks already created stay in ClickUp.";
@@ -170,7 +173,7 @@ export function ClickUpIntegrationForm({ workspaceId, connection }: ClickUpInteg
     <div className="flex flex-col gap-6">
       {connection === null ? null : (
         <section aria-labelledby={`${ids.token}-status`} className="flex flex-col gap-3">
-          <h2 id={`${ids.token}-status`} className="text-lg font-semibold">
+          <h2 id={`${ids.token}-status`} className="text-base font-semibold text-neutral-900">
             Connected
           </h2>
           <p className="text-neutral-700">
@@ -181,7 +184,7 @@ export function ClickUpIntegrationForm({ workspaceId, connection }: ClickUpInteg
               type="button"
               onClick={disconnect}
               disabled={pending}
-              className={SECONDARY_BUTTON_CLASS}
+              className={DASH_BUTTON_DANGER_CLASS}
             >
               Disconnect
             </button>
@@ -190,13 +193,10 @@ export function ClickUpIntegrationForm({ workspaceId, connection }: ClickUpInteg
       )}
 
       <form onSubmit={loadTeams} className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">
+        <h2 className="text-base font-semibold text-neutral-900">
           {connection === null ? "Connect ClickUp" : "Change the list"}
         </h2>
-        <label
-          htmlFor={ids.token}
-          className="flex flex-col gap-1 text-sm font-medium text-neutral-800"
-        >
+        <label htmlFor={ids.token} className={DASH_LABEL_CLASS}>
           {connection === null ? "Personal token" : "Replace the personal token (optional)"}
           <input
             id={ids.token}
@@ -207,41 +207,34 @@ export function ClickUpIntegrationForm({ workspaceId, connection }: ClickUpInteg
             onChange={(event) => {
               setToken(event.target.value);
             }}
-            className={INPUT_CLASS}
+            className={DASH_INPUT_CLASS}
           />
         </label>
-        <button type="submit" disabled={pending} className={`${SECONDARY_BUTTON_CLASS} w-fit`}>
+        <button type="submit" disabled={pending} className={`${DASH_BUTTON_SECONDARY_CLASS} w-fit`}>
           Load teams
         </button>
       </form>
 
       {teams === null ? null : (
-        <div className="flex flex-col gap-4">
-          <label
-            htmlFor={ids.team}
-            className="flex flex-col gap-1 text-sm font-medium text-neutral-800"
-          >
+        <div className="grid gap-4 sm:grid-cols-3">
+          <label htmlFor={ids.team} className={DASH_LABEL_CLASS}>
             Team
-            <select id={ids.team} value={teamId} onChange={chooseTeam} className={INPUT_CLASS}>
+            <DashSelect id={ids.team} value={teamId} onChange={chooseTeam}>
               <option value="">Choose a team</option>
               {teams.map((team) => (
                 <option key={team.id} value={team.id}>
                   {team.name}
                 </option>
               ))}
-            </select>
+            </DashSelect>
           </label>
-          <label
-            htmlFor={ids.space}
-            className="flex flex-col gap-1 text-sm font-medium text-neutral-800"
-          >
+          <label htmlFor={ids.space} className={DASH_LABEL_CLASS}>
             Space
-            <select
+            <DashSelect
               id={ids.space}
               value={spaceId}
               onChange={chooseSpace}
               disabled={spaces.length === 0}
-              className={INPUT_CLASS}
             >
               <option value="">Choose a space</option>
               {spaces.map((space) => (
@@ -249,21 +242,17 @@ export function ClickUpIntegrationForm({ workspaceId, connection }: ClickUpInteg
                   {space.name}
                 </option>
               ))}
-            </select>
+            </DashSelect>
           </label>
-          <label
-            htmlFor={ids.list}
-            className="flex flex-col gap-1 text-sm font-medium text-neutral-800"
-          >
+          <label htmlFor={ids.list} className={DASH_LABEL_CLASS}>
             List
-            <select
+            <DashSelect
               id={ids.list}
               value={listId}
               onChange={(event) => {
                 setListId(event.target.value);
               }}
               disabled={lists.length === 0}
-              className={INPUT_CLASS}
             >
               <option value="">Choose a list</option>
               {lists.map((list) => (
@@ -271,13 +260,13 @@ export function ClickUpIntegrationForm({ workspaceId, connection }: ClickUpInteg
                   {list.name}
                 </option>
               ))}
-            </select>
+            </DashSelect>
           </label>
-          <form onSubmit={save}>
+          <form onSubmit={save} className="sm:col-span-3">
             <button
               type="submit"
               disabled={pending || selectedList === undefined}
-              className={`${PRIMARY_BUTTON_CLASS} w-fit`}
+              className={`${DASH_BUTTON_PRIMARY_CLASS} w-fit`}
             >
               Save ClickUp list
             </button>
@@ -286,7 +275,7 @@ export function ClickUpIntegrationForm({ workspaceId, connection }: ClickUpInteg
       )}
 
       {error === null ? null : (
-        <p role="alert" data-error-code={error.code} className={ERROR_CLASS}>
+        <p role="alert" data-error-code={error.code} className={DASH_ERROR_CLASS}>
           {error.message}
         </p>
       )}

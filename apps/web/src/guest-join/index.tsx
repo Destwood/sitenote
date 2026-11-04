@@ -5,14 +5,14 @@ import { useState, useSyncExternalStore, type SubmitEvent as FormSubmitEvent } f
 import { DISPLAY_NAME_MAX_LENGTH, parseDisplayName } from "../display-name";
 import { connectExtension, type ExtensionConnection } from "../extension-connection";
 import { InstallInstructions } from "../extension-install";
-import {
-  ERROR_CLASS,
-  INPUT_CLASS,
-  PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
-} from "../form-controls";
 import { describeInviteError } from "../invite-error";
 import { toOpenableOrigin } from "../origin-link";
+import {
+  PUBLIC_ERROR_CLASS,
+  PUBLIC_INPUT_CLASS,
+  PUBLIC_PRIMARY_BUTTON_CLASS,
+  PUBLIC_SECONDARY_BUTTON_CLASS,
+} from "../public-styles";
 import { getSupabaseBrowserClient } from "../supabase-browser";
 
 const subscribeToNothing = () => () => undefined;
@@ -103,7 +103,11 @@ function ConnectionPanel({
       return (
         <div className="flex flex-col gap-3">
           <InstallInstructions lead="You joined the workspace, but the Sitenote extension was not found in this browser. Install it to comment on the workspace sites." />
-          <button type="button" onClick={onConnect} className={`${PRIMARY_BUTTON_CLASS} w-fit`}>
+          <button
+            type="button"
+            onClick={onConnect}
+            className={`${PUBLIC_PRIMARY_BUTTON_CLASS} w-fit`}
+          >
             I installed it — connect
           </button>
         </div>
@@ -111,11 +115,15 @@ function ConnectionPanel({
     case "alreadySignedIn":
       return (
         <div className="flex flex-col gap-3">
-          <p role="alert" className={ERROR_CLASS}>
+          <p role="alert" className={PUBLIC_ERROR_CLASS}>
             The Sitenote extension is already signed in to an account. Open the extension popup,
             sign out, then connect again.
           </p>
-          <button type="button" onClick={onConnect} className={`${SECONDARY_BUTTON_CLASS} w-fit`}>
+          <button
+            type="button"
+            onClick={onConnect}
+            className={`${PUBLIC_SECONDARY_BUTTON_CLASS} w-fit`}
+          >
             Connect again
           </button>
         </div>
@@ -123,10 +131,14 @@ function ConnectionPanel({
     case "failed":
       return (
         <div className="flex flex-col gap-3">
-          <p role="alert" className={ERROR_CLASS}>
+          <p role="alert" className={PUBLIC_ERROR_CLASS}>
             The extension could not accept this guest session. Try connecting again.
           </p>
-          <button type="button" onClick={onConnect} className={`${SECONDARY_BUTTON_CLASS} w-fit`}>
+          <button
+            type="button"
+            onClick={onConnect}
+            className={`${PUBLIC_SECONDARY_BUTTON_CLASS} w-fit`}
+          >
             Try connecting again
           </button>
         </div>
@@ -140,7 +152,7 @@ function SiteList({ origins, connected }: { origins: readonly string[]; connecte
   }
   return (
     <section aria-labelledby="sites-heading" className="flex flex-col gap-3">
-      <h2 id="sites-heading" className="text-lg font-semibold">
+      <h2 id="sites-heading" className="text-base font-semibold">
         Sites to review
       </h2>
       {connected ? (
@@ -148,7 +160,7 @@ function SiteList({ origins, connected }: { origins: readonly string[]; connecte
           Open a site below. Click the Sitenote icon on that site and choose Enable.
         </p>
       ) : null}
-      <ul className="flex flex-col divide-y divide-neutral-200 rounded-md border border-neutral-200">
+      <ul className="flex flex-col divide-y divide-neutral-200 rounded-lg border border-neutral-200">
         {origins.map((origin) => {
           const href = toOpenableOrigin(origin);
           return (
@@ -159,7 +171,7 @@ function SiteList({ origins, connected }: { origins: readonly string[]; connecte
                   href={href}
                   target="_blank"
                   rel="noreferrer"
-                  className="shrink-0 text-sm font-medium text-neutral-900 underline underline-offset-4"
+                  className="shrink-0 text-sm font-medium text-blue-700 underline underline-offset-4 hover:text-blue-900"
                 >
                   Open {origin}
                 </a>
@@ -213,7 +225,7 @@ export function GuestJoin({ token, workspaceName, extensionId }: GuestJoinProps)
 
   if (joined !== null) {
     return (
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-7">
         <h1 className="text-2xl font-bold tracking-tight">You joined {workspaceName}</h1>
         <ConnectionPanel
           connection={joined.connection}
@@ -229,13 +241,13 @@ export function GuestJoin({ token, workspaceName, extensionId }: GuestJoinProps)
   return (
     <form
       onSubmit={(event) => void handleSubmit(event)}
-      className="flex flex-col gap-4"
+      className="flex flex-col gap-6"
       aria-labelledby="guest-join-heading"
     >
       <h1 id="guest-join-heading" className="text-2xl font-bold tracking-tight">
         Join {workspaceName} as a guest
       </h1>
-      <p className="text-neutral-600">
+      <p className="text-sm leading-6 text-neutral-600">
         Enter the name your team will see on your comments. You do not need an account.
       </p>
       <div className="flex flex-col gap-1.5">
@@ -255,18 +267,18 @@ export function GuestJoin({ token, workspaceName, extensionId }: GuestJoinProps)
           }}
           aria-invalid={error !== null}
           aria-describedby={error === null ? undefined : "guest-join-error"}
-          className={INPUT_CLASS}
+          className={PUBLIC_INPUT_CLASS}
         />
       </div>
       {error === null ? null : (
-        <p id="guest-join-error" role="alert" className={ERROR_CLASS}>
+        <p id="guest-join-error" role="alert" className={PUBLIC_ERROR_CLASS}>
           {error}
         </p>
       )}
       <button
         type="submit"
         disabled={busy || !hydrated}
-        className={`${PRIMARY_BUTTON_CLASS} w-fit`}
+        className={`${PUBLIC_PRIMARY_BUTTON_CLASS} w-full`}
       >
         {busy ? "Joining..." : "Join as guest"}
       </button>

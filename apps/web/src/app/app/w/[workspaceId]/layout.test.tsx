@@ -13,7 +13,11 @@ const mocks = vi.hoisted(() => ({
   }),
 }));
 
-vi.mock("next/navigation", () => ({ notFound: mocks.notFound, redirect: mocks.redirect }));
+vi.mock("next/navigation", () => ({
+  notFound: mocks.notFound,
+  redirect: mocks.redirect,
+  usePathname: () => "/app/w/10000000-0000-4000-8000-000000000001/threads",
+}));
 vi.mock("../../../../supabase-server", () => ({
   createSupabaseServerClient: () => Promise.resolve({ from: mocks.from }),
   getAuthenticatedUser: mocks.getAuthenticatedUser,

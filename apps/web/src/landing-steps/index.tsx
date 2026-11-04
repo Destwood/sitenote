@@ -18,25 +18,27 @@ export function LandingSteps() {
     <section
       id="how-it-works"
       aria-labelledby="how-it-works-heading"
-      className="mx-auto w-full max-w-6xl scroll-mt-20 px-6 py-16"
+      className="scroll-mt-20 bg-neutral-50 py-24"
     >
-      <h2 id="how-it-works-heading" className="text-3xl font-bold tracking-tight">
-        How it works
-      </h2>
-      <ol className="mt-10 grid gap-6 md:grid-cols-3">
-        {STEPS.map((step, index) => (
-          <li key={step.title} className="flex flex-col gap-3 rounded-lg bg-neutral-50 p-6">
-            <span
-              aria-hidden="true"
-              className="flex size-8 items-center justify-center rounded-full bg-neutral-900 text-sm font-semibold text-white"
-            >
-              {index + 1}
-            </span>
-            <h3 className="font-semibold">{step.title}</h3>
-            <p className="text-sm text-neutral-600">{step.body}</p>
-          </li>
-        ))}
-      </ol>
+      <div className="mx-auto w-full max-w-6xl px-6">
+        <h2
+          id="how-it-works-heading"
+          className="text-center text-3xl font-bold tracking-tight sm:text-4xl"
+        >
+          How it works
+        </h2>
+        <ol className="mt-14 grid gap-10 md:grid-cols-3">
+          {STEPS.map((step, index) => (
+            <li key={step.title} className="flex flex-col gap-3 border-t border-neutral-300 pt-6">
+              <span aria-hidden="true" className="font-mono text-4xl font-semibold text-blue-600">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <h3 className="mt-4 font-semibold">{step.title}</h3>
+              <p className="text-sm leading-6 text-neutral-600">{step.body}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
     </section>
   );
 }

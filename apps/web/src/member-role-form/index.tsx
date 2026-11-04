@@ -3,7 +3,8 @@
 import { useActionState, useId } from "react";
 
 import type { ConfirmActionState } from "../confirm-action-form";
-import { ERROR_CLASS, INPUT_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
+import { DASH_BUTTON_SECONDARY_CLASS, DASH_ERROR_CLASS } from "../dashboard-classes";
+import { DashSelect } from "../dash-select";
 import { setMemberRole } from "../member-actions";
 import { ASSIGNABLE_ROLES, MEMBER_ROLE_LABELS, type AssignableRole } from "../member-roles";
 
@@ -27,19 +28,19 @@ export function MemberRoleForm({ workspaceId, userId, role }: MemberRoleFormProp
         <label htmlFor={selectId} className="text-sm font-medium text-neutral-700">
           Role
         </label>
-        <select id={selectId} name="role" defaultValue={role} className={`${INPUT_CLASS} w-auto`}>
+        <DashSelect id={selectId} name="role" defaultValue={role} wrapperClassName="w-auto">
           {ASSIGNABLE_ROLES.map((option) => (
             <option key={option} value={option}>
               {MEMBER_ROLE_LABELS[option]}
             </option>
           ))}
-        </select>
-        <button type="submit" disabled={pending} className={SECONDARY_BUTTON_CLASS}>
+        </DashSelect>
+        <button type="submit" disabled={pending} className={DASH_BUTTON_SECONDARY_CLASS}>
           {pending ? "Saving..." : "Save role"}
         </button>
       </div>
       {state.error === null ? null : (
-        <p role="alert" className={ERROR_CLASS}>
+        <p role="alert" className={DASH_ERROR_CLASS}>
           {state.error}
         </p>
       )}

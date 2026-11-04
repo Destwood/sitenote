@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 
-import { INPUT_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
+import {
+  DASH_BUTTON_SECONDARY_CLASS,
+  DASH_INPUT_CLASS,
+  DASH_LABEL_CLASS,
+} from "../dashboard-classes";
 
 type CopyState = "idle" | "copied" | "failed";
 
@@ -29,7 +33,7 @@ export function CopyLink({ label, value }: CopyLinkProps) {
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="flex flex-col gap-1.5 text-sm font-medium text-neutral-700">
+      <label className={DASH_LABEL_CLASS}>
         {label}
         <input
           type="text"
@@ -38,11 +42,11 @@ export function CopyLink({ label, value }: CopyLinkProps) {
           onFocus={(event) => {
             event.currentTarget.select();
           }}
-          className={INPUT_CLASS}
+          className={DASH_INPUT_CLASS}
         />
       </label>
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={() => void copy()} className={SECONDARY_BUTTON_CLASS}>
+        <button type="button" onClick={() => void copy()} className={DASH_BUTTON_SECONDARY_CLASS}>
           Copy link
         </button>
         {state === "copied" ? (

@@ -4,7 +4,13 @@ import { redirect } from "next/navigation";
 
 import { getPublicEnv } from "../../../env";
 import { ExtensionConnect } from "../../../extension-connect";
-import { LINK_BUTTON_CLASS } from "../../../form-controls";
+import { Logo } from "../../../logo";
+import {
+  PUBLIC_BRAND_CLASS,
+  PUBLIC_CANVAS_CLASS,
+  PUBLIC_CARD_CLASS,
+  PUBLIC_LINK_BUTTON_CLASS,
+} from "../../../public-styles";
 import { createSupabaseServerClient, getAuthenticatedUser } from "../../../supabase-server";
 
 export const metadata: Metadata = {
@@ -20,23 +26,27 @@ export default async function ExtensionConnectPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-8 px-6 py-16">
-      <div className="flex items-center justify-between">
-        <Link href="/" className="w-fit text-lg font-bold tracking-tight">
-          Sitenote
-        </Link>
-        <Link href="/app" className={LINK_BUTTON_CLASS}>
-          Go to dashboard
-        </Link>
+    <main className={`${PUBLIC_CANVAS_CLASS} flex items-center justify-center px-6 py-16`}>
+      <div className={`${PUBLIC_CARD_CLASS} flex w-full max-w-md flex-col gap-7 p-8`}>
+        <div className="flex items-center justify-between gap-4">
+          <Link href="/" className={PUBLIC_BRAND_CLASS}>
+            <Logo size={32} />
+            Sitenote
+          </Link>
+          <Link href="/app" className={PUBLIC_LINK_BUTTON_CLASS}>
+            Go to dashboard
+          </Link>
+        </div>
+        <header className="flex flex-col gap-2">
+          <h1 className="text-2xl font-bold tracking-tight">Connect the extension</h1>
+          <p className="text-sm leading-6 text-neutral-600">
+            You are signed in as{" "}
+            <strong className="break-all">{user.email ?? "your account"}</strong>. Connecting signs
+            the extension in to the same account. You stay signed in here.
+          </p>
+        </header>
+        <ExtensionConnect extensionId={getPublicEnv().extensionId} />
       </div>
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-bold tracking-tight">Connect the extension</h1>
-        <p className="text-neutral-600">
-          You are signed in as <strong className="break-all">{user.email ?? "your account"}</strong>
-          . Connecting signs the extension in to the same account. You stay signed in here.
-        </p>
-      </header>
-      <ExtensionConnect extensionId={getPublicEnv().extensionId} />
     </main>
   );
 }

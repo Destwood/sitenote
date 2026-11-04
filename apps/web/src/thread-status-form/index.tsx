@@ -3,7 +3,11 @@
 import type { Enums } from "@sitenote/db";
 import { useActionState } from "react";
 
-import { ERROR_CLASS, PRIMARY_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
+import {
+  DASH_BUTTON_PRIMARY_CLASS,
+  DASH_BUTTON_SECONDARY_CLASS,
+  DASH_ERROR_CLASS,
+} from "../dashboard-classes";
 import { setThreadStatus, type ThreadActionState } from "../thread-actions";
 
 const INITIAL_STATE: ThreadActionState = { error: null };
@@ -26,12 +30,12 @@ export function ThreadStatusForm({ workspaceId, threadId, status }: ThreadStatus
       <button
         type="submit"
         disabled={pending}
-        className={isOpen ? PRIMARY_BUTTON_CLASS : SECONDARY_BUTTON_CLASS}
+        className={isOpen ? DASH_BUTTON_PRIMARY_CLASS : DASH_BUTTON_SECONDARY_CLASS}
       >
         {pending ? "Saving..." : isOpen ? "Resolve thread" : "Reopen thread"}
       </button>
       {state.error === null ? null : (
-        <p role="alert" className={ERROR_CLASS}>
+        <p role="alert" className={DASH_ERROR_CLASS}>
           {state.error}
         </p>
       )}

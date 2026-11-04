@@ -10,6 +10,9 @@ describe("LandingHeader", () => {
       "#main",
     );
     expect(screen.getByRole("link", { name: "Features" }).getAttribute("href")).toBe("#features");
+    expect(screen.getByRole("link", { name: "How it works" }).getAttribute("href")).toBe(
+      "#how-it-works",
+    );
     expect(screen.getByRole("link", { name: "Demo" }).getAttribute("href")).toBe("/demo");
     expect(screen.getByRole("link", { name: "Install" }).getAttribute("href")).toBe("#install");
     expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/sign-in");

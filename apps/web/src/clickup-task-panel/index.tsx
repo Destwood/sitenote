@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { createClickUpTask, type ClickUpFailure } from "../clickup-api";
-import { ERROR_CLASS, PRIMARY_BUTTON_CLASS } from "../form-controls";
+import { DASH_BUTTON_PRIMARY_CLASS, DASH_CARD_CLASS, DASH_ERROR_CLASS } from "../dashboard-classes";
 import { safeExternalHref } from "../safe-external-link";
 import { getSupabaseBrowserClient } from "../supabase-browser";
 
@@ -44,7 +44,7 @@ export function ClickUpTaskPanel({ threadId, taskUrl, canCreate }: ClickUpTaskPa
   }
 
   return (
-    <section aria-label="ClickUp" className="flex flex-col gap-3">
+    <section aria-label="ClickUp" className={`${DASH_CARD_CLASS} flex flex-col gap-3 p-4`}>
       {linkUrl === null ? null : (
         <p className="text-sm text-neutral-700">
           ClickUp task:{" "}
@@ -69,13 +69,13 @@ export function ClickUpTaskPanel({ threadId, taskUrl, canCreate }: ClickUpTaskPa
             void create();
           }}
           disabled={pending}
-          className={`${PRIMARY_BUTTON_CLASS} w-fit`}
+          className={`${DASH_BUTTON_PRIMARY_CLASS} w-fit`}
         >
           {pending ? "Creating the ClickUp task" : error === null ? "Create ClickUp task" : "Retry"}
         </button>
       )}
       {error === null ? null : (
-        <p role="alert" data-error-code={error.code} className={ERROR_CLASS}>
+        <p role="alert" data-error-code={error.code} className={DASH_ERROR_CLASS}>
           {error.message}
         </p>
       )}

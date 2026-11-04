@@ -1,6 +1,8 @@
 import type { Enums } from "@sitenote/db";
 
+import { Avatar } from "../avatar";
 import { ConfirmActionForm } from "../confirm-action-form";
+import { DASH_CARD_CLASS } from "../dashboard-classes";
 import { formatUtcDateTime } from "../format-utc";
 import { leaveWorkspace, removeMember } from "../member-actions";
 import { MemberRoleForm } from "../member-role-form";
@@ -33,7 +35,7 @@ function MemberControls({ workspaceId, member, isViewer, viewerRole }: MemberCon
   const assignableRole = parseAssignableRole(member.role);
   if (assignableRole !== null && viewerRole === "owner") {
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 sm:items-end">
         <MemberRoleForm workspaceId={workspaceId} userId={member.userId} role={assignableRole} />
         <ConfirmActionForm
           action={removeMember}
@@ -61,22 +63,25 @@ function MemberControls({ workspaceId, member, isViewer, viewerRole }: MemberCon
 
 export function MemberList({ workspaceId, members, viewerId, viewerRole }: MemberListProps) {
   return (
-    <ul className="flex flex-col divide-y divide-neutral-200 rounded-md border border-neutral-200">
+    <ul className={`${DASH_CARD_CLASS} divide-y divide-neutral-200`}>
       {members.map((member) => {
         const isViewer = member.userId === viewerId;
         return (
           <li
             key={member.userId}
-            className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
+            className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between"
           >
-            <div className="flex min-w-0 flex-col gap-0.5">
-              <span className="font-medium break-words">
-                {member.displayName} {isViewer ? YOU_LABEL : null}
-              </span>
-              <span className="text-sm text-neutral-600">
-                {MEMBER_ROLE_LABELS[member.role]}, joined{" "}
-                <time dateTime={member.joinedAt}>{formatUtcDateTime(member.joinedAt)}</time>
-              </span>
+            <div className="flex min-w-0 items-center gap-3">
+              <Avatar name={member.displayName} />
+              <div className="flex min-w-0 flex-col">
+                <span className="text-sm font-medium break-words text-neutral-900">
+                  {member.displayName} {isViewer ? YOU_LABEL : null}
+                </span>
+                <span className="text-xs text-neutral-500">
+                  {MEMBER_ROLE_LABELS[member.role]}, joined{" "}
+                  <time dateTime={member.joinedAt}>{formatUtcDateTime(member.joinedAt)}</time>
+                </span>
+              </div>
             </div>
             <MemberControls
               workspaceId={workspaceId}

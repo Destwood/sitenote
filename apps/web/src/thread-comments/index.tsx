@@ -1,6 +1,7 @@
 import { splitMentions, type MentionCandidate } from "@sitenote/core";
 import type { Tables } from "@sitenote/db";
 
+import { Avatar } from "../avatar";
 import { formatUtcDateTime } from "../format-utc";
 import { FORMER_MEMBER_LABEL } from "../thread-table";
 import { memberNames, type WorkspaceMember } from "../workspace-members";
@@ -51,37 +52,40 @@ interface ThreadCommentsProps {
 
 export function ThreadComments({ comments }: ThreadCommentsProps) {
   if (comments.length === 0) {
-    return <p className="text-neutral-600">{NO_COMMENTS_TEXT}</p>;
+    return <p className="text-sm text-neutral-600">{NO_COMMENTS_TEXT}</p>;
   }
 
   return (
     <ol className="flex flex-col divide-y divide-neutral-200">
       {comments.map((comment) => (
-        <li key={comment.id} className="flex flex-col gap-1 py-3">
-          <p className="flex flex-wrap items-baseline gap-x-2 text-sm text-neutral-600">
-            <span className="font-semibold text-neutral-900">{comment.authorName}</span>
-            <time dateTime={comment.createdAt}>{formatUtcDateTime(comment.createdAt)}</time>
-            {comment.editedAt !== null && !comment.deleted ? <span>edited</span> : null}
-          </p>
-          {comment.deleted ? (
-            <p className="text-neutral-600 italic">{DELETED_COMMENT_TEXT}</p>
-          ) : (
-            <p className="break-words whitespace-pre-wrap">
-              {splitMentions(comment.body, comment.mentions).map((segment, index) =>
-                segment.kind === "mention" ? (
-                  <span
-                    key={index}
-                    data-mention={segment.userId}
-                    className="rounded-sm bg-blue-100 px-0.5 font-medium text-blue-900"
-                  >
-                    {segment.text}
-                  </span>
-                ) : (
-                  <span key={index}>{segment.text}</span>
-                ),
-              )}
+        <li key={comment.id} className="flex gap-3 py-4 first:pt-0 last:pb-0">
+          <Avatar name={comment.authorName} />
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <p className="flex flex-wrap items-baseline gap-x-2 text-sm text-neutral-500">
+              <span className="font-semibold text-neutral-900">{comment.authorName}</span>
+              <time dateTime={comment.createdAt}>{formatUtcDateTime(comment.createdAt)}</time>
+              {comment.editedAt !== null && !comment.deleted ? <span>edited</span> : null}
             </p>
-          )}
+            {comment.deleted ? (
+              <p className="text-sm text-neutral-500 italic">{DELETED_COMMENT_TEXT}</p>
+            ) : (
+              <p className="text-sm break-words whitespace-pre-wrap text-neutral-800">
+                {splitMentions(comment.body, comment.mentions).map((segment, index) =>
+                  segment.kind === "mention" ? (
+                    <span
+                      key={index}
+                      data-mention={segment.userId}
+                      className="rounded-sm bg-blue-100 px-0.5 font-medium text-blue-900"
+                    >
+                      {segment.text}
+                    </span>
+                  ) : (
+                    <span key={index}>{segment.text}</span>
+                  ),
+                )}
+              </p>
+            )}
+          </div>
         </li>
       ))}
     </ol>

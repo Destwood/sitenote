@@ -1,9 +1,19 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  pathname: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({ usePathname: mocks.pathname }));
 
 import { WorkspaceNav } from ".";
 
 const WORKSPACE_ID = "10000000-0000-4000-8000-000000000001";
+
+beforeEach(() => {
+  mocks.pathname.mockReturnValue(`/app/w/${WORKSPACE_ID}/threads`);
+});
 
 describe("WorkspaceNav", () => {
   it("shows every section to an owner", () => {
@@ -28,5 +38,13 @@ describe("WorkspaceNav", () => {
     expect(screen.getByRole("link", { name: "Members" }).getAttribute("href")).toBe(
       `/app/w/${WORKSPACE_ID}/members`,
     );
+  });
+
+  it("marks the section of the current path as the current page", () => {
+    mocks.pathname.mockReturnValue(`/app/w/${WORKSPACE_ID}/threads/abc`);
+    render(<WorkspaceNav workspaceId={WORKSPACE_ID} role="member" />);
+
+    expect(screen.getByRole("link", { name: "Threads" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: "Sites" }).getAttribute("aria-current")).toBeNull();
   });
 });

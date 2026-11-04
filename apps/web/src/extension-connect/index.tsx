@@ -5,7 +5,11 @@ import { useState } from "react";
 
 import { connectMemberExtension, type ExtensionConnection } from "../extension-connection";
 import { InstallInstructions } from "../extension-install";
-import { ERROR_CLASS, PRIMARY_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
+import {
+  PUBLIC_ERROR_CLASS,
+  PUBLIC_PRIMARY_BUTTON_CLASS,
+  PUBLIC_SECONDARY_BUTTON_CLASS,
+} from "../public-styles";
 
 type View = { status: "idle" } | { status: "connecting" } | ExtensionConnection;
 
@@ -27,24 +31,38 @@ export function ExtensionConnect({ extensionId }: ExtensionConnectProps) {
         <button
           type="button"
           onClick={() => void connect()}
-          className={`${PRIMARY_BUTTON_CLASS} w-fit`}
+          className={`${PUBLIC_PRIMARY_BUTTON_CLASS} w-fit`}
         >
           Connect the extension
         </button>
       );
     case "connecting":
       return (
-        <p role="status" className="text-neutral-700">
+        <p role="status" className="text-sm text-neutral-700">
           Connecting the Sitenote extension...
         </p>
       );
     case "connected":
       return (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
+          <span className="flex size-10 items-center justify-center rounded-full bg-green-100 text-green-700">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="size-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2.2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="m5 12 4 4L19 6" />
+            </svg>
+          </span>
           <p role="status" data-testid="extension-connected" className="font-medium">
             The extension is connected. You are still signed in here.
           </p>
-          <Link href="/app" className={`${PRIMARY_BUTTON_CLASS} w-fit`}>
+          <Link href="/app" className={`${PUBLIC_PRIMARY_BUTTON_CLASS} w-fit`}>
             Open dashboard
           </Link>
         </div>
@@ -56,7 +74,7 @@ export function ExtensionConnect({ extensionId }: ExtensionConnectProps) {
           <button
             type="button"
             onClick={() => void connect()}
-            className={`${PRIMARY_BUTTON_CLASS} w-fit`}
+            className={`${PUBLIC_PRIMARY_BUTTON_CLASS} w-fit`}
           >
             I installed it — connect
           </button>
@@ -65,14 +83,14 @@ export function ExtensionConnect({ extensionId }: ExtensionConnectProps) {
     case "alreadySignedIn":
       return (
         <div className="flex flex-col gap-3">
-          <p role="alert" className={ERROR_CLASS}>
+          <p role="alert" className={PUBLIC_ERROR_CLASS}>
             The extension is signed in as another account. Sign out in the extension popup first,
             then connect again.
           </p>
           <button
             type="button"
             onClick={() => void connect()}
-            className={`${SECONDARY_BUTTON_CLASS} w-fit`}
+            className={`${PUBLIC_SECONDARY_BUTTON_CLASS} w-fit`}
           >
             Connect again
           </button>
@@ -81,13 +99,13 @@ export function ExtensionConnect({ extensionId }: ExtensionConnectProps) {
     case "failed":
       return (
         <div className="flex flex-col gap-3">
-          <p role="alert" className={ERROR_CLASS}>
+          <p role="alert" className={PUBLIC_ERROR_CLASS}>
             The extension could not accept this session. Try connecting again.
           </p>
           <button
             type="button"
             onClick={() => void connect()}
-            className={`${SECONDARY_BUTTON_CLASS} w-fit`}
+            className={`${PUBLIC_SECONDARY_BUTTON_CLASS} w-fit`}
           >
             Try connecting again
           </button>

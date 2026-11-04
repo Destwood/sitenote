@@ -2,7 +2,13 @@
 
 import { useActionState, useState } from "react";
 
-import { ERROR_CLASS, INPUT_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
+import {
+  DASH_BUTTON_DANGER_CLASS,
+  DASH_BUTTON_SECONDARY_CLASS,
+  DASH_ERROR_CLASS,
+  DASH_INPUT_CLASS,
+} from "../dashboard-classes";
+import { DashIcon } from "../dashboard-icons";
 import { revokeInvite, type InviteActionState } from "../invite-actions";
 
 const INITIAL_STATE: InviteActionState = { error: null };
@@ -31,13 +37,18 @@ export function InviteRowActions({ workspaceId, inviteId, link }: InviteRowActio
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => void copyLink()} className={SECONDARY_BUTTON_CLASS}>
+        <button
+          type="button"
+          onClick={() => void copyLink()}
+          className={DASH_BUTTON_SECONDARY_CLASS}
+        >
+          <DashIcon name="copy" className="size-3.5" />
           Copy link
         </button>
         <form action={formAction}>
           <input type="hidden" name="workspaceId" value={workspaceId} />
           <input type="hidden" name="inviteId" value={inviteId} />
-          <button type="submit" disabled={pending} className={SECONDARY_BUTTON_CLASS}>
+          <button type="submit" disabled={pending} className={DASH_BUTTON_DANGER_CLASS}>
             {pending ? "Revoking..." : "Revoke"}
           </button>
         </form>
@@ -61,12 +72,12 @@ export function InviteRowActions({ workspaceId, inviteId, link }: InviteRowActio
             onFocus={(event) => {
               event.currentTarget.select();
             }}
-            className={INPUT_CLASS}
+            className={DASH_INPUT_CLASS}
           />
         </div>
       ) : null}
       {state.error === null ? null : (
-        <p role="alert" className={ERROR_CLASS}>
+        <p role="alert" className={DASH_ERROR_CLASS}>
           {state.error}
         </p>
       )}

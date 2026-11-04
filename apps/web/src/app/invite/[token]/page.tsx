@@ -5,11 +5,18 @@ import type { ReactNode } from "react";
 
 import { AcceptInviteForm } from "../../../accept-invite-form";
 import { getPublicEnv } from "../../../env";
-import { ERROR_CLASS, PRIMARY_BUTTON_CLASS } from "../../../form-controls";
 import { GuestJoin } from "../../../guest-join";
+import { Logo } from "../../../logo";
 import { INVALID_INVITE_MESSAGE } from "../../../invite-error";
 import { inviteSignInPath, isInviteToken } from "../../../invite-link";
 import { INVITE_ROLE_LABELS, parseInviteRole, type InviteRole } from "../../../invite-options";
+import {
+  PUBLIC_BRAND_CLASS,
+  PUBLIC_CANVAS_CLASS,
+  PUBLIC_CARD_CLASS,
+  PUBLIC_ERROR_CLASS,
+  PUBLIC_PRIMARY_BUTTON_CLASS,
+} from "../../../public-styles";
 import { createSupabaseServerClient, getAuthenticatedUser } from "../../../supabase-server";
 
 export const metadata: Metadata = {
@@ -45,11 +52,14 @@ async function readPreview(supabase: SitenoteClient, token: string): Promise<Pre
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-8 px-6 py-16">
-      <Link href="/" className="w-fit text-lg font-bold tracking-tight">
-        Sitenote
-      </Link>
-      {children}
+    <main className={`${PUBLIC_CANVAS_CLASS} flex items-center justify-center px-6 py-16`}>
+      <div className={`${PUBLIC_CARD_CLASS} flex w-full max-w-md flex-col gap-7 p-8`}>
+        <Link href="/" className={PUBLIC_BRAND_CLASS}>
+          <Logo size={32} />
+          Sitenote
+        </Link>
+        {children}
+      </div>
     </main>
   );
 }
@@ -66,7 +76,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
     return (
       <Shell>
         <h1 className="text-2xl font-bold tracking-tight">Invite link</h1>
-        <p role="alert" className={ERROR_CLASS}>
+        <p role="alert" className={PUBLIC_ERROR_CLASS}>
           {INVALID_INVITE_MESSAGE}
         </p>
       </Shell>
@@ -76,7 +86,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
     return (
       <Shell>
         <h1 className="text-2xl font-bold tracking-tight">Invite link</h1>
-        <p role="alert" className={ERROR_CLASS}>
+        <p role="alert" className={PUBLIC_ERROR_CLASS}>
           We could not check this invite. Reload the page to try again.
         </p>
       </Shell>
@@ -112,7 +122,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
         This invite is for a {INVITE_ROLE_LABELS[role].toLowerCase()}. Sign in with your email to
         join.
       </p>
-      <Link href={inviteSignInPath(token)} className={`${PRIMARY_BUTTON_CLASS} w-fit`}>
+      <Link href={inviteSignInPath(token)} className={`${PUBLIC_PRIMARY_BUTTON_CLASS} w-fit`}>
         Sign in to join
       </Link>
     </Shell>

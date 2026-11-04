@@ -1,86 +1,105 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
+import { Badge } from "../badge";
+import { DASH_CARD_CLASS, DASH_EMPTY_CLASS, DASH_LINK_CLASS } from "../dashboard-classes";
+import { DashIcon } from "../dashboard-icons";
 import { formatUtcDateTime } from "../format-utc";
 import { pagePathLabel } from "../page-path";
-import { threadPath } from "../workspace-paths";
 import { THREAD_STATUS_LABELS } from "../thread-status";
 import type { ThreadRow } from "../thread-search";
+import { threadPath } from "../workspace-paths";
 
 export const FORMER_MEMBER_LABEL = "Former member";
 export const NO_THREADS_TEXT = "No threads yet. Comments left on your sites appear here.";
 export const NO_MATCHES_TEXT = "No threads match these filters.";
+
+const HEAD_CELL_CLASS =
+  "px-4 py-2.5 text-left text-xs font-medium tracking-wide whitespace-nowrap text-neutral-500 uppercase";
 
 interface ThreadTableProps {
   workspaceId: string;
   rows: readonly ThreadRow[];
   names: ReadonlyMap<string, string>;
   filtered: boolean;
+  footer?: ReactNode;
 }
 
-export function ThreadTable({ workspaceId, rows, names, filtered }: ThreadTableProps) {
+export function ThreadTable({ workspaceId, rows, names, filtered, footer }: ThreadTableProps) {
   if (rows.length === 0) {
     return (
-      <p className="rounded-md border border-dashed border-neutral-300 px-4 py-6 text-center text-neutral-600">
-        {filtered ? NO_MATCHES_TEXT : NO_THREADS_TEXT}
-      </p>
+      <>
+        <p className={DASH_EMPTY_CLASS}>{filtered ? NO_MATCHES_TEXT : NO_THREADS_TEXT}</p>
+        {footer}
+      </>
     );
   }
 
   return (
-    <div className="overflow-x-auto rounded-md border border-neutral-200">
-      <table className="w-full min-w-[56rem] border-collapse text-left text-sm">
-        <thead className="bg-neutral-50 text-neutral-700">
-          <tr>
-            <th scope="col" className="px-3 py-2 font-semibold">
-              Page
-            </th>
-            <th scope="col" className="px-3 py-2 font-semibold">
-              First comment
-            </th>
-            <th scope="col" className="px-3 py-2 font-semibold">
-              Author
-            </th>
-            <th scope="col" className="px-3 py-2 font-semibold">
-              Status
-            </th>
-            <th scope="col" className="px-3 py-2 text-right font-semibold">
-              Comments
-            </th>
-            <th scope="col" className="px-3 py-2 font-semibold">
-              Created
-            </th>
-            <th scope="col" className="px-3 py-2 font-semibold">
-              Last activity
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.id} className="border-t border-neutral-200 align-top">
-              <td className="px-3 py-2 font-medium break-all">
-                <Link
-                  href={threadPath(workspaceId, row.id)}
-                  className="underline underline-offset-4 hover:text-neutral-700"
-                >
-                  {pagePathLabel(row.pageUrl)}
-                </Link>
-              </td>
-              <td className="max-w-xs px-3 py-2 break-words text-neutral-800">{row.firstBody}</td>
-              <td className="px-3 py-2 text-neutral-700">
-                {names.get(row.createdBy) ?? FORMER_MEMBER_LABEL}
-              </td>
-              <td className="px-3 py-2 text-neutral-700">{THREAD_STATUS_LABELS[row.status]}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{row.commentCount}</td>
-              <td className="px-3 py-2 whitespace-nowrap text-neutral-700">
-                <time dateTime={row.createdAt}>{formatUtcDateTime(row.createdAt)}</time>
-              </td>
-              <td className="px-3 py-2 whitespace-nowrap text-neutral-700">
-                <time dateTime={row.lastActivity}>{formatUtcDateTime(row.lastActivity)}</time>
-              </td>
+    <div className={DASH_CARD_CLASS}>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[56rem] border-collapse text-left text-sm">
+          <thead className="border-b border-neutral-200 bg-neutral-50">
+            <tr>
+              <th scope="col" className={HEAD_CELL_CLASS}>
+                Page
+              </th>
+              <th scope="col" className={HEAD_CELL_CLASS}>
+                First comment
+              </th>
+              <th scope="col" className={HEAD_CELL_CLASS}>
+                Author
+              </th>
+              <th scope="col" className={HEAD_CELL_CLASS}>
+                Status
+              </th>
+              <th scope="col" className={`${HEAD_CELL_CLASS} text-right`}>
+                Comments
+              </th>
+              <th scope="col" className={HEAD_CELL_CLASS}>
+                Created
+              </th>
+              <th scope="col" className={HEAD_CELL_CLASS}>
+                Last activity
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-neutral-200">
+            {rows.map((row) => (
+              <tr key={row.id} className="align-top transition-colors hover:bg-neutral-50">
+                <td className="max-w-xs px-4 py-3 font-medium break-all">
+                  <Link
+                    href={threadPath(workspaceId, row.id)}
+                    className={`${DASH_LINK_CLASS} inline-flex items-start gap-1.5 text-neutral-900`}
+                  >
+                    <DashIcon name="globe" className="mt-0.5 size-3.5 text-neutral-500" />
+                    {pagePathLabel(row.pageUrl)}
+                  </Link>
+                </td>
+                <td className="max-w-xs px-4 py-3 break-words text-neutral-800">{row.firstBody}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-neutral-700">
+                  {names.get(row.createdBy) ?? FORMER_MEMBER_LABEL}
+                </td>
+                <td className="px-4 py-3">
+                  <Badge tone={row.status === "open" ? "blue" : "gray"}>
+                    {THREAD_STATUS_LABELS[row.status]}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-neutral-700">
+                  {row.commentCount}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap text-neutral-700">
+                  <time dateTime={row.createdAt}>{formatUtcDateTime(row.createdAt)}</time>
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap text-neutral-700">
+                  <time dateTime={row.lastActivity}>{formatUtcDateTime(row.lastActivity)}</time>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {footer}
     </div>
   );
 }

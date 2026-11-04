@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 
-import { ERROR_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
+import { DASH_BUTTON_SECONDARY_CLASS, DASH_ERROR_CLASS } from "../dashboard-classes";
 
 export interface ConfirmActionState {
   error: string | null;
@@ -45,12 +45,12 @@ export function ConfirmActionForm({
             event.preventDefault();
           }
         }}
-        className={SECONDARY_BUTTON_CLASS}
+        className={`${DASH_BUTTON_SECONDARY_CLASS} w-fit`}
       >
         {pending ? pendingLabel : label}
       </button>
       {state.error === null ? null : (
-        <p role="alert" className={ERROR_CLASS}>
+        <p role="alert" className={DASH_ERROR_CLASS}>
           {state.error}
         </p>
       )}

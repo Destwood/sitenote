@@ -4,9 +4,10 @@ import { notFound, redirect } from "next/navigation";
 
 import { CreateInviteForm } from "../../../../../create-invite-form";
 import { getPublicEnv } from "../../../../../env";
-import { ERROR_CLASS, LINK_BUTTON_CLASS } from "../../../../../form-controls";
+import { DASH_ERROR_CLASS, DASH_LINK_CLASS } from "../../../../../dashboard-classes";
 import { InviteList, type InviteListItem } from "../../../../../invite-list";
 import { inviteLink, workspaceInvitesPath } from "../../../../../invite-link";
+import { PageHeader } from "../../../../../page-header";
 import { parseInviteRole } from "../../../../../invite-options";
 import { inviteStatus } from "../../../../../invite-status";
 import { currentTimeMs } from "../../../../../now";
@@ -67,25 +68,24 @@ export default async function InvitesPage({ params }: InvitesPageProps) {
 
   return (
     <div className="flex flex-col gap-8">
-      <header className="flex flex-col gap-2">
-        <Link href="/app" className={`${LINK_BUTTON_CLASS} w-fit`}>
-          Back to workspaces
-        </Link>
-        <h1 className="text-2xl font-bold tracking-tight">Invites for {access.name}</h1>
-        <p className="text-neutral-600">
-          Anyone with an active link can join until it expires or you revoke it. Guests join with a
-          display name only; members sign in with their email.
-        </p>
-      </header>
+      <PageHeader
+        leading={
+          <Link href="/app" className={`${DASH_LINK_CLASS} w-fit`}>
+            Back to workspaces
+          </Link>
+        }
+        title={`Invites for ${access.name}`}
+        description="Anyone with an active link can join until it expires or you revoke it. Guests join with a display name only; members sign in with their email."
+      />
       <CreateInviteForm workspaceId={workspaceId} />
       <section aria-labelledby="invites-heading" className="flex flex-col gap-4">
-        <h2 id="invites-heading" className="text-lg font-semibold">
+        <h2 id="invites-heading" className="text-base font-semibold text-neutral-900">
           Invite links
         </h2>
         {invites.error === null ? (
           <InviteList workspaceId={workspaceId} invites={items} />
         ) : (
-          <p role="alert" className={ERROR_CLASS}>
+          <p role="alert" className={DASH_ERROR_CLASS}>
             We could not load the invites. Reload the page to try again.
           </p>
         )}
