@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 
-import {
-  ERROR_CLASS,
-  LINK_BUTTON_CLASS,
-  PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
-  INPUT_CLASS,
-} from "../form-controls";
+import { ERROR_CLASS, PRIMARY_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
+import { Icon } from "../icon";
 import { PageThreadsPanel } from "../page-threads-panel";
 import { TOGGLE_COMMENT_MODE_SHORTCUT } from "../manifest-config";
 import { sendMessage, toggleCommentMode } from "../message-client";
 import { SiteMenu } from "../site-menu";
+import { WorkspacePicker } from "../workspace-picker";
 import { createPendingEnable } from "../pending-enable";
 import { ERROR_MESSAGES, type ErrorCode } from "@sitenote/widget";
 import { getTargetTab, hasOriginAccess, requestOriginAccess, type TargetTab } from "../tab-access";
@@ -39,6 +35,7 @@ interface Target {
 interface SitePanelProps {
   webUrl: string;
   onManageSites: () => void;
+  onWorkspaceName: (name: string | null) => void;
 }
 
 function readLastWorkspace(): string | null {
@@ -70,6 +67,20 @@ export function hostOf(origin: string): string {
   return URL.parse(origin)?.host ?? origin;
 }
 
+function monogramOf(name: string): string {
+  return name.trim().charAt(0).toUpperCase();
+}
+
+function workspaceNameOf(view: View, workspaceId: string): string | null {
+  if (view.kind === "enabled") {
+    return view.site.workspaceName;
+  }
+  if (view.kind === "disabled") {
+    return view.workspaces.find((workspace) => workspace.id === workspaceId)?.name ?? null;
+  }
+  return null;
+}
+
 function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -98,7 +109,7 @@ async function resolveView(): Promise<View> {
   return target === null ? { kind: "unavailable" } : loadView(target);
 }
 
-export function SitePanel({ webUrl, onManageSites }: SitePanelProps) {
+export function SitePanel({ webUrl, onManageSites, onWorkspaceName }: SitePanelProps) {
   const [view, setView] = useState<View>({ kind: "loading" });
   const [workspaceId, setWorkspaceId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -127,6 +138,11 @@ export function SitePanel({ webUrl, onManageSites }: SitePanelProps) {
       active = false;
     };
   }, [show]);
+
+  const workspaceName = workspaceNameOf(view, workspaceId);
+  useEffect(() => {
+    onWorkspaceName(workspaceName);
+  }, [onWorkspaceName, workspaceName]);
 
   async function enableAfterPrompt(tab: Target) {
     await pending.set({ tabId: tab.id, origin: tab.origin, workspaceId });
@@ -258,16 +274,29 @@ export function SitePanel({ webUrl, onManageSites }: SitePanelProps) {
 
   if (view.kind === "loading") {
     return (
-      <p role="status" className="text-sm text-neutral-600">
+      <p role="status" className="flex items-center gap-2 text-sm text-neutral-500">
+        <span
+          aria-hidden="true"
+          className="size-4 shrink-0 animate-spin rounded-full border-2 border-neutral-200 border-t-blue-600"
+        />
         Checking this page...
       </p>
     );
   }
   if (view.kind === "unavailable") {
     return (
-      <p data-testid="site-unavailable" className="text-sm text-neutral-600">
-        Sitenote is not available on this page.
-      </p>
+      <div className="flex flex-col items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-5 text-center">
+        <span
+          aria-hidden="true"
+          className="flex size-9 items-center justify-center rounded-full bg-neutral-200 text-neutral-600"
+        >
+          <Icon name="error" size={18} />
+        </span>
+        <p data-testid="site-unavailable" className="text-sm font-semibold text-neutral-900">
+          Sitenote is not available on this page.
+        </p>
+        <p className="text-xs text-neutral-500">Chrome system pages can’t be annotated.</p>
+      </div>
     );
   }
   if (view.kind === "error") {
@@ -285,6 +314,7 @@ export function SitePanel({ webUrl, onManageSites }: SitePanelProps) {
 
   const tab = view.tab;
   const enabled = view.kind === "enabled";
+  const host = hostOf(tab.origin);
   const selected =
     view.kind === "disabled"
       ? view.workspaces.find((workspace) => workspace.id === workspaceId)
@@ -292,103 +322,141 @@ export function SitePanel({ webUrl, onManageSites }: SitePanelProps) {
 
   return (
     <section aria-label="This site" className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
+      <div className="rounded-lg border border-neutral-200 bg-white">
+        <div className="flex items-center gap-2.5 p-2.5">
           <span
             aria-hidden="true"
-            className={`size-2 shrink-0 rounded-full ${enabled ? "bg-green-600" : "bg-neutral-300"}`}
-          />
-          <p data-testid="site-origin" className="truncate text-sm font-semibold text-neutral-900">
-            {hostOf(tab.origin)}
-          </p>
-        </div>
-        <SiteMenu
-          webUrl={webUrl}
-          captureErrors={enabled ? view.site.captureErrors : null}
-          busy={busy}
-          onToggleCapture={(on) => void changeErrorCapture(tab, on)}
-          onDisable={() => void disable(tab)}
-          onManageSites={onManageSites}
-        />
-      </div>
-      <p data-testid="site-state" className="-mt-2 text-xs text-neutral-600">
-        {enabled ? `Enabled in ${view.site.workspaceName}` : "Not enabled"}
-      </p>
-      {view.kind === "enabled" ? (
-        <>
-          {view.workspaces.length > 1 ? (
-            <button
-              type="button"
-              onClick={() => void switchWorkspace(tab, view.site.workspaceId, view.workspaces)}
-              disabled={busy}
-              className={`${LINK_BUTTON_CLASS} self-start`}
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-white text-sm font-bold text-neutral-900 uppercase"
+          >
+            {host.charAt(0)}
+          </span>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <p
+              data-testid="site-origin"
+              className="truncate text-sm font-semibold text-neutral-900"
             >
-              Switch workspace
-            </button>
-          ) : null}
+              {host}
+            </p>
+            <p
+              data-testid="site-state"
+              className="mt-0.5 flex items-center gap-1.5 text-xs text-neutral-500"
+            >
+              <span
+                aria-hidden="true"
+                className={`size-1.5 shrink-0 rounded-full ${enabled ? "bg-green-500" : "bg-neutral-400"}`}
+              />
+              {enabled ? `Enabled in ${view.site.workspaceName}` : "Not enabled"}
+            </p>
+          </div>
+          <SiteMenu
+            webUrl={webUrl}
+            captureErrors={enabled ? view.site.captureErrors : null}
+            busy={busy}
+            onToggleCapture={(on) => void changeErrorCapture(tab, on)}
+            onDisable={() => void disable(tab)}
+            onManageSites={onManageSites}
+          />
+        </div>
+        {view.kind === "enabled" ? (
+          <div className="flex items-center gap-2.5 rounded-b-lg border-t border-neutral-200 bg-neutral-50 px-2.5 py-2">
+            <span
+              aria-hidden="true"
+              className="flex size-6 shrink-0 items-center justify-center rounded-md bg-neutral-900 text-[11px] font-bold text-white"
+            >
+              {monogramOf(view.site.workspaceName)}
+            </span>
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className="text-[11px] text-neutral-500">Workspace</span>
+              <span className="truncate text-xs font-semibold text-neutral-900">
+                {view.site.workspaceName}
+              </span>
+            </div>
+            {view.workspaces.length > 1 ? (
+              <button
+                type="button"
+                onClick={() => void switchWorkspace(tab, view.site.workspaceId, view.workspaces)}
+                disabled={busy}
+                className="rounded-md px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Switch
+              </button>
+            ) : null}
+          </div>
+        ) : view.workspaces.length > 1 ? (
+          <WorkspacePicker
+            value={workspaceId}
+            options={view.workspaces}
+            onChange={setWorkspaceId}
+            disabled={busy}
+          />
+        ) : selected === undefined ? null : (
+          <div className="flex items-center gap-2.5 rounded-b-lg border-t border-neutral-200 bg-neutral-50 px-2.5 py-2">
+            <span
+              aria-hidden="true"
+              className="flex size-6 shrink-0 items-center justify-center rounded-md bg-neutral-900 text-[11px] font-bold text-white"
+            >
+              {monogramOf(selected.name)}
+            </span>
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className="text-[11px] text-neutral-500">Workspace</span>
+              <span className="truncate text-xs font-semibold text-neutral-900">
+                {selected.name}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+      {enabled ? (
+        <>
           <PageThreadsPanel tabId={tab.id} />
           <button
             type="button"
             onClick={() => void toggle(tab)}
             disabled={busy}
             aria-keyshortcuts={TOGGLE_COMMENT_MODE_SHORTCUT}
-            className={`${PRIMARY_BUTTON_CLASS} w-full flex-col gap-0.5 py-3 text-base`}
+            className="flex h-11 w-full items-center justify-between rounded-lg bg-neutral-900 px-3 text-sm font-semibold text-white hover:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <span>Comment mode</span>
-            <span className="text-xs font-normal text-neutral-300">
-              {TOGGLE_COMMENT_MODE_SHORTCUT}
+            <span className="flex items-center gap-2">
+              <Icon name="comment" size={17} />
+              Comment mode
             </span>
+            <kbd className="rounded border border-neutral-600 bg-neutral-800 px-1.5 py-1 font-sans text-[10px] font-normal text-neutral-300">
+              {TOGGLE_COMMENT_MODE_SHORTCUT}
+            </kbd>
           </button>
         </>
+      ) : view.workspaces.length === 0 ? (
+        <p className="text-sm text-neutral-500">
+          You are not in a workspace yet.{" "}
+          <a
+            href={`${webUrl}/app`}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-neutral-900 underline underline-offset-4"
+          >
+            Create one on the web
+          </a>
+          .
+        </p>
       ) : (
         <>
-          {view.workspaces.length === 0 ? (
-            <p className="text-sm text-neutral-600">
-              You are not in a workspace yet.{" "}
-              <a
-                href={`${webUrl}/app`}
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium text-neutral-900 underline underline-offset-4"
-              >
-                Create one on the web
-              </a>
-              .
-            </p>
-          ) : (
-            <>
-              {view.workspaces.length > 1 ? (
-                <label className="flex flex-col gap-1 text-sm font-medium text-neutral-900">
-                  Workspace
-                  <select
-                    value={workspaceId}
-                    onChange={(event) => {
-                      setWorkspaceId(event.target.value);
-                    }}
-                    disabled={busy}
-                    className={INPUT_CLASS}
-                  >
-                    {view.workspaces.map((workspace) => (
-                      <option key={workspace.id} value={workspace.id}>
-                        {workspace.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-              {selected?.role === "guest" ? (
-                <p className="text-xs text-neutral-600">{GUEST_HINT}</p>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => void enable(tab)}
-                disabled={busy}
-                className={`${PRIMARY_BUTTON_CLASS} w-full py-3 text-base`}
-              >
-                Enable on this site
-              </button>
-            </>
-          )}
+          {selected?.role === "guest" ? (
+            <div className="flex items-start gap-2.5 rounded-md bg-neutral-100 px-3 py-2.5 text-xs leading-relaxed text-neutral-600">
+              <Icon name="users" size={15} className="mt-px shrink-0 text-neutral-900" />
+              <p>{GUEST_HINT}</p>
+            </div>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => void enable(tab)}
+            disabled={busy}
+            className={`${PRIMARY_BUTTON_CLASS} h-10 w-full text-sm`}
+          >
+            Enable on this site
+          </button>
+          <p className="text-center text-[11px] leading-snug text-neutral-500">
+            {`Sitenote will be available whenever you visit ${host}.`}
+          </p>
         </>
       )}
       {notice === null ? null : (

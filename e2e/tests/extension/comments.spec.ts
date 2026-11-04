@@ -203,7 +203,7 @@ test("the popup summarises the page's comments and opens the sidebar on the page
 
   await popup.reload();
   await expect(popup.getByTestId("comments-summary")).toHaveText("1 open comment");
-  await popup.getByRole("button", { name: "Open on page" }).click();
+  await popup.getByRole("button", { name: "Open all comments on page" }).click();
 
   const sidebar = page.getByRole("complementary", { name: "Comments", exact: true });
   await expect(sidebar).toBeVisible();

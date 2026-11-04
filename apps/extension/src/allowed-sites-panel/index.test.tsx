@@ -24,9 +24,9 @@ describe("AllowedSitesPanel", () => {
     render(<AllowedSitesPanel onChanged={vi.fn()} />);
 
     expect(screen.getByRole("status").textContent).toBe("Loading...");
-    expect((await screen.findByRole("list", { name: "Allowed sites" })).textContent).toContain(
-      "https://example.test",
-    );
+    const list = await screen.findByRole("list", { name: "Allowed sites" });
+    expect(list.textContent).toContain("example.test");
+    expect(screen.getByRole("button", { name: "Remove example.test" })).toBeTruthy();
     expect(screen.queryByRole("status")).toBeNull();
     expect(mocks.listOriginAccess).toHaveBeenCalledOnce();
   });
@@ -51,7 +51,7 @@ describe("AllowedSitesPanel", () => {
     });
     render(<AllowedSitesPanel onChanged={onChanged} />);
 
-    await user.click(await screen.findByRole("button", { name: "Remove https://alpha.test" }));
+    await user.click(await screen.findByRole("button", { name: "Remove alpha.test" }));
 
     await vi.waitFor(() => {
       expect(screen.queryByText("https://alpha.test")).toBeNull();
@@ -70,7 +70,7 @@ describe("AllowedSitesPanel", () => {
     mocks.sendMessage.mockResolvedValue(failure("unknown"));
     render(<AllowedSitesPanel onChanged={onChanged} />);
 
-    await user.click(await screen.findByRole("button", { name: "Remove https://alpha.test" }));
+    await user.click(await screen.findByRole("button", { name: "Remove alpha.test" }));
 
     expect((await screen.findByRole("alert")).textContent).toBe("Something went wrong. Try again.");
     expect(screen.getByText("https://alpha.test")).toBeTruthy();

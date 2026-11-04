@@ -48,17 +48,27 @@ export function PopupApp({ googleEnabled, webUrl }: PopupAppProps) {
     };
   }, [showState]);
 
+  const signedIn = view.kind === "ready" && view.state.status === "signedIn";
+
   return (
-    <main className="flex w-[340px] flex-col gap-4 bg-white p-4 text-neutral-900">
-      <div className="flex items-center gap-2">
-        <span
-          aria-hidden="true"
-          className="flex size-6 items-center justify-center rounded-md bg-neutral-900 text-xs font-bold text-white"
-        >
-          S
-        </span>
-        <h1 className="text-base font-bold tracking-tight">Sitenote</h1>
-      </div>
+    <main
+      className={
+        signedIn
+          ? "flex w-[340px] flex-col bg-white text-neutral-900"
+          : "flex w-[340px] flex-col gap-4 bg-white p-4 text-neutral-900"
+      }
+    >
+      {signedIn ? null : (
+        <div className="flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className="flex size-6 items-center justify-center rounded-md bg-neutral-900 text-xs font-bold text-white"
+          >
+            S
+          </span>
+          <h1 className="text-base font-bold tracking-tight">Sitenote</h1>
+        </div>
+      )}
       {view.kind === "loading" ? (
         <p role="status" className="text-sm text-neutral-600">
           Loading...

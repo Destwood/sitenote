@@ -113,8 +113,9 @@ test("a mention picked from the list notifies the owner, a reply notifies the cr
     ]);
 
     await expect.poll(() => badgeText(ownerPopup)).toBe("1");
-    const ownerTab = ownerPopup.getByRole("button", { name: "Notifications (1)" });
+    const ownerTab = ownerPopup.getByRole("button", { name: "Notifications", exact: true });
     await expect(ownerTab).toBeVisible();
+    await expect(ownerTab).toContainText("1");
     await ownerTab.click();
     const mention = ownerPopup.getByTestId("notification-item");
     await expect(mention).toHaveCount(1);
@@ -140,7 +141,7 @@ test("a mention picked from the list notifies the owner, a reply notifies the cr
     await expect(ownerThread).toContainText("Thanks, on it");
 
     await expect.poll(() => badgeText(memberPopup)).toBe("1");
-    await memberPopup.getByRole("button", { name: "Notifications (1)" }).click();
+    await memberPopup.getByRole("button", { name: "Notifications", exact: true }).click();
     const reply = memberPopup.getByTestId("notification-item");
     await expect(reply).toHaveCount(1);
     await expect(reply).toHaveAttribute("data-unread", "true");

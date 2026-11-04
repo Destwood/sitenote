@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,10 +12,19 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../site-panel", async () => {
   const { useEffect } = await import("react");
   return {
-    SitePanel: ({ webUrl, onManageSites }: { webUrl: string; onManageSites: () => void }) => {
+    SitePanel: ({
+      webUrl,
+      onManageSites,
+      onWorkspaceName,
+    }: {
+      webUrl: string;
+      onManageSites: () => void;
+      onWorkspaceName: (name: string | null) => void;
+    }) => {
       useEffect(() => {
         mocks.sitePanelMounted();
-      }, []);
+        onWorkspaceName("Northwind");
+      }, [onWorkspaceName]);
       return (
         <>
           <div data-testid="site-panel">{webUrl}</div>
@@ -28,9 +37,24 @@ vi.mock("../site-panel", async () => {
   };
 });
 
-vi.mock("../notifications-panel", () => ({
-  NotificationsRow: () => <div data-testid="notifications-row" />,
-}));
+vi.mock("../notifications-panel", async () => {
+  const { useEffect } = await import("react");
+  return {
+    NOTIFICATIONS_PREVIEW_SIZE: 5,
+    NotificationsPanel: ({
+      onUnreadChange,
+      webUrl,
+    }: {
+      onUnreadChange: (unread: number) => void;
+      webUrl: string;
+    }) => {
+      useEffect(() => {
+        onUnreadChange(3);
+      }, [onUnreadChange]);
+      return <div data-testid="notifications-panel">{webUrl}</div>;
+    },
+  };
+});
 
 vi.mock("../allowed-sites-panel", () => ({
   AllowedSitesPanel: ({ onChanged }: { onChanged: () => void }) => (
@@ -41,6 +65,7 @@ vi.mock("../allowed-sites-panel", () => ({
 }));
 
 vi.mock("../account-panel", () => ({
+  initialOf: (name: string) => name.charAt(0),
   AccountPanel: ({ user }: { user: { displayName: string } }) => (
     <div data-testid="account-panel">{user.displayName}</div>
   ),
@@ -54,27 +79,129 @@ function renderView() {
   return render(<SignedInView user={SIGNED_IN.user} webUrl={WEB_URL} onSignedOut={vi.fn()} />);
 }
 
+function bell() {
+  return screen.getByRole("button", { name: "Notifications" });
+}
+
+function account() {
+  return screen.getByRole("button", { name: "Account" });
+}
+
+function notificationsTray(): HTMLElement {
+  const tray = document.getElementById("notifications-tray");
+  if (tray === null) {
+    throw new Error("The notifications tray is missing");
+  }
+  return tray;
+}
+
 beforeEach(() => {
   mocks.sitePanelMounted.mockReset();
 });
 
-describe("SignedInView", () => {
-  it("shows the site panel, the notifications row and the account on the main screen", () => {
+describe("SignedInView header", () => {
+  it("shows the bell with the unread count and the account trigger with the initial", async () => {
+    renderView();
+
+    expect(await within(bell()).findByText("3")).toBeTruthy();
+    expect(account().textContent).toBe("M");
+    expect(account().getAttribute("data-testid")).toBe("account-trigger");
+  });
+
+  it("keeps the notifications list mounted while its tray is closed", () => {
+    renderView();
+
+    expect(screen.getByTestId("notifications-panel").textContent).toBe(WEB_URL);
+    expect(notificationsTray().hidden).toBe(true);
+    expect(bell().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("opens the notifications tray from the bell and closes it when the bell is pressed again", async () => {
+    const user = userEvent.setup();
+    renderView();
+
+    await user.click(bell());
+    expect(notificationsTray().hidden).toBe(false);
+    expect(bell().getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("heading", { name: "Notifications" })).toBeTruthy();
+
+    await user.click(bell());
+    expect(notificationsTray().hidden).toBe(true);
+    expect(bell().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("closes the open tray on Escape", async () => {
+    const user = userEvent.setup();
+    renderView();
+    await user.click(bell());
+
+    await user.keyboard("{Escape}");
+
+    expect(notificationsTray().hidden).toBe(true);
+  });
+
+  it("closes the open tray when the user clicks outside the header", async () => {
+    const user = userEvent.setup();
+    renderView();
+    await user.click(bell());
+
+    await user.click(screen.getByTestId("site-panel"));
+
+    expect(notificationsTray().hidden).toBe(true);
+  });
+
+  it("keeps the tray open when the user clicks inside it", async () => {
+    const user = userEvent.setup();
+    renderView();
+    await user.click(bell());
+
+    await user.click(screen.getByTestId("notifications-panel"));
+
+    expect(notificationsTray().hidden).toBe(false);
+  });
+
+  it("opens the account tray with the account panel and closes the notifications tray", async () => {
+    const user = userEvent.setup();
+    renderView();
+    await user.click(bell());
+
+    await user.click(account());
+
+    expect(screen.getByTestId("account-panel").textContent).toBe("Max Member");
+    expect(account().getAttribute("aria-expanded")).toBe("true");
+    expect(notificationsTray().hidden).toBe(true);
+    expect(bell().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("closes the account tray when the account trigger is pressed again", async () => {
+    const user = userEvent.setup();
+    renderView();
+    await user.click(account());
+
+    await user.click(account());
+
+    expect(screen.queryByTestId("account-panel")).toBeNull();
+    expect(account().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("does not show the account panel on the main screen until the account is opened", () => {
+    renderView();
+
+    expect(screen.queryByTestId("account-panel")).toBeNull();
+  });
+});
+
+describe("SignedInView main screen", () => {
+  it("shows the site panel and the footer with the dashboard link and the workspace name", async () => {
     renderView();
 
     expect(screen.getByTestId("site-panel").textContent).toBe(WEB_URL);
-    expect(screen.getByTestId("notifications-row")).toBeTruthy();
-    expect(screen.getByTestId("account-panel").textContent).toBe("Max Member");
-    expect(screen.queryByRole("heading", { name: "Allowed sites" })).toBeNull();
-  });
-
-  it("links to the web dashboard in a new tab on the main screen", () => {
-    renderView();
-
+    expect(await screen.findByText("Northwind")).toBeTruthy();
     const link = screen.getByRole("link", { name: "Open dashboard" });
     expect(link.getAttribute("href")).toBe(`${WEB_URL}/app`);
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toContain("noreferrer");
+    expect(screen.queryByRole("heading", { name: "Allowed sites" })).toBeNull();
   });
 
   it("opens the allowed sites screen from the site panel and hides the site panel", async () => {
@@ -87,7 +214,18 @@ describe("SignedInView", () => {
     expect(screen.getByTestId("allowed-sites-list")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Back" })).toBeTruthy();
     expect(screen.queryByTestId("site-panel")).toBeNull();
-    expect(screen.queryByTestId("notifications-row")).toBeNull();
+  });
+
+  it("keeps the header and the footer on the allowed sites screen", async () => {
+    const user = userEvent.setup();
+    renderView();
+
+    await user.click(screen.getByRole("button", { name: "Manage sites" }));
+
+    expect(account()).toBeTruthy();
+    expect(bell()).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open dashboard" })).toBeTruthy();
+    expect(screen.queryByTestId("account-panel")).toBeNull();
   });
 
   it("returns to the main screen when Back is pressed", async () => {
