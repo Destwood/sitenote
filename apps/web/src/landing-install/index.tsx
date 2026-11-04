@@ -1,3 +1,6 @@
+import { EXTENSION_DOWNLOAD_URL } from "../extension-download";
+import { PUBLIC_FOCUS_CLASS } from "../public-styles";
+
 export function LandingInstall() {
   return (
     <section
@@ -15,36 +18,27 @@ export function LandingInstall() {
           </h2>
           <p className="leading-7 text-neutral-300">
             Sitenote is a Chrome extension (Manifest V3). Until the Chrome Web Store listing is
-            live, load the build from source.
+            live, download the latest build and load it unpacked.
           </p>
         </div>
         <div className="flex flex-col gap-6">
+          <a
+            href={EXTENSION_DOWNLOAD_URL}
+            download
+            className={`inline-flex w-fit items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-neutral-900 shadow-sm hover:bg-neutral-100 ${PUBLIC_FOCUS_CLASS}`}
+          >
+            Download extension (.zip)
+          </a>
           <ol className="flex list-decimal flex-col gap-4 pl-5 leading-7 text-neutral-200 marker:font-semibold marker:text-neutral-400">
-            <li>
-              Clone the repository and run{" "}
-              <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-sm">
-                pnpm install
-              </code>
-              .
-            </li>
-            <li>
-              Build the extension with{" "}
-              <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-sm">
-                pnpm --filter @sitenote/extension build
-              </code>
-              . The README lists the environment it needs.
-            </li>
+            <li>Download the zip and unzip it.</li>
             <li>
               Open{" "}
               <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-sm">
                 chrome://extensions
-              </code>
-              , turn on Developer mode, choose Load unpacked and select{" "}
-              <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-sm">
-                apps/extension/.output/chrome-mv3
-              </code>
-              .
+              </code>{" "}
+              and turn on Developer mode.
             </li>
+            <li>Choose Load unpacked and select the unzipped folder.</li>
           </ol>
           <p className="border-t border-white/10 pt-6 font-medium text-white">
             Chrome Web Store listing coming soon.

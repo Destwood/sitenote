@@ -13,6 +13,20 @@ interface AccountActionsProps {
   canConnectExtension: boolean;
 }
 
+interface SignOutFormProps {
+  className?: string;
+}
+
+function SignOutForm({ className }: SignOutFormProps) {
+  return (
+    <form method="post" action="/auth/sign-out" className={className}>
+      <button type="submit" className={DASH_BUTTON_SECONDARY_CLASS}>
+        Sign out
+      </button>
+    </form>
+  );
+}
+
 function AccountActions({ canConnectExtension }: AccountActionsProps) {
   return (
     <>
@@ -21,11 +35,7 @@ function AccountActions({ canConnectExtension }: AccountActionsProps) {
           Connect the extension
         </Link>
       ) : null}
-      <form method="post" action="/auth/sign-out">
-        <button type="submit" className={DASH_BUTTON_SECONDARY_CLASS}>
-          Sign out
-        </button>
-      </form>
+      <SignOutForm />
     </>
   );
 }
@@ -46,18 +56,23 @@ export function AppHeader({ displayName, canConnectExtension }: AppHeaderProps) 
 
 export function AppAccount({ displayName, canConnectExtension }: AppHeaderProps) {
   return (
-    <div className="flex flex-col gap-3 border-t border-neutral-200 pt-4">
-      <div className="flex min-w-0 items-center gap-3">
-        <Avatar name={displayName} />
-        <span
-          className="min-w-0 truncate text-sm font-medium text-neutral-900"
-          data-testid="display-name"
-        >
-          {displayName}
-        </span>
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <AccountActions canConnectExtension={canConnectExtension} />
+    <div className="flex flex-col gap-3">
+      {canConnectExtension ? (
+        <Link href="/extension/connect" className={DASH_LINK_CLASS}>
+          Connect the extension
+        </Link>
+      ) : null}
+      <div className="flex items-center justify-between gap-3 border-t border-neutral-200 pt-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <Avatar name={displayName} />
+          <span
+            className="min-w-0 truncate text-sm font-medium text-neutral-900"
+            data-testid="display-name"
+          >
+            {displayName}
+          </span>
+        </div>
+        <SignOutForm className="shrink-0" />
       </div>
     </div>
   );
