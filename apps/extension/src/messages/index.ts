@@ -221,7 +221,7 @@ export const offscreenCommandSchema = z.discriminatedUnion("type", [
     stopBytes: z.int().check(z.positive()),
   }),
   z.object({ type: z.literal("offscreen.stop"), discard: z.boolean() }),
-  z.object({ type: z.literal("offscreen.query"), tabId: tabIdSchema }),
+  z.object({ type: z.literal("offscreen.query"), tabId: z.optional(tabIdSchema) }),
   z.object({ type: z.literal("offscreen.release") }),
 ]);
 
@@ -395,6 +395,13 @@ export type PageOpenSidebarState = z.infer<typeof pageOpenSidebarStateSchema>;
 
 export const pageOpenSidebarResponseSchema = resultSchema(pageOpenSidebarStateSchema);
 
-export const offscreenResponseSchema = resultSchema(recordingStatusSchema);
+export const offscreenStatusSchema = z.extend(recordingStatusSchema, {
+  blobUrl: z.optional(z.string()),
+  size: z.optional(nonNegativeIntSchema),
+});
 
-export type OffscreenResponse = MessageResult<RecordingStatus>;
+export type OffscreenStatus = z.infer<typeof offscreenStatusSchema>;
+
+export const offscreenResponseSchema = resultSchema(offscreenStatusSchema);
+
+export type OffscreenResponse = MessageResult<OffscreenStatus>;

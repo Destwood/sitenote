@@ -39,6 +39,9 @@ export interface RecordingStore {
   query: (tabId: number) => RecordingStatus;
   take: (tabId: number) => PendingRecording | null;
   clear: () => PendingRecording | null;
+  snapshot: () => { active: ActiveRecording | null; pending: PendingRecording | null };
+  cancel: () => void;
+  release: () => PendingRecording | null;
 }
 
 export function pickMimeType(isSupported: (mime: string) => boolean): string | null {
@@ -97,6 +100,19 @@ export function createRecordingStore(options: RecordingStoreOptions = {}): Recor
     clear: () => {
       const dropped = pending;
       active = null;
+      pending = null;
+      return dropped;
+    },
+    snapshot: () => {
+      prune();
+      return { active, pending };
+    },
+    cancel: () => {
+      active = null;
+    },
+    release: () => {
+      prune();
+      const dropped = pending;
       pending = null;
       return dropped;
     },

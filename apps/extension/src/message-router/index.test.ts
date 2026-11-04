@@ -679,6 +679,21 @@ describe("createMessageRouter recordings", () => {
     );
   });
 
+  it("accepts the finish and beats from the offscreen recorder page", async () => {
+    const { route, recordings } = setup();
+    const OFFSCREEN = {
+      id: EXTENSION_ID,
+      url: `chrome-extension://${EXTENSION_ID}/offscreen.html`,
+    };
+
+    expect(await route(FINISHED, OFFSCREEN)).toEqual(success(null));
+    expect(await route({ type: "recording.heartbeat" }, OFFSCREEN)).toEqual(success(null));
+
+    expect(recordings.onFinished).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ tabId: 4, blobUrl: "blob:x" }),
+    );
+  });
+
   it("refuses to start, finish or beat from a content script", async () => {
     const { route, recordings } = setup();
 

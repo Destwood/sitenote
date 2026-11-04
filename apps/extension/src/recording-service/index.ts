@@ -1,7 +1,16 @@
 import type { RecordingRef } from "@sitenote/core";
 import { failure, success, type MessageResult } from "@sitenote/widget";
 
-import type { DataRequest, RecordingStatus } from "../messages";
+import type { EnabledEntry } from "../enablement-store";
+import type {
+  DataRequest,
+  OffscreenCommand,
+  OffscreenResponse,
+  RecordingReadyMessage,
+  RecordingStateMessage,
+  RecordingStatus,
+} from "../messages";
+import { originOfTabUrl } from "../tab-access";
 
 export type RecordingFinished = Extract<DataRequest, { type: "recording.finished" }>;
 
@@ -15,6 +24,33 @@ export interface RecordingService {
   onTabRemoved: (tabId: number) => void;
 }
 
+export interface OffscreenDocument {
+  hasDocument: () => Promise<boolean>;
+  createDocument: () => Promise<void>;
+  closeDocument: () => Promise<void>;
+}
+
+export interface RecordingServiceDeps {
+  tabs: { get: (tabId: number) => Promise<{ url?: string | undefined } | null> };
+  getEnabledSite: (origin: string) => Promise<EnabledEntry | null>;
+  offscreen: OffscreenDocument;
+  sendToOffscreen: (command: OffscreenCommand) => Promise<OffscreenResponse>;
+  sendToTab: (
+    tabId: number,
+    message: RecordingStateMessage | RecordingReadyMessage,
+  ) => Promise<void>;
+  badge: {
+    set: (tabId: number, text: string) => Promise<void>;
+    clear: (tabId: number) => Promise<void>;
+  };
+  maxMs: number;
+  stopBytes: number;
+}
+
+type QueryCommand = Extract<OffscreenCommand, { type: "offscreen.query" }>;
+
+export const RECORDING_BADGE_COLOR = "#dc2626";
+
 export function createNoopRecordingService(): RecordingService {
   return {
     start: () => Promise.resolve(failure("recording_failed")),
@@ -24,5 +60,131 @@ export function createNoopRecordingService(): RecordingService {
     discard: () => undefined,
     attach: () => Promise.resolve(null),
     onTabRemoved: () => undefined,
+  };
+}
+
+function quiet(task: Promise<unknown>): Promise<void> {
+  return task.then(
+    () => undefined,
+    () => undefined,
+  );
+}
+
+export function createRecordingService(deps: RecordingServiceDeps): RecordingService {
+  let creating: Promise<void> | null = null;
+
+  function ensureDocument(): Promise<void> {
+    creating ??= (async () => {
+      if (!(await deps.offscreen.hasDocument())) {
+        await deps.offscreen.createDocument();
+      }
+    })().finally(() => {
+      creating = null;
+    });
+    return creating;
+  }
+
+  async function ask(command: QueryCommand): Promise<RecordingStatus> {
+    try {
+      if (!(await deps.offscreen.hasDocument())) {
+        return { state: "idle" };
+      }
+      const reply = await deps.sendToOffscreen(command);
+      if (!reply.ok) {
+        return { state: "idle" };
+      }
+      const { state, startedAt, durationMs } = reply.data;
+      return { state, startedAt, durationMs };
+    } catch {
+      return { state: "idle" };
+    }
+  }
+
+  async function closeWhenIdle(): Promise<void> {
+    if (
+      (await deps.offscreen.hasDocument()) &&
+      (await ask({ type: "offscreen.query" })).state === "idle"
+    ) {
+      await quiet(deps.offscreen.closeDocument());
+    }
+  }
+
+  async function releaseTab(tabId: number): Promise<void> {
+    if ((await ask({ type: "offscreen.query", tabId })).state === "pending") {
+      await quiet(deps.sendToOffscreen({ type: "offscreen.release" }));
+    }
+    await closeWhenIdle();
+  }
+
+  return {
+    start: async ({ tabId, streamId }) => {
+      const origin = originOfTabUrl((await deps.tabs.get(tabId))?.url);
+      if (origin === null || (await deps.getEnabledSite(origin)) === null) {
+        return failure("forbidden");
+      }
+      try {
+        await ensureDocument();
+        const reply = await deps.sendToOffscreen({
+          type: "offscreen.start",
+          tabId,
+          streamId,
+          maxMs: deps.maxMs,
+          stopBytes: deps.stopBytes,
+        });
+        if (!reply.ok) {
+          return failure(
+            reply.error.code === "recording_busy" ? "recording_busy" : "recording_failed",
+          );
+        }
+        const { startedAt } = reply.data;
+        await quiet(deps.badge.set(tabId, "REC"));
+        await quiet(deps.sendToTab(tabId, { type: "recording.state", recording: true, startedAt }));
+        return success({ state: "recording", startedAt });
+      } catch {
+        return failure("recording_failed");
+      }
+    },
+    stop: async (tabId) => {
+      if (
+        tabId === undefined ||
+        (await ask({ type: "offscreen.query", tabId })).state === "recording"
+      ) {
+        await quiet(deps.sendToOffscreen({ type: "offscreen.stop", discard: false }));
+      }
+      return success(null);
+    },
+    status: async (tabId) =>
+      success(
+        tabId === undefined ? { state: "idle" } : await ask({ type: "offscreen.query", tabId }),
+      ),
+    onFinished: async (finished) => {
+      const { tabId } = finished;
+      await quiet(deps.badge.clear(tabId));
+      await quiet(deps.sendToTab(tabId, { type: "recording.state", recording: false }));
+      if ((await deps.tabs.get(tabId)) === null) {
+        await quiet(releaseTab(tabId));
+        return success(null);
+      }
+      if (finished.reason !== "error" && finished.size > 0) {
+        await quiet(
+          deps.sendToTab(tabId, { type: "recording.ready", durationMs: finished.durationMs }),
+        );
+      }
+      return success(null);
+    },
+    discard: (tabId) => {
+      void quiet(releaseTab(tabId));
+    },
+    attach: () => Promise.resolve(null),
+    onTabRemoved: (tabId) => {
+      void quiet(
+        (async () => {
+          if ((await ask({ type: "offscreen.query", tabId })).state === "recording") {
+            await deps.sendToOffscreen({ type: "offscreen.stop", discard: true });
+          }
+          await releaseTab(tabId);
+        })(),
+      );
+    },
   };
 }

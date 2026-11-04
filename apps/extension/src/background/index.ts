@@ -18,12 +18,15 @@ import {
   PAGE_PORT_NAME,
   type AuthStateChangedMessage,
   type NotificationsChangedMessage,
+  type OffscreenCommand,
+  type OffscreenResponse,
 } from "../messages";
 import { createNotificationCenter } from "../notification-center";
 import { createPendingEnable } from "../pending-enable";
 import { createChannelFactory, createNotificationChannelFactory } from "../realtime-channels";
 import { createRealtimeHub } from "../realtime-hub";
-import { createNoopRecordingService } from "../recording-service";
+import { createRecordingService, RECORDING_BADGE_COLOR } from "../recording-service";
+import { RECORDING_MAX_MS, RECORDING_STOP_BYTES } from "../recording-store";
 import { planRefresh, REFRESH_ALARM_NAME, type RefreshOutcome } from "../refresh-schedule";
 import { createResolvedPreference } from "../resolved-preference";
 import { cropDataUrl } from "../screenshot-crop";
@@ -123,6 +126,42 @@ export function startBackground(): void {
     listOrigins: async () => Object.keys(await store.list()),
   });
 
+  const recordings = createRecordingService({
+    tabs: {
+      get: async (tabId) => {
+        try {
+          return await browser.tabs.get(tabId);
+        } catch {
+          return null;
+        }
+      },
+    },
+    getEnabledSite: store.get,
+    offscreen: {
+      hasDocument: () => browser.offscreen.hasDocument(),
+      createDocument: () =>
+        browser.offscreen.createDocument({
+          url: "offscreen.html",
+          reasons: ["USER_MEDIA"],
+          justification: "Record the current tab",
+        }),
+      closeDocument: () => browser.offscreen.closeDocument(),
+    },
+    sendToOffscreen: (command) =>
+      browser.runtime.sendMessage<OffscreenCommand, OffscreenResponse>(command),
+    sendToTab: (tabId, message) =>
+      browser.tabs.sendMessage(tabId, message, { frameId: 0 }).then(() => undefined),
+    badge: {
+      set: async (tabId, text) => {
+        await browser.action.setBadgeBackgroundColor({ tabId, color: RECORDING_BADGE_COLOR });
+        await browser.action.setBadgeText({ tabId, text });
+      },
+      clear: (tabId) => browser.action.setBadgeText({ tabId, text: "" }),
+    },
+    maxMs: RECORDING_MAX_MS,
+    stopBytes: RECORDING_STOP_BYTES,
+  });
+
   const pending = createPendingEnable(browser.storage.local);
 
   async function enableAfterGrant(pattern: string): Promise<void> {
@@ -181,7 +220,7 @@ export function startBackground(): void {
     enablement,
     notifications,
     screenshots,
-    recordings: createNoopRecordingService(),
+    recordings,
     preferences: createResolvedPreference(browser.storage.local),
     selectionPlacement: createSelectionPlacementPreference(browser.storage.local),
     getEnabledSite: store.get,
@@ -213,6 +252,9 @@ export function startBackground(): void {
     if (port.name === PAGE_PORT_NAME) {
       hub.attach(createHubPort(port, browser.runtime.id));
     }
+  });
+  browser.tabs.onRemoved.addListener((tabId) => {
+    recordings.onTabRemoved(tabId);
   });
   browser.commands.onCommand.addListener(createCommandListener(toggleCommentMode));
   browser.contextMenus.onClicked.addListener(createContextMenuClickListener({ commentOnElement }));

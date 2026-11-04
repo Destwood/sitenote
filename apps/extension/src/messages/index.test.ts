@@ -717,6 +717,21 @@ describe("recording messages", () => {
         stopBytes: 1,
       }).success,
     ).toBe(false);
+    expect(offscreenCommandSchema.safeParse({ type: "offscreen.query" }).success).toBe(true);
     expect(offscreenResponseSchema.safeParse(success({ state: "idle" })).success).toBe(true);
+  });
+
+  it("answers a pending recording with its blob url and size", () => {
+    expect(
+      offscreenResponseSchema.safeParse(
+        success({ state: "pending", durationMs: 5000, blobUrl: "blob:x", size: 1024 }),
+      ).success,
+    ).toBe(true);
+    expect(offscreenResponseSchema.safeParse(success({ state: "pending", size: -1 })).success).toBe(
+      false,
+    );
+    expect(
+      offscreenResponseSchema.safeParse(success({ state: "paused", blobUrl: "blob:x" })).success,
+    ).toBe(false);
   });
 });

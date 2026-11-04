@@ -133,4 +133,41 @@ describe("createRecordingStore", () => {
     expect(store.clear()).toBeNull();
     expect(store.begin(2)).toBe(true);
   });
+
+  it("cancels only the active recording and keeps the pending one", () => {
+    const { store } = setup();
+    store.begin(1);
+    store.finish(recording(1, "blob:one"));
+    store.begin(2);
+
+    store.cancel();
+
+    expect(store.snapshot()).toMatchObject({
+      active: null,
+      pending: { tabId: 1, blobUrl: "blob:one" },
+    });
+  });
+
+  it("releases only the pending recording and keeps the active one", () => {
+    const { store } = setup();
+    store.begin(1);
+    store.finish(recording(1, "blob:one"));
+    store.begin(2);
+
+    expect(store.release()).toMatchObject({ tabId: 1, blobUrl: "blob:one" });
+    expect(store.release()).toBeNull();
+    expect(store.snapshot()).toMatchObject({ active: { tabId: 2 }, pending: null });
+  });
+
+  it("reports both slots in a snapshot", () => {
+    const { store, advance } = setup();
+    store.begin(1);
+    store.finish(recording(1));
+    store.begin(2);
+    advance(100);
+
+    const { active, pending } = store.snapshot();
+    expect(active).toEqual({ tabId: 2, startedAt: 1_000 });
+    expect(pending).toMatchObject({ tabId: 1, at: 1_000 });
+  });
 });
