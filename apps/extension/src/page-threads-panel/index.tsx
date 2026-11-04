@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { ERROR_CLASS, LINK_BUTTON_CLASS } from "../form-controls";
+import { Icon } from "../icon";
 import { listPageThreads, openPageSidebar } from "../message-client";
 import { ERROR_MESSAGES, type PageThreadSummary } from "@sitenote/widget";
 
@@ -64,7 +65,7 @@ export function PageThreadsPanel({ tabId, close = closePopup }: PageThreadsPanel
 
   if (view.kind === "loading") {
     return (
-      <p role="status" className="text-sm text-neutral-600">
+      <p role="status" className="text-sm text-neutral-500">
         Loading comments...
       </p>
     );
@@ -73,7 +74,7 @@ export function PageThreadsPanel({ tabId, close = closePopup }: PageThreadsPanel
   if (view.kind === "error") {
     return (
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-neutral-600">Open the page to see its comments.</p>
+        <p className="text-sm text-neutral-500">Open the page to see its comments.</p>
         <button type="button" onClick={retry} className={LINK_BUTTON_CLASS}>
           Try again
         </button>
@@ -82,22 +83,47 @@ export function PageThreadsPanel({ tabId, close = closePopup }: PageThreadsPanel
   }
 
   const openCount = view.threads.filter((thread) => thread.status === "open").length;
+  const hasThreads = view.threads.length > 0;
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2 text-sm">
-        <span data-testid="comments-summary" className="text-neutral-900">
-          {commentsSummary(view.threads.length, openCount)}
-        </span>
-        {view.threads.length > 0 ? (
-          <>
-            <span aria-hidden="true" className="text-neutral-400">
-              ·
+      <div className="flex flex-col rounded-lg border border-neutral-200">
+        <div className="flex items-center justify-between gap-3 rounded-t-lg bg-neutral-50 px-3 py-2.5">
+          <div className="flex items-center gap-2.5">
+            <span
+              aria-hidden="true"
+              className="flex size-7 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white"
+            >
+              {openCount}
             </span>
-            <button type="button" onClick={() => void openSidebar()} className={LINK_BUTTON_CLASS}>
-              Open on page
+            <span className="flex flex-col">
+              <span className="text-sm font-semibold text-neutral-900">Open comments</span>
+              <span className="text-xs text-neutral-500">On this page</span>
+            </span>
+          </div>
+          {hasThreads ? (
+            <button
+              type="button"
+              aria-label="Open comments"
+              onClick={() => void openSidebar()}
+              className="flex size-7 items-center justify-center rounded-md text-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
+            >
+              <Icon name="arrow" size={15} />
             </button>
-          </>
+          ) : null}
+        </div>
+        <p data-testid="comments-summary" className="px-3 py-2 text-xs text-neutral-700">
+          {commentsSummary(view.threads.length, openCount)}
+        </p>
+        {hasThreads ? (
+          <button
+            type="button"
+            onClick={() => void openSidebar()}
+            className="flex h-9 w-full items-center justify-center gap-1.5 rounded-b-lg border-t border-neutral-200 text-xs font-semibold text-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
+          >
+            Open all comments on page
+            <Icon name="external" size={13} />
+          </button>
         ) : null}
       </div>
       {openError === null ? null : (

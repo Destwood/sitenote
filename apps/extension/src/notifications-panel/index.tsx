@@ -1,12 +1,7 @@
 import { formatRelativeTime } from "@sitenote/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  ERROR_CLASS,
-  LINK_BUTTON_CLASS,
-  MENU_ITEM_CLASS,
-  SECONDARY_BUTTON_CLASS,
-} from "../form-controls";
+import { ERROR_CLASS, LINK_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
 import { onNotificationsChanged, sendMessage } from "../message-client";
 import { ERROR_MESSAGES, type ErrorCode } from "@sitenote/widget";
 import { openThread } from "../open-thread";
@@ -45,10 +40,6 @@ export function describePage(pageUrl: string): string {
   }
   const path = url.pathname === "/" ? "" : url.pathname;
   return `${url.host}${path}`;
-}
-
-export function notificationsLabel(unread: number): string {
-  return unread > 0 ? `Notifications (${String(unread)})` : "Notifications";
 }
 
 export function NotificationsPanel({ onUnreadChange, limit, webUrl }: NotificationsPanelProps) {
@@ -127,7 +118,7 @@ export function NotificationsPanel({ onUnreadChange, limit, webUrl }: Notificati
 
   if (view.kind === "loading") {
     return (
-      <p role="status" className="text-sm text-neutral-600">
+      <p role="status" className="text-sm text-neutral-500">
         Loading notifications...
       </p>
     );
@@ -146,9 +137,9 @@ export function NotificationsPanel({ onUnreadChange, limit, webUrl }: Notificati
   }
 
   return (
-    <section aria-label="Notifications" className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <p data-testid="notifications-summary" className="text-xs text-neutral-600">
+    <section aria-label="Notifications" className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2 px-2">
+        <p data-testid="notifications-summary" className="text-xs text-neutral-500">
           {view.unread === 0 ? "You are all caught up." : `${String(view.unread)} unread`}
         </p>
         <button
@@ -166,7 +157,7 @@ export function NotificationsPanel({ onUnreadChange, limit, webUrl }: Notificati
         </p>
       )}
       {view.items.length === 0 ? (
-        <p className="text-sm text-neutral-600">{EMPTY_NOTIFICATIONS_MESSAGE}</p>
+        <p className="px-2 text-sm text-neutral-500">{EMPTY_NOTIFICATIONS_MESSAGE}</p>
       ) : (
         <ul
           className={
@@ -198,7 +189,7 @@ export function NotificationsPanel({ onUnreadChange, limit, webUrl }: Notificati
                 {item.excerpt === "" ? null : (
                   <span className="line-clamp-2 text-sm break-words">{item.excerpt}</span>
                 )}
-                <span className="truncate text-xs text-neutral-600">
+                <span className="truncate text-xs text-neutral-500">
                   {describePage(item.pageUrl)} · {formatRelativeTime(item.createdAt, now)}
                 </span>
               </button>
@@ -206,45 +197,16 @@ export function NotificationsPanel({ onUnreadChange, limit, webUrl }: Notificati
           ))}
         </ul>
       )}
-      {limit !== undefined && webUrl !== undefined && view.items.length > limit ? (
+      {limit !== undefined && webUrl !== undefined ? (
         <a
           href={`${webUrl}/app`}
           target="_blank"
           rel="noreferrer"
-          className={`${LINK_BUTTON_CLASS} self-start`}
+          className="rounded-md border-t border-neutral-200 py-2 text-center text-xs font-semibold text-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
         >
-          Open dashboard for the rest
+          View all notifications
         </a>
       ) : null}
     </section>
-  );
-}
-
-export function NotificationsRow({ webUrl }: { webUrl: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const [unread, setUnread] = useState(0);
-
-  return (
-    <div className="flex flex-col gap-2">
-      <button
-        type="button"
-        aria-expanded={expanded}
-        aria-controls="notifications-row-panel"
-        onClick={() => {
-          setExpanded((value) => !value);
-        }}
-        className={`${MENU_ITEM_CLASS} justify-between`}
-      >
-        <span>{notificationsLabel(unread)}</span>
-        <span aria-hidden="true">{expanded ? "▴" : "▾"}</span>
-      </button>
-      <div id="notifications-row-panel" hidden={!expanded}>
-        <NotificationsPanel
-          onUnreadChange={setUnread}
-          limit={NOTIFICATIONS_PREVIEW_SIZE}
-          webUrl={webUrl}
-        />
-      </div>
-    </div>
   );
 }

@@ -119,7 +119,25 @@ describe("PageThreadsPanel", () => {
     render(<PageThreadsPanel tabId={TAB_ID} />);
 
     expect((await screen.findByTestId("comments-summary")).textContent).toBe("No open comments");
-    expect(screen.getByRole("button", { name: "Open on page" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open all comments on page" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open comments" })).toBeTruthy();
+  });
+
+  it("shows the open count in the overview and hides the open buttons when the page has no comments", async () => {
+    mocks.listPageThreads.mockResolvedValue(success([RESOLVED, OPEN_SECOND]));
+
+    const { unmount } = render(<PageThreadsPanel tabId={TAB_ID} />);
+
+    expect(await screen.findByText("Open comments")).toBeTruthy();
+    expect(screen.getByText("1", { selector: "span[aria-hidden='true']" })).toBeTruthy();
+    unmount();
+
+    mocks.listPageThreads.mockResolvedValue(success([]));
+    render(<PageThreadsPanel tabId={TAB_ID} />);
+
+    expect(await screen.findByTestId("comments-summary")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Open comments" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open all comments on page" })).toBeNull();
   });
 
   it("uses the singular for one open comment", async () => {
@@ -147,7 +165,20 @@ describe("PageThreadsPanel", () => {
     mocks.openPageSidebar.mockResolvedValue(success({ opened: true }));
 
     render(<PageThreadsPanel tabId={TAB_ID} close={close} />);
-    await user.click(await screen.findByRole("button", { name: "Open on page" }));
+    await user.click(await screen.findByRole("button", { name: "Open all comments on page" }));
+
+    expect(mocks.openPageSidebar).toHaveBeenCalledWith(TAB_ID);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the same sidebar from the arrow button in the overview", async () => {
+    const user = userEvent.setup();
+    const close = vi.fn();
+    mocks.listPageThreads.mockResolvedValue(success([OPEN_THIRD]));
+    mocks.openPageSidebar.mockResolvedValue(success({ opened: true }));
+
+    render(<PageThreadsPanel tabId={TAB_ID} close={close} />);
+    await user.click(await screen.findByRole("button", { name: "Open comments" }));
 
     expect(mocks.openPageSidebar).toHaveBeenCalledWith(TAB_ID);
     expect(close).toHaveBeenCalledTimes(1);
@@ -160,7 +191,7 @@ describe("PageThreadsPanel", () => {
     mocks.openPageSidebar.mockResolvedValue(failure("page_unavailable"));
 
     render(<PageThreadsPanel tabId={TAB_ID} close={close} />);
-    await user.click(await screen.findByRole("button", { name: "Open on page" }));
+    await user.click(await screen.findByRole("button", { name: "Open all comments on page" }));
 
     expect((await screen.findByRole("alert")).textContent).toBe(ERROR_MESSAGES.page_unavailable);
     expect(close).not.toHaveBeenCalled();

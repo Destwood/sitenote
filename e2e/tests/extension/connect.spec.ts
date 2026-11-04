@@ -1,5 +1,5 @@
 import { expect, test } from "../../fixtures/extension";
-import { newEmail, openPopup } from "../../support/extension";
+import { newEmail, openAccountMenu, openPopup } from "../../support/extension";
 import { WEB_ORIGIN, signInOnWeb, webAuthCookies } from "../../support/web-auth";
 
 test("a member connects the extension and stays signed in on the web", async ({
@@ -21,6 +21,7 @@ test("a member connects the extension and stays signed in on the web", async ({
   await expect.poll(() => webAuthCookies(context)).not.toEqual([]);
 
   const popup = await openPopup(context, extensionId);
+  await openAccountMenu(popup);
   await expect(popup.getByTestId("display-name")).toHaveAttribute("title", email);
 
   await page.getByRole("link", { name: "Open dashboard" }).click();

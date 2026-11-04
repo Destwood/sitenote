@@ -16,6 +16,7 @@ import {
   enableSite,
   evaluateIn,
   isRecord,
+  openAccountMenu,
   openPopup,
   pointPopupAt,
   signIn,
@@ -130,6 +131,7 @@ test("a guest joins from the invite link, the extension takes over the session a
   await expect(joinPage).toHaveURL(/\/sign-in\?next=/);
 
   const popup = await openPopup(context, extensionId);
+  await openAccountMenu(popup);
   await expect(popup.getByTestId("display-name")).toHaveText(GUEST_NAME);
   await expect(popup.getByTestId("display-name")).toHaveAttribute("title", "Guest session");
 
@@ -218,6 +220,7 @@ test("the extension keeps a signed-in member and the page explains how to switch
   expect((await webAuthCookies(context)).length).toBeGreaterThan(0);
 
   await popup.reload();
+  await openAccountMenu(popup);
   await expect(popup.getByTestId("display-name")).toHaveText("Max Member");
   await expect(popup.getByTestId("display-name")).toHaveAttribute("title", MEMBER);
 
@@ -237,6 +240,7 @@ test("a guest session that was kept on the web connects after the extension sign
   const joinPage = await joinAsGuest(context, link);
   await expect(joinPage.getByRole("button", { name: "Connect again" })).toBeVisible();
 
+  await openAccountMenu(popup);
   await popup.getByRole("button", { name: "Sign out" }).click();
   await expect(popup.getByRole("button", { name: "Sign in on the website" })).toBeVisible();
   await joinPage.getByRole("button", { name: "Connect again" }).click();
@@ -244,5 +248,6 @@ test("a guest session that was kept on the web connects after the extension sign
   await expect(joinPage.getByTestId("extension-connected")).toBeVisible();
   await expect.poll(() => webAuthCookies(context)).toEqual([]);
   await popup.reload();
+  await openAccountMenu(popup);
   await expect(popup.getByTestId("display-name")).toHaveText(GUEST_NAME);
 });

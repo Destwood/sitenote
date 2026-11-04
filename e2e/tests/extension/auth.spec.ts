@@ -5,6 +5,7 @@ import {
   evaluateIn,
   isRecord,
   newEmail,
+  openAccountMenu,
   openPopup,
   signIn,
   stopServiceWorker,
@@ -101,6 +102,7 @@ test("the seeded member signs in through the website and the popup shows Max Mem
   const popup = await openPopup(context, extensionId);
 
   await signIn(popup, SEEDED_MEMBER);
+  await openAccountMenu(popup);
 
   await expect(popup.getByTestId("display-name")).toHaveText("Max Member");
   await expect(popup.getByTestId("display-name")).toHaveAttribute("title", SEEDED_MEMBER);
@@ -111,13 +113,16 @@ test("the seeded member signs in through the website and the popup shows Max Mem
 test("the session survives a popup reload and a new popup", async ({ context, extensionId }) => {
   const popup = await openPopup(context, extensionId);
   await signIn(popup, newEmail());
+  await openAccountMenu(popup);
   const name = (await popup.getByTestId("display-name").textContent()) ?? "";
 
   await popup.reload();
+  await openAccountMenu(popup);
   await expect(popup.getByTestId("display-name")).toHaveText(name);
 
   await popup.close();
   const reopened = await openPopup(context, extensionId);
+  await openAccountMenu(reopened);
   await expect(reopened.getByTestId("display-name")).toHaveText(name);
 });
 
@@ -128,6 +133,7 @@ test("the session survives a stopped service worker", async ({ context, extensio
 
   await stopServiceWorker(context, popup);
   await popup.reload();
+  await openAccountMenu(popup);
 
   await expect(popup.getByTestId("display-name")).toHaveAttribute("title", email);
 });
@@ -154,6 +160,7 @@ test("an expired access token is refreshed when the service worker wakes up", as
   await stopServiceWorker(context, popup);
   await popup.reload();
 
+  await openAccountMenu(popup);
   await expect(popup.getByTestId("display-name")).toHaveAttribute("title", email);
   const after = await readStoredSession(popup);
   expect(after.access_token).not.toBe(before.access_token);
@@ -175,6 +182,7 @@ test("a refresh alarm is scheduled shortly before the access token expires", asy
     .poll(async () => Math.abs(((await readAlarmTime(popup)) ?? 0) - expectedTime))
     .toBeLessThan(2000);
 
+  await openAccountMenu(popup);
   await popup.getByRole("button", { name: "Sign out" }).click();
   await expect(popup.getByRole("button", { name: "Sign in on the website" })).toBeVisible();
   await expect.poll(() => readAlarmTime(popup)).toBeNull();
@@ -188,6 +196,7 @@ test("signing out returns to the form and removes the stored session", async ({
   await signIn(popup, newEmail());
   expect((await storedAuthKeys(popup)).length).toBeGreaterThan(0);
 
+  await openAccountMenu(popup);
   await popup.getByRole("button", { name: "Sign out" }).click();
 
   await expect(popup.getByRole("button", { name: "Sign in on the website" })).toBeVisible();
@@ -207,8 +216,10 @@ test("an open popup follows sign-in and sign-out done in another popup", async (
   const email = newEmail();
 
   await signIn(first, email);
+  await openAccountMenu(second);
   await expect(second.getByTestId("display-name")).toHaveAttribute("title", email);
 
+  await openAccountMenu(first);
   await first.getByRole("button", { name: "Sign out" }).click();
   await expect(second.getByRole("button", { name: "Sign in on the website" })).toBeVisible();
 });

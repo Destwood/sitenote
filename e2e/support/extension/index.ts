@@ -38,6 +38,14 @@ export async function signIn(popup: Page, email: string): Promise<void> {
   await page.close();
   await context.clearCookies({ name: /^sb-/ });
   await popup.reload();
+  await expect(popup.getByTestId("account-trigger")).toBeVisible();
+}
+
+export async function openAccountMenu(popup: Page): Promise<void> {
+  const trigger = popup.getByRole("button", { name: "Account", exact: true });
+  if ((await trigger.getAttribute("aria-expanded")) !== "true") {
+    await trigger.click();
+  }
   await expect(popup.getByTestId("display-name")).toBeVisible();
 }
 

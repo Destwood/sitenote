@@ -9,11 +9,9 @@ import {
   NOTIFICATIONS_PAGE_SIZE,
   NOTIFICATIONS_PREVIEW_SIZE,
   NotificationsPanel,
-  NotificationsRow,
   OPEN_FAILED_MESSAGE,
   describeNotification,
   describePage,
-  notificationsLabel,
 } from ".";
 
 const mocks = vi.hoisted(() => ({
@@ -99,16 +97,6 @@ describe("describeNotification", () => {
   it("names the actor and the kind", () => {
     expect(describeNotification(record())).toBe("Max Member mentioned you");
     expect(describeNotification(REPLY)).toBe("Olena Owner replied in a thread");
-  });
-});
-
-describe("notificationsLabel", () => {
-  it.each([
-    [0, "Notifications"],
-    [1, "Notifications (1)"],
-    [12, "Notifications (12)"],
-  ])("%i unread -> %s", (unread, expected) => {
-    expect(notificationsLabel(unread)).toBe(expected);
   });
 });
 
@@ -348,7 +336,7 @@ describe("NotificationsPanel", () => {
     expect(screen.getAllByTestId("notification-item")).toHaveLength(1);
   });
 
-  it("shows only the first notifications when a limit is set and links to the dashboard for the rest", async () => {
+  it("shows only the first notifications when a limit is set and links to all of them", async () => {
     answer({ items: records(NOTIFICATIONS_PREVIEW_SIZE + 2), unread: 7 });
 
     render(
@@ -362,12 +350,12 @@ describe("NotificationsPanel", () => {
     expect(await screen.findAllByTestId("notification-item")).toHaveLength(
       NOTIFICATIONS_PREVIEW_SIZE,
     );
-    const link = screen.getByRole("link", { name: "Open dashboard for the rest" });
+    const link = screen.getByRole("link", { name: "View all notifications" });
     expect(link.getAttribute("href")).toBe("https://app.sitenote.test/app");
     expect(link.getAttribute("target")).toBe("_blank");
   });
 
-  it("hides the dashboard link when everything fits in the limit", async () => {
+  it("keeps the view all link when everything fits in the limit", async () => {
     answer({ items: records(NOTIFICATIONS_PREVIEW_SIZE), unread: 0 });
 
     render(
@@ -381,10 +369,10 @@ describe("NotificationsPanel", () => {
     expect(await screen.findAllByTestId("notification-item")).toHaveLength(
       NOTIFICATIONS_PREVIEW_SIZE,
     );
-    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.getByRole("link", { name: "View all notifications" })).toBeTruthy();
   });
 
-  it("hides the dashboard link when no web address is given", async () => {
+  it("hides the view all link when no web address is given", async () => {
     answer({ items: records(NOTIFICATIONS_PREVIEW_SIZE + 1), unread: 0 });
 
     render(<NotificationsPanel onUnreadChange={vi.fn()} limit={NOTIFICATIONS_PREVIEW_SIZE} />);
@@ -393,35 +381,5 @@ describe("NotificationsPanel", () => {
       NOTIFICATIONS_PREVIEW_SIZE,
     );
     expect(screen.queryByRole("link")).toBeNull();
-  });
-});
-
-describe("NotificationsRow", () => {
-  it("shows the unread count in its label once loaded", async () => {
-    answer({ items: [record(), REPLY], unread: 2 });
-
-    render(<NotificationsRow webUrl="https://app.sitenote.test" />);
-
-    expect(await screen.findByRole("button", { name: "Notifications (2)" })).toBeTruthy();
-  });
-
-  it("starts collapsed and toggles the list on click", async () => {
-    const user = userEvent.setup();
-    answer({ items: [record()], unread: 1 });
-    render(<NotificationsRow webUrl="https://app.sitenote.test" />);
-
-    const trigger = await screen.findByRole("button", { name: "Notifications (1)" });
-    const panel = document.getElementById("notifications-row-panel");
-    expect(trigger.getAttribute("aria-expanded")).toBe("false");
-    expect(panel?.hidden).toBe(true);
-
-    await user.click(trigger);
-    expect(trigger.getAttribute("aria-expanded")).toBe("true");
-    expect(panel?.hidden).toBe(false);
-    expect(screen.getByTestId("notification-item")).toBeTruthy();
-
-    await user.click(trigger);
-    expect(trigger.getAttribute("aria-expanded")).toBe("false");
-    expect(panel?.hidden).toBe(true);
   });
 });

@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   pendingSet: vi.fn(),
   pendingClear: vi.fn(),
   onManageSites: vi.fn(),
+  onWorkspaceName: vi.fn(),
 }));
 
 vi.mock("../message-client", () => ({
@@ -76,7 +77,13 @@ function route(handlers: Record<string, () => unknown>) {
 }
 
 function renderPanel() {
-  return render(<SitePanel webUrl="https://web.test" onManageSites={mocks.onManageSites} />);
+  return render(
+    <SitePanel
+      webUrl="https://web.test"
+      onManageSites={mocks.onManageSites}
+      onWorkspaceName={mocks.onWorkspaceName}
+    />,
+  );
 }
 
 async function openMenu(user: ReturnType<typeof userEvent.setup>) {
@@ -115,8 +122,18 @@ describe("SitePanel unavailable pages", () => {
     expect((await screen.findByTestId("site-unavailable")).textContent).toBe(
       "Sitenote is not available on this page.",
     );
+    expect(screen.getByText("Chrome system pages can’t be annotated.")).toBeTruthy();
     expect(mocks.sendMessage).not.toHaveBeenCalled();
     expect(screen.queryByRole("button")).toBeNull();
+    expect(mocks.onWorkspaceName).toHaveBeenLastCalledWith(null);
+  });
+
+  it("shows a status with a spinner while the page is checked", () => {
+    mocks.getTargetTab.mockReturnValue(new Promise(() => undefined));
+
+    renderPanel();
+
+    expect(screen.getByRole("status").textContent).toBe("Checking this page...");
   });
 });
 
@@ -186,6 +203,27 @@ describe("SitePanel when the site is not enabled", () => {
 
     expect(await screen.findByRole("button", { name: "Enable on this site" })).toBeTruthy();
     expect(screen.queryByLabelText("Workspace")).toBeNull();
+    expect(screen.getByText(NORTHWIND.name)).toBeTruthy();
+  });
+
+  it("explains that the site will be available on the host", async () => {
+    notEnabled();
+
+    renderPanel();
+
+    expect(
+      await screen.findByText(`Sitenote will be available whenever you visit ${HOST}.`),
+    ).toBeTruthy();
+  });
+
+  it("reports the workspace picked for a site that is not enabled", async () => {
+    localStorage.setItem(LAST_WORKSPACE_KEY, AGENCY.id);
+    notEnabled();
+
+    renderPanel();
+
+    await screen.findByLabelText("Workspace");
+    expect(mocks.onWorkspaceName).toHaveBeenLastCalledWith(AGENCY.name);
   });
 
   it("points to the web app when the user has no workspace", async () => {
@@ -310,6 +348,27 @@ describe("SitePanel when the site is enabled", () => {
     route({ "sites.forOrigin": () => success(SITE) });
   }
 
+  it("reports the enabled workspace to the dashboard footer", async () => {
+    enabled();
+
+    renderPanel();
+
+    await screen.findByTestId("site-state");
+    expect(mocks.onWorkspaceName).toHaveBeenLastCalledWith(NORTHWIND.name);
+  });
+
+  it("orders the card, the comments overview and then the comment mode button", async () => {
+    enabled();
+
+    renderPanel();
+
+    const origin = await screen.findByTestId("site-origin");
+    const threads = await screen.findByTestId("page-threads-panel");
+    const mode = screen.getByRole("button", { name: COMMENT_MODE });
+    expect(origin.compareDocumentPosition(threads) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(threads.compareDocumentPosition(mode) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("shows the host, the state, the comment mode button with its shortcut and the menu", async () => {
     const user = userEvent.setup();
     enabled();
@@ -319,6 +378,9 @@ describe("SitePanel when the site is enabled", () => {
     expect((await screen.findByTestId("site-state")).textContent).toBe("Enabled in Northwind");
     expect(screen.getByTestId("site-origin").textContent).toBe(HOST);
     expect(screen.getByRole("button", { name: COMMENT_MODE }).textContent).toContain("Alt+Shift+C");
+    expect(
+      screen.getByRole("button", { name: COMMENT_MODE }).getAttribute("aria-keyshortcuts"),
+    ).toBe("Alt+Shift+C");
     expect(screen.queryByLabelText("Workspace")).toBeNull();
     expect(screen.queryByRole("button", { name: "Disable on this site" })).toBeNull();
     expect(screen.queryByRole("checkbox")).toBeNull();
@@ -336,7 +398,7 @@ describe("SitePanel when the site is enabled", () => {
     });
     const { unmount } = renderPanel();
     expect(await screen.findByTestId("site-state")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Switch workspace" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Switch" })).toBeNull();
     unmount();
 
     route({
@@ -345,7 +407,7 @@ describe("SitePanel when the site is enabled", () => {
     });
     renderPanel();
 
-    expect(await screen.findByRole("button", { name: "Switch workspace" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Switch" })).toBeTruthy();
   });
 
   it("disables the site and preselects another workspace when switching", async () => {
@@ -361,7 +423,7 @@ describe("SitePanel when the site is enabled", () => {
     });
     renderPanel();
 
-    await user.click(await screen.findByRole("button", { name: "Switch workspace" }));
+    await user.click(await screen.findByRole("button", { name: "Switch" }));
 
     expect(mocks.sendMessage).toHaveBeenCalledWith({ type: "sites.disable", origin: ORIGIN });
     expect((await screen.findByLabelText<HTMLSelectElement>("Workspace")).value).toBe(AGENCY.id);
@@ -377,7 +439,7 @@ describe("SitePanel when the site is enabled", () => {
     });
     renderPanel();
 
-    await user.click(await screen.findByRole("button", { name: "Switch workspace" }));
+    await user.click(await screen.findByRole("button", { name: "Switch" }));
 
     expect((await screen.findByRole("alert")).textContent).toBe("Something went wrong. Try again.");
     expect(screen.getByTestId("site-state").textContent).toBe("Enabled in Northwind");
