@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { type DataRequest } from "../messages";
 import { failure, success } from "@sitenote/widget";
+import type { ThreadRecordings } from "../recording-upload";
 import type { ThreadScreenshots } from "../screenshot-upload";
 import {
   SIGNED_URL_REFRESH_MARGIN_MS,
@@ -46,6 +47,7 @@ const CONTEXT: ThreadContext = {
   capturedAt: "2026-10-22T09:30:02.000Z",
 };
 const CAPTURE_ID = "60000000-0000-4000-8000-000000000001";
+const RECORDING = { path: `${WORKSPACE_ID}/${THREAD_ID}.webm`, durationMs: 5000, size: 1024 };
 
 interface Response {
   data: unknown;
@@ -167,6 +169,7 @@ function setup(
     signed?: unknown[];
     invokes?: Response[];
     attach?: ThreadScreenshots["attach"];
+    recordAttach?: ThreadRecordings["attach"];
   } = {},
 ) {
   const fake = createFake({
@@ -190,13 +193,18 @@ function setup(
     attach: vi.fn<ThreadScreenshots["attach"]>(extra.attach ?? (() => Promise.resolve(null))),
     discard: vi.fn<ThreadScreenshots["discard"]>(),
   };
+  const recordings = {
+    attach: vi.fn<ThreadRecordings["attach"]>(extra.recordAttach ?? (() => Promise.resolve(null))),
+    discard: vi.fn<ThreadRecordings["discard"]>(),
+  };
   const service = createDataService({
     client: fake.client,
     getEnabledSite,
     screenshots,
+    recordings,
     ...(extra.now === undefined ? {} : { now: extra.now }),
   });
-  return { service, getEnabledSite, screenshots, ...fake };
+  return { service, getEnabledSite, screenshots, recordings, ...fake };
 }
 
 function profile(id: string, name: string) {
@@ -233,6 +241,10 @@ function threadRow(overrides: Record<string, unknown> = {}) {
     comments: [commentRow()],
     ...overrides,
   };
+}
+
+function storedContext(args: unknown): unknown {
+  return (args as { p_context: unknown }).p_context;
 }
 
 function callsOf(queries: Query[], target: string): Call[][] {
@@ -625,6 +637,119 @@ describe("createThread", () => {
     expect(callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0]).toMatchObject({
       p_context: { pageTitle: "ab\uFFFD" },
     });
+  });
+
+  it("attaches the pending recording of the sender tab and stores its reference", async () => {
+    const { service, queries, recordings } = setup(
+      { "rpc:create_thread": [ok({ id: THREAD_ID })], threads: [ok(threadRow())] },
+      {
+        recordAttach: (_tabId, workspaceId, threadId) =>
+          Promise.resolve({
+            path: `${workspaceId}/${threadId}.webm`,
+            durationMs: 5000,
+            size: 1024,
+          }),
+      },
+    );
+
+    await service.createThread(REQUEST, { tabId: 4 });
+
+    const threadId = String(recordings.attach.mock.calls[0]?.[2]);
+    expect(recordings.attach).toHaveBeenCalledExactlyOnceWith(4, WORKSPACE_ID, threadId);
+    expect(callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0]).toMatchObject({
+      p_id: threadId,
+      p_context: {
+        ...CONTEXT,
+        recording: { path: `${WORKSPACE_ID}/${threadId}.webm`, durationMs: 5000, size: 1024 },
+      },
+    });
+    expect(recordings.discard).toHaveBeenCalledExactlyOnceWith(4);
+  });
+
+  it("reuses the screenshot thread id for the recording", async () => {
+    const OTHER_THREAD_ID = "30000000-0000-4000-8000-0000000000ff";
+    const { service, queries, recordings } = setup(
+      { "rpc:create_thread": [ok({ id: OTHER_THREAD_ID })], threads: [ok(threadRow())] },
+      {
+        attach: () => Promise.resolve({ threadId: OTHER_THREAD_ID, path: null }),
+        recordAttach: () => Promise.resolve(RECORDING),
+      },
+    );
+
+    await service.createThread({ ...WITH_CAPTURE }, { tabId: 4 });
+
+    expect(recordings.attach).toHaveBeenCalledExactlyOnceWith(4, WORKSPACE_ID, OTHER_THREAD_ID);
+    expect(callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0]).toMatchObject({
+      p_id: OTHER_THREAD_ID,
+    });
+  });
+
+  it("drops a recording forged in the request", async () => {
+    const { service, queries, recordings } = setup({
+      "rpc:create_thread": [ok({ id: THREAD_ID })],
+      threads: [ok(threadRow())],
+    });
+
+    await service.createThread({ ...REQUEST, context: { ...CONTEXT, recording: RECORDING } });
+
+    const args = callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0];
+    expect(args).not.toHaveProperty("p_id");
+    expect(storedContext(args)).not.toHaveProperty("recording");
+    expect(recordings.attach).not.toHaveBeenCalled();
+  });
+
+  it("keeps a forged recording out when the sender's upload failed", async () => {
+    const { service, queries } = setup({
+      "rpc:create_thread": [ok({ id: THREAD_ID })],
+      threads: [ok(threadRow())],
+    });
+
+    await service.createThread(
+      { ...REQUEST, context: { ...CONTEXT, recording: RECORDING } },
+      { tabId: 4 },
+    );
+
+    const args = callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0];
+    expect(args).not.toHaveProperty("p_id");
+    expect(storedContext(args)).not.toHaveProperty("recording");
+  });
+
+  it("creates the thread without recording when the upload failed", async () => {
+    const { service, queries, recordings } = setup({
+      "rpc:create_thread": [ok({ id: THREAD_ID })],
+      threads: [ok(threadRow())],
+    });
+
+    const result = await service.createThread(REQUEST, { tabId: 4 });
+
+    expect(result.ok && result.data.id).toBe(THREAD_ID);
+    const args = callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0];
+    expect(args).not.toHaveProperty("p_id");
+    expect(storedContext(args)).toEqual(CONTEXT);
+    expect(recordings.discard).toHaveBeenCalledExactlyOnceWith(4);
+  });
+
+  it("keeps the recording of the sender for a retry when the function fails", async () => {
+    const { service, recordings } = setup(
+      { "rpc:create_thread": [broken({ code: "23514", message: "x" })] },
+      { recordAttach: () => Promise.resolve(RECORDING) },
+    );
+
+    await service.createThread(REQUEST, { tabId: 4 });
+
+    expect(recordings.discard).not.toHaveBeenCalled();
+  });
+
+  it("does not look for a recording without a sender tab", async () => {
+    const { service, recordings } = setup({
+      "rpc:create_thread": [ok({ id: THREAD_ID })],
+      threads: [ok(threadRow())],
+    });
+
+    await service.createThread(REQUEST);
+
+    expect(recordings.attach).not.toHaveBeenCalled();
+    expect(recordings.discard).not.toHaveBeenCalled();
   });
 
   it("is forbidden for a site that is not enabled for the page", async () => {

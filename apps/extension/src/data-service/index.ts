@@ -4,6 +4,7 @@ import {
   parsePageUrl,
   parseThreadContext,
   withoutConsoleErrors,
+  withRecording,
   type Anchor,
   type ThreadContext,
 } from "@sitenote/core";
@@ -32,7 +33,7 @@ import type {
   ThreadRecord,
   WorkspaceInfo,
 } from "@sitenote/widget";
-import { RECORDING_BUCKET } from "../recording-upload";
+import { RECORDING_BUCKET, type ThreadRecordings } from "../recording-upload";
 import { SCREENSHOT_BUCKET, type ThreadScreenshots } from "../screenshot-upload";
 const PROFILE_COLUMNS = "user_id, display_name, avatar_url" as const;
 const COMMENT_COLUMNS =
@@ -130,6 +131,7 @@ export interface DataServiceDeps {
   client: SitenoteClient;
   getEnabledSite: (origin: string) => Promise<EnabledSite | null>;
   screenshots: ThreadScreenshots;
+  recordings: ThreadRecordings;
   now?: () => number;
 }
 
@@ -392,7 +394,7 @@ export function createDataService(deps: DataServiceDeps): DataService {
         return result.error === null ? success(result.data.map(toThread)) : fail(result.error);
       }),
 
-    createThread: ({ siteId, pageUrl, anchor, context, captureId, body, mentions }) =>
+    createThread: ({ siteId, pageUrl, anchor, context, captureId, body, mentions }, sender) =>
       guarded(async () => {
         const origin = parsePageUrl(pageUrl)?.site;
         const enabled = origin === undefined ? null : await deps.getEnabledSite(origin);
@@ -404,14 +406,21 @@ export function createDataService(deps: DataServiceDeps): DataService {
           captureId === undefined
             ? null
             : await deps.screenshots.attach(captureId, enabled.workspaceId);
+        const threadId = attachment?.threadId ?? crypto.randomUUID();
+        const tabId = sender?.tabId;
+        const recording =
+          tabId === undefined
+            ? null
+            : await deps.recordings.attach(tabId, enabled.workspaceId, threadId);
+        const stored = recording === null ? fitted : withRecording(fitted, recording);
         const created = await client.rpc("create_thread", {
           p_site_id: siteId,
           p_page_url: pageUrl,
           p_anchor: anchor,
-          p_context: enabled.captureErrors ? fitted : withoutConsoleErrors(fitted),
+          p_context: enabled.captureErrors ? stored : withoutConsoleErrors(stored),
           p_body: body,
           p_mentions: mentions,
-          ...(attachment === null ? {} : { p_id: attachment.threadId }),
+          ...(attachment === null && recording === null ? {} : { p_id: threadId }),
           ...(attachment?.path == null ? {} : { p_screenshot_path: attachment.path }),
         });
         if (created.error !== null) {
@@ -419,6 +428,9 @@ export function createDataService(deps: DataServiceDeps): DataService {
         }
         if (captureId !== undefined) {
           deps.screenshots.discard(captureId);
+        }
+        if (tabId !== undefined) {
+          deps.recordings.discard(tabId);
         }
         return fetchThread(created.data.id);
       }),

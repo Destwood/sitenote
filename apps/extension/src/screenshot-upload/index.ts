@@ -27,7 +27,7 @@ export function extensionOf(contentType: string): "png" | "webp" {
   return contentType === "image/png" ? "png" : "webp";
 }
 
-function isDuplicate(error: unknown): boolean {
+export function isDuplicate(error: unknown): boolean {
   if (typeof error !== "object" || error === null) {
     return false;
   }

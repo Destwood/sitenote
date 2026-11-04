@@ -1,6 +1,6 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { Anchor, ThreadContext } from "@sitenote/core";
+import { SITENOTE_ROOT_TAG, type Anchor, type ThreadContext } from "@sitenote/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { WidgetBackend } from "../backend";
@@ -176,5 +176,25 @@ describe("mountWidget", () => {
         }),
       );
     });
+  });
+
+  it("does not comment on a click inside another sitenote root", async () => {
+    const root = document.createElement(SITENOTE_ROOT_TAG);
+    root.innerHTML = '<button id="pill">Stop</button>';
+    document.body.append(root);
+    const { backend, createThread } = fakeBackend([]);
+    handle = mountWidget({ host, backend, document, window });
+    await vi.waitFor(() => {
+      expect(backend.getSiteInfo).toHaveBeenCalled();
+    });
+
+    handle.setCommentMode(true);
+    document
+      .getElementById("pill")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(screen.queryByRole("textbox", { name: "Comment" })).toBeNull();
+    expect(createThread).not.toHaveBeenCalled();
   });
 });

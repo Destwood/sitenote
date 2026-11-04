@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { EnabledEntry } from "../enablement-store";
 import type { OffscreenCommand, OffscreenResponse } from "../messages";
+import type { ThreadRecordings } from "../recording-upload";
 import { createRecordingService, type RecordingFinished, type RecordingServiceDeps } from ".";
 
 const ORIGIN = "https://example.test";
@@ -43,6 +44,10 @@ function setup(
   const commands: OffscreenCommand[] = [];
   const pushes: { tabId: number; message: unknown }[] = [];
   const reply = options.reply ?? defaultReply;
+  const recordings = {
+    attach: vi.fn<ThreadRecordings["attach"]>(() => Promise.resolve(null)),
+    discard: vi.fn<ThreadRecordings["discard"]>(),
+  };
   const deps: RecordingServiceDeps = {
     tabs: {
       get: vi.fn(() =>
@@ -77,8 +82,9 @@ function setup(
     },
     maxMs: 120_000,
     stopBytes: 39_000_000,
+    recordings,
   };
-  return { service: createRecordingService(deps), deps, commands, pushes };
+  return { service: createRecordingService(deps), deps, commands, pushes, recordings };
 }
 
 describe("createRecordingService start", () => {
@@ -290,21 +296,32 @@ describe("createRecordingService discard and tab removal", () => {
     expect(commands.some((command) => command.type === "offscreen.stop")).toBe(false);
   });
 
-  it("releases the pending recording of a discarded tab", async () => {
-    const { service, deps, commands } = setup({
-      document: true,
-      reply: (command) =>
-        command.type === "offscreen.query" && command.tabId === 4
-          ? success({ state: "pending", durationMs: 5 })
-          : success({ state: "idle" }),
-    });
+  it("hands the discard of a tab to the recordings and closes an idle document", async () => {
+    const { service, deps, recordings } = setup({ document: true });
 
     service.discard(4);
 
     await vi.waitFor(() => {
       expect(deps.offscreen.closeDocument).toHaveBeenCalledOnce();
     });
-    expect(commands).toContainEqual({ type: "offscreen.release" });
+    expect(recordings.discard).toHaveBeenCalledExactlyOnceWith(4);
+  });
+
+  it("keeps the document open while another recording is active on discard", async () => {
+    const { service, deps } = setup({
+      document: true,
+      reply: (command) =>
+        command.type === "offscreen.query" && command.tabId === undefined
+          ? success({ state: "recording", startedAt: 1_000 })
+          : success({ state: "idle" }),
+    });
+
+    service.discard(4);
+
+    await vi.waitFor(() => {
+      expect(deps.sendToOffscreen).toHaveBeenCalledWith({ type: "offscreen.query" });
+    });
+    expect(deps.offscreen.closeDocument).not.toHaveBeenCalled();
   });
 
   it("swallows failures while cancelling a removed tab", async () => {
@@ -319,9 +336,14 @@ describe("createRecordingService discard and tab removal", () => {
     });
   });
 
-  it("does not attach a recording yet", async () => {
-    const { service } = setup();
+  it("delegates attach to the recordings without discarding", async () => {
+    const { service, recordings } = setup();
+    const ref = { path: "workspace/thread.webm", durationMs: 5, size: 9 };
+    recordings.attach.mockResolvedValueOnce(ref);
 
-    expect(await service.attach(4, "workspace", "thread")).toBeNull();
+    expect(await service.attach(4, "workspace", "thread")).toEqual(ref);
+
+    expect(recordings.attach).toHaveBeenCalledExactlyOnceWith(4, "workspace", "thread");
+    expect(recordings.discard).not.toHaveBeenCalled();
   });
 });

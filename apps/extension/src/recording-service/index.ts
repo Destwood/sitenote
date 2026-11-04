@@ -10,6 +10,7 @@ import type {
   RecordingStateMessage,
   RecordingStatus,
 } from "../messages";
+import { type ThreadRecordings } from "../recording-upload";
 import { originOfTabUrl } from "../tab-access";
 
 export type RecordingFinished = Extract<DataRequest, { type: "recording.finished" }>;
@@ -45,6 +46,7 @@ export interface RecordingServiceDeps {
   };
   maxMs: number;
   stopBytes: number;
+  recordings: ThreadRecordings;
 }
 
 type QueryCommand = Extract<OffscreenCommand, { type: "offscreen.query" }>;
@@ -173,9 +175,10 @@ export function createRecordingService(deps: RecordingServiceDeps): RecordingSer
       return success(null);
     },
     discard: (tabId) => {
-      void quiet(releaseTab(tabId));
+      deps.recordings.discard(tabId);
+      void quiet(closeWhenIdle());
     },
-    attach: () => Promise.resolve(null),
+    attach: (tabId, workspaceId, threadId) => deps.recordings.attach(tabId, workspaceId, threadId),
     onTabRemoved: (tabId) => {
       void quiet(
         (async () => {
