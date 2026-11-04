@@ -16,7 +16,7 @@ interface WorkspacePickerProps {
 
 const LIST_KEYS = ["ArrowDown", "ArrowUp", "Home", "End", "Enter", " ", "Escape"];
 
-function monogramOf(name: string): string {
+export function monogramOf(name: string): string {
   return name.trim().charAt(0).toUpperCase();
 }
 
@@ -129,10 +129,11 @@ export function WorkspacePicker({ value, options, onChange, disabled }: Workspac
   }
 
   return (
-    <div ref={rootRef} className="rounded-b-lg border-t border-neutral-200 bg-neutral-50">
+    <div ref={rootRef} className="relative">
       <button
         ref={triggerRef}
         type="button"
+        aria-label="Workspace"
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={expanded}
@@ -145,19 +146,16 @@ export function WorkspacePicker({ value, options, onChange, disabled }: Workspac
           }
         }}
         onKeyDown={handleTriggerKeyDown}
-        className="flex w-full min-w-0 items-center gap-2.5 rounded-b-lg px-2.5 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex max-w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
       >
         <span
           aria-hidden="true"
-          className="flex size-6 shrink-0 items-center justify-center rounded-md bg-neutral-900 text-[11px] font-bold text-white"
+          className="flex size-5 shrink-0 items-center justify-center rounded-md bg-neutral-900 text-[10px] font-bold text-white"
         >
           {monogramOf(selectedName)}
         </span>
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="text-[11px] text-neutral-500">Workspace</span>
-          <span className="truncate text-[13px] font-semibold text-neutral-900">
-            {selectedName}
-          </span>
+        <span className="max-w-[8.5rem] truncate text-[11px] font-semibold text-neutral-700">
+          {selectedName}
         </span>
         <Icon
           name="chevron"
@@ -174,7 +172,7 @@ export function WorkspacePicker({ value, options, onChange, disabled }: Workspac
           tabIndex={-1}
           aria-activedescendant={optionId(active)}
           onKeyDown={handleListKeyDown}
-          className="mx-1.5 mb-1.5 max-h-40 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+          className="absolute right-0 bottom-full z-30 mb-1 max-h-40 w-56 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-1 shadow-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
         >
           {options.map((option, index) => {
             const isSelected = option.id === value;

@@ -2,11 +2,14 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { WorkspaceInfo } from "@sitenote/widget";
 import { type AuthState } from "../messages";
+import type { WorkspaceControl } from "../site-panel";
 import { SignedInView } from ".";
 
 const mocks = vi.hoisted(() => ({
   sitePanelMounted: vi.fn(),
+  workspaceControl: null as WorkspaceControl | null,
 }));
 
 vi.mock("../site-panel", async () => {
@@ -15,16 +18,16 @@ vi.mock("../site-panel", async () => {
     SitePanel: ({
       webUrl,
       onManageSites,
-      onWorkspaceName,
+      onWorkspaceControl,
     }: {
       webUrl: string;
       onManageSites: () => void;
-      onWorkspaceName: (name: string | null) => void;
+      onWorkspaceControl: (control: WorkspaceControl | null) => void;
     }) => {
       useEffect(() => {
         mocks.sitePanelMounted();
-        onWorkspaceName("Northwind");
-      }, [onWorkspaceName]);
+        onWorkspaceControl(mocks.workspaceControl);
+      }, [onWorkspaceControl]);
       return (
         <>
           <div data-testid="site-panel">{webUrl}</div>
@@ -95,8 +98,30 @@ function notificationsTray(): HTMLElement {
   return tray;
 }
 
+const NORTHWIND: WorkspaceInfo = {
+  id: "10000000-0000-4000-8000-000000000001",
+  name: "Northwind",
+  role: "owner",
+};
+const AGENCY: WorkspaceInfo = {
+  id: "10000000-0000-4000-8000-000000000002",
+  name: "Agency",
+  role: "guest",
+};
+
+function publishControl(overrides: Partial<WorkspaceControl> = {}) {
+  mocks.workspaceControl = {
+    value: NORTHWIND.id,
+    options: [NORTHWIND],
+    onChange: vi.fn(),
+    disabled: false,
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   mocks.sitePanelMounted.mockReset();
+  mocks.workspaceControl = null;
 });
 
 describe("SignedInView header", () => {
@@ -193,6 +218,7 @@ describe("SignedInView header", () => {
 
 describe("SignedInView main screen", () => {
   it("shows the site panel and the footer with the dashboard link and the workspace name", async () => {
+    publishControl();
     renderView();
 
     expect(screen.getByTestId("site-panel").textContent).toBe(WEB_URL);
@@ -202,6 +228,41 @@ describe("SignedInView main screen", () => {
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toContain("noreferrer");
     expect(screen.queryByRole("heading", { name: "Allowed sites" })).toBeNull();
+  });
+
+  it("shows a static workspace label in the footer when the user has one workspace", async () => {
+    publishControl();
+    renderView();
+
+    expect(await screen.findByText("Northwind")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Workspace" })).toBeNull();
+  });
+
+  it("shows the workspace picker in the footer when the user has several workspaces", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    publishControl({ value: AGENCY.id, options: [NORTHWIND, AGENCY], onChange });
+    renderView();
+
+    const trigger = await screen.findByRole("button", { name: "Workspace" });
+    expect(trigger.textContent).toContain("Agency");
+    expect(trigger.closest("footer")).not.toBeNull();
+
+    await user.click(trigger);
+    await user.click(screen.getByRole("option", { name: "Northwind" }));
+
+    expect(onChange).toHaveBeenCalledWith(NORTHWIND.id);
+  });
+
+  it("shows no workspace in the footer while the site panel publishes none", async () => {
+    renderView();
+
+    await vi.waitFor(() => {
+      expect(mocks.sitePanelMounted).toHaveBeenCalled();
+    });
+    expect(screen.queryByRole("button", { name: "Workspace" })).toBeNull();
+    expect(screen.queryByText("Northwind")).toBeNull();
+    expect(screen.getByRole("link", { name: "Open dashboard" })).toBeTruthy();
   });
 
   it("opens the allowed sites screen from the site panel and hides the site panel", async () => {

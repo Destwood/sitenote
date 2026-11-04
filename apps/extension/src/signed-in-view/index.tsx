@@ -5,7 +5,8 @@ import { AllowedSitesPanel } from "../allowed-sites-panel";
 import { Icon } from "../icon";
 import { type AuthState } from "../messages";
 import { NOTIFICATIONS_PREVIEW_SIZE, NotificationsPanel } from "../notifications-panel";
-import { SitePanel } from "../site-panel";
+import { SitePanel, type WorkspaceControl } from "../site-panel";
+import { WorkspacePicker, monogramOf } from "../workspace-picker";
 
 type SignedInState = Extract<AuthState, { status: "signedIn" }>;
 type Tray = "notifications" | "account";
@@ -18,7 +19,7 @@ interface SignedInViewProps {
 
 interface PopupFooterProps {
   webUrl: string;
-  workspaceName: string | null;
+  workspaceControl: WorkspaceControl | null;
 }
 
 const ICON_BUTTON_CLASS =
@@ -32,7 +33,7 @@ export function SignedInView({ user, webUrl, onSignedOut }: SignedInViewProps) {
   const [siteVersion, setSiteVersion] = useState(0);
   const [tray, setTray] = useState<Tray | null>(null);
   const [unread, setUnread] = useState(0);
-  const [workspaceName, setWorkspaceName] = useState<string | null>(null);
+  const [workspaceControl, setWorkspaceControl] = useState<WorkspaceControl | null>(null);
   const headerRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -157,16 +158,16 @@ export function SignedInView({ user, webUrl, onSignedOut }: SignedInViewProps) {
             onManageSites={() => {
               setScreen("manage");
             }}
-            onWorkspaceName={setWorkspaceName}
+            onWorkspaceControl={setWorkspaceControl}
           />
         </div>
       )}
-      <PopupFooter webUrl={webUrl} workspaceName={workspaceName} />
+      <PopupFooter webUrl={webUrl} workspaceControl={workspaceControl} />
     </div>
   );
 }
 
-function PopupFooter({ webUrl, workspaceName }: PopupFooterProps) {
+function PopupFooter({ webUrl, workspaceControl }: PopupFooterProps) {
   return (
     <footer className="flex h-10 items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-50 px-4">
       <a
@@ -178,8 +179,25 @@ function PopupFooter({ webUrl, workspaceName }: PopupFooterProps) {
         <Icon name="table" size={13} />
         Open dashboard
       </a>
-      {workspaceName === null ? null : (
-        <span className="truncate text-[11px] text-neutral-400">{workspaceName}</span>
+      {workspaceControl === null ? null : workspaceControl.options.length > 1 ? (
+        <WorkspacePicker
+          value={workspaceControl.value}
+          options={workspaceControl.options}
+          onChange={workspaceControl.onChange}
+          disabled={workspaceControl.disabled}
+        />
+      ) : (
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span
+            aria-hidden="true"
+            className="flex size-5 shrink-0 items-center justify-center rounded-md bg-neutral-900 text-[10px] font-bold text-white"
+          >
+            {monogramOf(workspaceControl.options[0]?.name ?? "")}
+          </span>
+          <span className="max-w-[8.5rem] truncate text-[11px] font-semibold text-neutral-700">
+            {workspaceControl.options[0]?.name}
+          </span>
+        </span>
       )}
     </footer>
   );

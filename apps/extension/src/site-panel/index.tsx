@@ -6,7 +6,6 @@ import { PageThreadsPanel } from "../page-threads-panel";
 import { TOGGLE_COMMENT_MODE_SHORTCUT } from "../manifest-config";
 import { sendMessage, toggleCommentMode } from "../message-client";
 import { SiteMenu } from "../site-menu";
-import { WorkspacePicker } from "../workspace-picker";
 import { createPendingEnable } from "../pending-enable";
 import { ERROR_MESSAGES, type ErrorCode } from "@sitenote/widget";
 import { getTargetTab, hasOriginAccess, requestOriginAccess, type TargetTab } from "../tab-access";
@@ -32,10 +31,17 @@ interface Target {
   origin: string;
 }
 
+export interface WorkspaceControl {
+  value: string;
+  options: WorkspaceInfo[];
+  onChange: (id: string) => void;
+  disabled: boolean;
+}
+
 interface SitePanelProps {
   webUrl: string;
   onManageSites: () => void;
-  onWorkspaceName: (name: string | null) => void;
+  onWorkspaceControl: (control: WorkspaceControl | null) => void;
 }
 
 function readLastWorkspace(): string | null {
@@ -67,20 +73,6 @@ export function hostOf(origin: string): string {
   return URL.parse(origin)?.host ?? origin;
 }
 
-function monogramOf(name: string): string {
-  return name.trim().charAt(0).toUpperCase();
-}
-
-function workspaceNameOf(view: View, workspaceId: string): string | null {
-  if (view.kind === "enabled") {
-    return view.site.workspaceName;
-  }
-  if (view.kind === "disabled") {
-    return view.workspaces.find((workspace) => workspace.id === workspaceId)?.name ?? null;
-  }
-  return null;
-}
-
 function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -109,7 +101,7 @@ async function resolveView(): Promise<View> {
   return target === null ? { kind: "unavailable" } : loadView(target);
 }
 
-export function SitePanel({ webUrl, onManageSites, onWorkspaceName }: SitePanelProps) {
+export function SitePanel({ webUrl, onManageSites, onWorkspaceControl }: SitePanelProps) {
   const [view, setView] = useState<View>({ kind: "loading" });
   const [workspaceId, setWorkspaceId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -138,11 +130,6 @@ export function SitePanel({ webUrl, onManageSites, onWorkspaceName }: SitePanelP
       active = false;
     };
   }, [show]);
-
-  const workspaceName = workspaceNameOf(view, workspaceId);
-  useEffect(() => {
-    onWorkspaceName(workspaceName);
-  }, [onWorkspaceName, workspaceName]);
 
   async function enableAfterPrompt(tab: Target) {
     await pending.set({ tabId: tab.id, origin: tab.origin, workspaceId });
@@ -201,37 +188,57 @@ export function SitePanel({ webUrl, onManageSites, onWorkspaceName }: SitePanelP
     setBusy(false);
   }
 
-  async function disable(tab: Target): Promise<boolean> {
-    if (busy) {
-      return false;
-    }
-    setBusy(true);
-    setFailed(null);
-    setNotice(null);
-    const result = await sendMessage({ type: "sites.disable", origin: tab.origin });
-    if (!result.ok) {
-      setFailed(ERROR_MESSAGES[result.error.code]);
+  const disable = useCallback(
+    async (tab: Target): Promise<boolean> => {
+      if (busy) {
+        return false;
+      }
+      setBusy(true);
+      setFailed(null);
+      setNotice(null);
+      const result = await sendMessage({ type: "sites.disable", origin: tab.origin });
+      if (!result.ok) {
+        setFailed(ERROR_MESSAGES[result.error.code]);
+        setBusy(false);
+        return false;
+      }
+      await load();
       setBusy(false);
-      return false;
-    }
-    await load();
-    setBusy(false);
-    return true;
-  }
+      return true;
+    },
+    [busy, load],
+  );
 
-  async function switchWorkspace(
-    tab: Target,
-    currentWorkspaceId: string,
-    workspaces: WorkspaceInfo[],
-  ) {
-    if (!(await disable(tab))) {
+  const handleWorkspaceChange = useCallback(
+    async (id: string) => {
+      if (view.kind === "enabled") {
+        if (id !== view.site.workspaceId && (await disable(view.tab))) {
+          setWorkspaceId(id);
+        }
+        return;
+      }
+      if (view.kind === "disabled") {
+        setWorkspaceId(id);
+      }
+    },
+    [disable, view],
+  );
+
+  useEffect(() => {
+    if ((view.kind !== "enabled" && view.kind !== "disabled") || view.workspaces.length === 0) {
+      onWorkspaceControl(null);
       return;
     }
-    const other = workspaces.find((workspace) => workspace.id !== currentWorkspaceId);
-    if (other !== undefined) {
-      setWorkspaceId(other.id);
-    }
-  }
+    onWorkspaceControl({
+      value: view.kind === "enabled" ? view.site.workspaceId : workspaceId,
+      options: view.workspaces,
+      onChange: (id) => void handleWorkspaceChange(id),
+      disabled: busy,
+    });
+    return () => {
+      onWorkspaceControl(null);
+    };
+  }, [busy, handleWorkspaceChange, onWorkspaceControl, view, workspaceId]);
 
   async function changeErrorCapture(tab: Target, enabled: boolean) {
     if (busy) {
@@ -357,54 +364,6 @@ export function SitePanel({ webUrl, onManageSites, onWorkspaceName }: SitePanelP
             onManageSites={onManageSites}
           />
         </div>
-        {view.kind === "enabled" ? (
-          <div className="flex items-center gap-2.5 rounded-b-lg border-t border-neutral-200 bg-neutral-50 px-2.5 py-2">
-            <span
-              aria-hidden="true"
-              className="flex size-6 shrink-0 items-center justify-center rounded-md bg-neutral-900 text-[11px] font-bold text-white"
-            >
-              {monogramOf(view.site.workspaceName)}
-            </span>
-            <div className="flex min-w-0 flex-1 flex-col">
-              <span className="text-[11px] text-neutral-500">Workspace</span>
-              <span className="truncate text-xs font-semibold text-neutral-900">
-                {view.site.workspaceName}
-              </span>
-            </div>
-            {view.workspaces.length > 1 ? (
-              <button
-                type="button"
-                onClick={() => void switchWorkspace(tab, view.site.workspaceId, view.workspaces)}
-                disabled={busy}
-                className="rounded-md px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Switch
-              </button>
-            ) : null}
-          </div>
-        ) : view.workspaces.length > 1 ? (
-          <WorkspacePicker
-            value={workspaceId}
-            options={view.workspaces}
-            onChange={setWorkspaceId}
-            disabled={busy}
-          />
-        ) : selected === undefined ? null : (
-          <div className="flex items-center gap-2.5 rounded-b-lg border-t border-neutral-200 bg-neutral-50 px-2.5 py-2">
-            <span
-              aria-hidden="true"
-              className="flex size-6 shrink-0 items-center justify-center rounded-md bg-neutral-900 text-[11px] font-bold text-white"
-            >
-              {monogramOf(selected.name)}
-            </span>
-            <div className="flex min-w-0 flex-1 flex-col">
-              <span className="text-[11px] text-neutral-500">Workspace</span>
-              <span className="truncate text-xs font-semibold text-neutral-900">
-                {selected.name}
-              </span>
-            </div>
-          </div>
-        )}
       </div>
       {enabled ? (
         <>
