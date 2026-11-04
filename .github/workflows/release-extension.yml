@@ -1,0 +1,64 @@
+name: Release extension
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/extension/**"
+      - "packages/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/release-extension.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: release-extension
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  TURBO_TELEMETRY_DISABLED: "1"
+
+jobs:
+  release:
+    name: Release extension
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      WXT_SUPABASE_URL: ${{ vars.WXT_SUPABASE_URL }}
+      WXT_SUPABASE_PUBLISHABLE_KEY: ${{ vars.WXT_SUPABASE_PUBLISHABLE_KEY }}
+      WXT_WEB_URL: ${{ vars.WXT_WEB_URL }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Require the build variables
+        run: |
+          for name in WXT_SUPABASE_URL WXT_SUPABASE_PUBLISHABLE_KEY WXT_WEB_URL; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Repository variable $name is not set"
+              exit 1
+            fi
+          done
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @sitenote/extension build
+      - run: pnpm check:manifest
+      - run: pnpm --filter @sitenote/extension zip
+      - name: Copy the Chrome zip to a fixed name
+        run: |
+          zip_path=$(find apps/extension/.output -maxdepth 1 -name '*-chrome.zip')
+          if [ "$(printf '%s\n' "$zip_path" | grep -c .)" != "1" ]; then
+            echo "Expected exactly one Chrome zip in apps/extension/.output, found:"
+            echo "$zip_path"
+            exit 1
+          fi
+          cp "$zip_path" sitenote-extension.zip
+      - name: Publish the rolling release
+        run: |
+          gh release delete extension-latest --cleanup-tag --yes || true
+          gh release create extension-latest sitenote-extension.zip --target "$GITHUB_SHA" --title "Sitenote extension (latest)" --notes "Built from $GITHUB_SHA. Unzip and load unpacked at chrome://extensions." --latest

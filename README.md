@@ -82,6 +82,8 @@ To load the extension, build it and open `chrome://extensions`, turn on Develope
 pnpm --filter @sitenote/extension build
 ```
 
+The latest build as a zip is at https://github.com/Destwood/sitenote/releases/download/extension-latest/sitenote-extension.zip, and the Release extension workflow publishes it on every push to `main` that changes the extension or its packages.
+
 Without Docker, develop against a cloud Supabase project instead: run `supabase link`, `supabase db push` and `supabase config push`, copy `.env.cloud.example` to `.env.cloud`, fill it in, and run `pnpm db:env:cloud`. `.env.cloud` holds secrets and stays out of git.
 
 `pnpm db:stop` stops the local stack. `pnpm db:reset` re-applies migrations and the seed, and `pnpm db:types` regenerates `packages/db/src/database-types` after a migration.
