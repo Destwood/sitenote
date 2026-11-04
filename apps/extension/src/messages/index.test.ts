@@ -12,6 +12,8 @@ import {
   commentOnElementSchema,
   dataRequestSchema,
   notificationsChangedSchema,
+  offscreenCommandSchema,
+  offscreenResponseSchema,
   pageClientMessageSchema,
   pageEventSchema,
   pageOpenSidebarResponseSchema,
@@ -20,6 +22,8 @@ import {
   pageOpenThreadSchema,
   pageThreadsRequestSchema,
   pageThreadsResponseSchema,
+  recordingReadySchema,
+  recordingStateSchema,
   requestSchema,
 } from ".";
 
@@ -611,5 +615,108 @@ describe("comment mode messages", () => {
     expect(pageOpenSidebarResponseSchema.safeParse(success({ opened: true })).success).toBe(true);
     expect(pageOpenSidebarResponseSchema.safeParse(failure("page_unavailable")).success).toBe(true);
     expect(pageOpenSidebarResponseSchema.safeParse(success({ opened: "yes" })).success).toBe(false);
+  });
+});
+
+describe("recording messages", () => {
+  const START = { type: "recording.start", tabId: 4, streamId: "stream-1" } as const;
+  const FINISHED = {
+    type: "recording.finished",
+    tabId: 4,
+    blobUrl: "blob:https://example.test/1",
+    durationMs: 5000,
+    size: 1024,
+    reason: "user",
+  } as const;
+
+  it("accepts the recording requests", () => {
+    for (const message of [
+      START,
+      FINISHED,
+      { type: "recording.stop" },
+      { type: "recording.stop", tabId: 4 },
+      { type: "recording.status" },
+      { type: "recording.status", tabId: 4 },
+      { type: "recording.heartbeat" },
+      { type: "threads.recordingUrl", threadId: THREAD_ID },
+    ]) {
+      expect(dataRequestSchema.safeParse(message).success).toBe(true);
+    }
+  });
+
+  it.each([
+    ["an empty stream id", { ...START, streamId: "" }],
+    ["a stream id over 512 characters", { ...START, streamId: "x".repeat(513) }],
+    ["a missing stream id", { type: "recording.start", tabId: 4 }],
+    ["a negative tab", { ...START, tabId: -1 }],
+    ["a fractional tab", { ...START, tabId: 1.5 }],
+    ["a negative duration", { ...FINISHED, durationMs: -1 }],
+    ["a fractional size", { ...FINISHED, size: 1.5 }],
+    ["an unknown finish reason", { ...FINISHED, reason: "crash" }],
+    ["a finish without a blob url", { ...FINISHED, blobUrl: undefined }],
+  ])("rejects %s", (_name, message) => {
+    expect(dataRequestSchema.safeParse(message).success).toBe(false);
+  });
+
+  it("validates the recording responses", () => {
+    expect(
+      RESPONSE_SCHEMAS["recording.start"].safeParse(success({ state: "recording", startedAt: 1 }))
+        .success,
+    ).toBe(true);
+    expect(
+      RESPONSE_SCHEMAS["recording.status"].safeParse(success({ state: "pending", durationMs: 5 }))
+        .success,
+    ).toBe(true);
+    expect(
+      RESPONSE_SCHEMAS["recording.status"].safeParse(success({ state: "paused" })).success,
+    ).toBe(false);
+    for (const type of ["recording.stop", "recording.finished", "recording.heartbeat"] as const) {
+      expect(RESPONSE_SCHEMAS[type].safeParse(success(null)).success).toBe(true);
+    }
+    expect(
+      RESPONSE_SCHEMAS["threads.recordingUrl"].safeParse(success("https://storage.test/r.webm"))
+        .success,
+    ).toBe(true);
+    expect(RESPONSE_SCHEMAS["threads.recordingUrl"].safeParse(success(null)).success).toBe(true);
+    expect(
+      RESPONSE_SCHEMAS["threads.recordingUrl"].safeParse(success("javascript:alert(1)")).success,
+    ).toBe(false);
+  });
+
+  it("accepts the state and ready pushes", () => {
+    expect(
+      recordingStateSchema.safeParse({ type: "recording.state", recording: true, startedAt: 1 })
+        .success,
+    ).toBe(true);
+    expect(
+      recordingStateSchema.safeParse({ type: "recording.state", recording: false }).success,
+    ).toBe(true);
+    expect(
+      recordingReadySchema.safeParse({ type: "recording.ready", durationMs: 1000 }).success,
+    ).toBe(true);
+    expect(
+      recordingReadySchema.safeParse({ type: "recording.ready", durationMs: -1 }).success,
+    ).toBe(false);
+  });
+
+  it("accepts the offscreen commands and rejects a bad stream id", () => {
+    for (const command of [
+      { type: "offscreen.start", tabId: 4, streamId: "s", maxMs: 120000, stopBytes: 1000 },
+      { type: "offscreen.stop", discard: false },
+      { type: "offscreen.query", tabId: 4 },
+      { type: "offscreen.release" },
+    ]) {
+      expect(offscreenCommandSchema.safeParse(command).success).toBe(true);
+    }
+    expect(
+      offscreenCommandSchema.safeParse({
+        type: "offscreen.start",
+        tabId: 4,
+        streamId: "",
+        maxMs: 1,
+        stopBytes: 1,
+      }).success,
+    ).toBe(false);
+    expect(offscreenResponseSchema.safeParse(success({ state: "idle" })).success).toBe(true);
   });
 });

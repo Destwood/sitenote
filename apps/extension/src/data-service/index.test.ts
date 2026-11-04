@@ -1357,3 +1357,73 @@ describe("screenshotUrl", () => {
     expect(queries).toEqual([]);
   });
 });
+
+describe("recordingUrl", () => {
+  const REQUEST = { type: "threads.recordingUrl", threadId: THREAD_ID } as const;
+  const PATH = `${WORKSPACE_ID}/${THREAD_ID}.webm`;
+  const HOUR_MS = SIGNED_URL_TTL_SECONDS * 1000;
+  const WITH_RECORDING = {
+    ...CONTEXT,
+    recording: { path: PATH, durationMs: 5000, size: 1024 },
+  };
+
+  it("signs the recording path of the thread context for one hour", async () => {
+    const { service, signedCalls, queries } = setup({
+      threads: [ok({ context: WITH_RECORDING })],
+    });
+
+    expect(await service.recordingUrl(REQUEST)).toEqual(success("https://storage.test/signed"));
+
+    expect(signedCalls).toEqual([{ bucket: "recordings", path: PATH, ttl: 3600 }]);
+    expect(callsOf(queries, "threads")[0]?.map((call) => call.args)).toEqual([
+      ["context"],
+      ["id", THREAD_ID],
+      [],
+    ]);
+  });
+
+  it("answers null for a thread without a recording and not found for a hidden thread", async () => {
+    const none = setup({ threads: [ok({ context: CONTEXT })] });
+    expect(await none.service.recordingUrl(REQUEST)).toEqual(success(null));
+    expect(none.signedCalls).toEqual([]);
+
+    const hidden = setup({ threads: [ok(null)] });
+    expect(await hidden.service.recordingUrl(REQUEST)).toEqual(failure("not_found"));
+  });
+
+  it("maps a query error and does not cache a failed signature", async () => {
+    const denied = setup({ threads: [broken({ code: "42501", message: "denied" })] });
+    expect(await denied.service.recordingUrl(REQUEST)).toEqual(failure("forbidden"));
+
+    const { service, signedCalls } = setup(
+      { threads: [ok({ context: WITH_RECORDING }), ok({ context: WITH_RECORDING })] },
+      { signed: [{ data: null, error: { message: "boom", status: 500 } }] },
+    );
+    expect((await service.recordingUrl(REQUEST)).ok).toBe(false);
+    expect(await service.recordingUrl(REQUEST)).toEqual(success("https://storage.test/signed"));
+    expect(signedCalls).toHaveLength(2);
+  });
+
+  it("reuses a signed url until five minutes before it expires", async () => {
+    let now = 1_000_000;
+    const { service, signedCalls } = setup(
+      { threads: [ok({ context: WITH_RECORDING })] },
+      {
+        now: () => now,
+        signed: [{ data: { signedUrl: "https://storage.test/one" }, error: null }],
+      },
+    );
+
+    expect(await service.recordingUrl(REQUEST)).toEqual(success("https://storage.test/one"));
+    now += HOUR_MS - SIGNED_URL_REFRESH_MARGIN_MS - 1;
+    expect(await service.recordingUrl(REQUEST)).toEqual(success("https://storage.test/one"));
+    expect(signedCalls).toHaveLength(1);
+  });
+
+  it("answers unauthorized without a session", async () => {
+    const { service, queries } = setup({}, { session: false });
+
+    expect(await service.recordingUrl(REQUEST)).toEqual(failure("unauthorized"));
+    expect(queries).toEqual([]);
+  });
+});

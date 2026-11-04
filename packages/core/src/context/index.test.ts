@@ -6,17 +6,25 @@ import {
   CONSOLE_SOURCE_MAX,
   CONSOLE_STACK_MAX,
   CONTEXT_MAX_BYTES,
+  RECORDING_PATH_MAX,
   consoleErrorRecordSchema,
   fitThreadContext,
   parseThreadContext,
   sanitizeText,
   threadContextSchema,
+  withRecording,
   withoutConsoleErrors,
   type ConsoleErrorRecord,
+  type RecordingRef,
   type ThreadContext,
 } from ".";
 
 const AT = "2026-10-22T09:30:00.000Z";
+const RECORDING: RecordingRef = {
+  path: "10000000-0000-4000-8000-000000000001/20000000-0000-4000-8000-000000000002.webm",
+  durationMs: 4200,
+  size: 81920,
+};
 
 function record(overrides: Partial<ConsoleErrorRecord> = {}): ConsoleErrorRecord {
   return { kind: "error", message: "Boom", at: AT, ...overrides };
@@ -121,6 +129,26 @@ describe("threadContextSchema", () => {
     );
     expect(threadContextSchema.safeParse(context({ consoleErrors: heavy })).success).toBe(false);
   });
+
+  it("accepts a recording with and without the optional field", () => {
+    expect(threadContextSchema.safeParse(context({ recording: RECORDING })).success).toBe(true);
+    expect(threadContextSchema.safeParse(context({ recording: undefined })).success).toBe(true);
+    expect(threadContextSchema.safeParse(context()).success).toBe(true);
+  });
+
+  it("rejects a malformed recording", () => {
+    const rejected: unknown[] = [
+      { ...context(), recording: { ...RECORDING, size: -1 } },
+      { ...context(), recording: { ...RECORDING, durationMs: -1 } },
+      { ...context(), recording: { ...RECORDING, size: 1.5 } },
+      { ...context(), recording: { ...RECORDING, durationMs: 0.5 } },
+      { ...context(), recording: { ...RECORDING, path: "p".repeat(RECORDING_PATH_MAX + 1) } },
+      { ...context(), recording: { path: RECORDING.path, size: 1 } },
+    ];
+    for (const value of rejected) {
+      expect(threadContextSchema.safeParse(value).success).toBe(false);
+    }
+  });
 });
 
 describe("sanitizeText", () => {
@@ -184,6 +212,31 @@ describe("fitThreadContext", () => {
     );
     expect(threadContextSchema.safeParse(fitted).success).toBe(true);
   });
+
+  it("drops a recording, which only the trusted background may add", () => {
+    const fitted = fitThreadContext(context({ recording: RECORDING }));
+    expect(fitted).not.toHaveProperty("recording");
+    expect(fitted).toEqual(context());
+  });
+
+  it("leaves room for a recording added after fitting", () => {
+    const heavy = Array.from({ length: CONSOLE_ERRORS_MAX }, () =>
+      record({
+        message: "m".repeat(CONSOLE_MESSAGE_MAX),
+        source: "s".repeat(CONSOLE_SOURCE_MAX),
+        stack: "k".repeat(CONSOLE_STACK_MAX),
+      }),
+    );
+    const longest: RecordingRef = {
+      path: "p".repeat(RECORDING_PATH_MAX),
+      durationMs: Number.MAX_SAFE_INTEGER,
+      size: Number.MAX_SAFE_INTEGER,
+    };
+    const parsed = parseThreadContext(
+      withRecording(fitThreadContext(context({ consoleErrors: heavy })), longest),
+    );
+    expect(parsed?.recording).toEqual(longest);
+  });
 });
 
 describe("parseThreadContext", () => {
@@ -193,6 +246,12 @@ describe("parseThreadContext", () => {
     expect(parseThreadContext(null)).toBeNull();
     expect(parseThreadContext({ ...context(), viewport: "wide" })).toBeNull();
   });
+
+  it("keeps a recording that was attached with withRecording", () => {
+    const attached = withRecording(context(), RECORDING);
+    expect(parseThreadContext(attached)).toEqual(attached);
+    expect(parseThreadContext(JSON.parse(JSON.stringify(attached)))?.recording).toEqual(RECORDING);
+  });
 });
 
 describe("withoutConsoleErrors", () => {
@@ -200,5 +259,14 @@ describe("withoutConsoleErrors", () => {
     const stripped = withoutConsoleErrors(context({ consoleErrors: [record()] }));
     expect(stripped.consoleErrors).toEqual([]);
     expect(stripped.pageTitle).toBe("Northwind Studio");
+  });
+});
+
+describe("withRecording", () => {
+  it("adds the recording and keeps the rest of the context", () => {
+    const original = context({ consoleErrors: [record()] });
+    const attached = withRecording(original, RECORDING);
+    expect(attached).toEqual({ ...original, recording: RECORDING });
+    expect(original).not.toHaveProperty("recording");
   });
 });

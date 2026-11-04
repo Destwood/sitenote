@@ -10,9 +10,18 @@ export const CONTEXT_URL_MAX = 2048;
 export const CONTEXT_USER_AGENT_MAX = 512;
 export const CONTEXT_NAME_MAX = 100;
 export const CONTEXT_MAX_BYTES = 48000;
+export const RECORDING_PATH_MAX = 200;
 
 const nonNegativeInteger = z.int().check(z.gte(0));
 const shortText = z.string().check(z.maxLength(CONTEXT_NAME_MAX));
+
+export const recordingRefSchema = z.object({
+  path: z.string().check(z.maxLength(RECORDING_PATH_MAX)),
+  durationMs: nonNegativeInteger,
+  size: nonNegativeInteger,
+});
+
+export type RecordingRef = z.infer<typeof recordingRefSchema>;
 
 export const consoleErrorRecordSchema = z.object({
   kind: z.enum(CONSOLE_ERROR_KINDS),
@@ -31,6 +40,15 @@ function byteLength(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value)).length;
 }
 
+const RECORDING_MAX_BYTES = byteLength({
+  recording: {
+    path: "x".repeat(RECORDING_PATH_MAX),
+    durationMs: Number.MAX_SAFE_INTEGER,
+    size: Number.MAX_SAFE_INTEGER,
+  },
+});
+const FITTED_MAX_BYTES = CONTEXT_MAX_BYTES - RECORDING_MAX_BYTES;
+
 export const threadContextSchema = z
   .object({
     viewport: z.object({
@@ -45,6 +63,7 @@ export const threadContextSchema = z
     userAgent: z.string().check(z.maxLength(CONTEXT_USER_AGENT_MAX)),
     consoleErrors: z.array(consoleErrorRecordSchema).check(z.maxLength(CONSOLE_ERRORS_MAX)),
     capturedAt: z.iso.datetime(),
+    recording: z.optional(recordingRefSchema),
   })
   .check(z.refine((context) => byteLength(context) <= CONTEXT_MAX_BYTES));
 
@@ -96,7 +115,7 @@ export function fitThreadContext(context: ThreadContext): ThreadContext {
     consoleErrors: context.consoleErrors.map(sanitizeRecord),
     capturedAt: context.capturedAt,
   };
-  while (fitted.consoleErrors.length > 0 && byteLength(fitted) > CONTEXT_MAX_BYTES) {
+  while (fitted.consoleErrors.length > 0 && byteLength(fitted) > FITTED_MAX_BYTES) {
     fitted = { ...fitted, consoleErrors: fitted.consoleErrors.slice(1) };
   }
   return fitted;
@@ -109,4 +128,8 @@ export function parseThreadContext(value: unknown): ThreadContext | null {
 
 export function withoutConsoleErrors(context: ThreadContext): ThreadContext {
   return { ...context, consoleErrors: [] };
+}
+
+export function withRecording(context: ThreadContext, recording: RecordingRef): ThreadContext {
+  return { ...context, recording };
 }

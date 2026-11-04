@@ -23,6 +23,7 @@ import { createNotificationCenter } from "../notification-center";
 import { createPendingEnable } from "../pending-enable";
 import { createChannelFactory, createNotificationChannelFactory } from "../realtime-channels";
 import { createRealtimeHub } from "../realtime-hub";
+import { createNoopRecordingService } from "../recording-service";
 import { planRefresh, REFRESH_ALARM_NAME, type RefreshOutcome } from "../refresh-schedule";
 import { createResolvedPreference } from "../resolved-preference";
 import { cropDataUrl } from "../screenshot-crop";
@@ -180,6 +181,7 @@ export function startBackground(): void {
     enablement,
     notifications,
     screenshots,
+    recordings: createNoopRecordingService(),
     preferences: createResolvedPreference(browser.storage.local),
     selectionPlacement: createSelectionPlacementPreference(browser.storage.local),
     getEnabledSite: store.get,

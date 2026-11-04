@@ -140,6 +140,7 @@ const AUTHENTICATED_DELETE = [
 const POLICY_FUNCTIONS = [
   "is_anonymous",
   "is_workspace_member",
+  "recording_workspace",
   "screenshot_workspace",
   "shares_workspace",
   "workspace_role",

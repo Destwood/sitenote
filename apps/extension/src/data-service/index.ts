@@ -32,6 +32,7 @@ import type {
   ThreadRecord,
   WorkspaceInfo,
 } from "@sitenote/widget";
+import { RECORDING_BUCKET } from "../recording-upload";
 import { SCREENSHOT_BUCKET, type ThreadScreenshots } from "../screenshot-upload";
 const PROFILE_COLUMNS = "user_id, display_name, avatar_url" as const;
 const COMMENT_COLUMNS =
@@ -137,10 +138,14 @@ type Handled<Type extends DataRequest["type"]> = Extract<DataRequest, { type: Ty
 export interface DataService {
   forOrigin: (request: Handled<"sites.forOrigin">) => Promise<MessageResult<SiteInfo | null>>;
   listThreads: (request: Handled<"threads.list">) => Promise<MessageResult<ThreadRecord[]>>;
-  createThread: (request: Handled<"threads.create">) => Promise<MessageResult<ThreadRecord>>;
+  createThread: (
+    request: Handled<"threads.create">,
+    sender?: { tabId?: number | undefined },
+  ) => Promise<MessageResult<ThreadRecord>>;
   screenshotUrl: (
     request: Handled<"threads.screenshotUrl">,
   ) => Promise<MessageResult<string | null>>;
+  recordingUrl: (request: Handled<"threads.recordingUrl">) => Promise<MessageResult<string | null>>;
   setThreadStatus: (request: Handled<"threads.setStatus">) => Promise<MessageResult<ThreadRecord>>;
   clickUpStatus: (request: Handled<"clickup.status">) => Promise<MessageResult<boolean>>;
   clickUpCreateTask: (
@@ -249,7 +254,8 @@ export function createDataService(deps: DataServiceDeps): DataService {
   const { client } = deps;
   const now = deps.now ?? Date.now;
   const memberCache = new Map<string, CachedMembers>();
-  const urlCache = new Map<string, CachedUrl>();
+  const screenshotUrls = new Map<string, CachedUrl>();
+  const recordingUrls = new Map<string, CachedUrl>();
 
   async function currentUserId(): Promise<string | null> {
     try {
@@ -293,6 +299,40 @@ export function createDataService(deps: DataServiceDeps): DataService {
     return parsed.success && isErrorCode(parsed.data.error.code)
       ? failure(parsed.data.error.code)
       : failure("unknown");
+  }
+
+  async function signedThreadUrl(
+    urlCache: Map<string, CachedUrl>,
+    bucket: string,
+    threadId: string,
+    userId: string,
+    readPath: () => Promise<MessageResult<string | null>>,
+  ): Promise<MessageResult<string | null>> {
+    const cached = urlCache.get(threadId);
+    if (cached?.userId === userId && cached.expiresAt - now() > SIGNED_URL_REFRESH_MARGIN_MS) {
+      return success(cached.url);
+    }
+    const path = await readPath();
+    if (!path.ok || path.data === null) {
+      return path;
+    }
+    const signed = await client.storage
+      .from(bucket)
+      .createSignedUrl(path.data, SIGNED_URL_TTL_SECONDS);
+    if (signed.error !== null) {
+      return fail(signed.error);
+    }
+    for (const [key, entry] of urlCache) {
+      if (entry.expiresAt <= now()) {
+        urlCache.delete(key);
+      }
+    }
+    urlCache.set(threadId, {
+      userId,
+      url: signed.data.signedUrl,
+      expiresAt: now() + SIGNED_URL_TTL_SECONDS * 1000,
+    });
+    return success(signed.data.signedUrl);
   }
 
   async function fetchThread(threadId: string): Promise<MessageResult<ThreadRecord>> {
@@ -384,43 +424,40 @@ export function createDataService(deps: DataServiceDeps): DataService {
       }),
 
     screenshotUrl: ({ threadId }) =>
-      guarded(async (userId) => {
-        const cached = urlCache.get(threadId);
-        if (cached?.userId === userId && cached.expiresAt - now() > SIGNED_URL_REFRESH_MARGIN_MS) {
-          return success(cached.url);
-        }
-        const row = await client
-          .from("threads")
-          .select("screenshot_path")
-          .eq("id", threadId)
-          .maybeSingle();
-        if (row.error !== null) {
-          return fail(row.error);
-        }
-        if (row.data === null) {
-          return failure("not_found");
-        }
-        if (row.data.screenshot_path === null) {
-          return success(null);
-        }
-        const signed = await client.storage
-          .from(SCREENSHOT_BUCKET)
-          .createSignedUrl(row.data.screenshot_path, SIGNED_URL_TTL_SECONDS);
-        if (signed.error !== null) {
-          return fail(signed.error);
-        }
-        for (const [key, entry] of urlCache) {
-          if (entry.expiresAt <= now()) {
-            urlCache.delete(key);
+      guarded((userId) =>
+        signedThreadUrl(screenshotUrls, SCREENSHOT_BUCKET, threadId, userId, async () => {
+          const row = await client
+            .from("threads")
+            .select("screenshot_path")
+            .eq("id", threadId)
+            .maybeSingle();
+          if (row.error !== null) {
+            return fail(row.error);
           }
-        }
-        urlCache.set(threadId, {
-          userId,
-          url: signed.data.signedUrl,
-          expiresAt: now() + SIGNED_URL_TTL_SECONDS * 1000,
-        });
-        return success(signed.data.signedUrl);
-      }),
+          if (row.data === null) {
+            return failure("not_found");
+          }
+          return success(row.data.screenshot_path);
+        }),
+      ),
+
+    recordingUrl: ({ threadId }) =>
+      guarded((userId) =>
+        signedThreadUrl(recordingUrls, RECORDING_BUCKET, threadId, userId, async () => {
+          const row = await client
+            .from("threads")
+            .select("context")
+            .eq("id", threadId)
+            .maybeSingle();
+          if (row.error !== null) {
+            return fail(row.error);
+          }
+          if (row.data === null) {
+            return failure("not_found");
+          }
+          return success(parseThreadContext(row.data.context)?.recording?.path ?? null);
+        }),
+      ),
 
     clickUpStatus: ({ workspaceId }) =>
       guarded(async () => {

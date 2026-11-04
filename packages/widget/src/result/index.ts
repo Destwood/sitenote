@@ -25,6 +25,8 @@ export const ERROR_CODES = [
   "page_unavailable",
   "capture_failed",
   "demo_limited",
+  "recording_failed",
+  "recording_busy",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -60,6 +62,8 @@ export const ERROR_MESSAGES: Readonly<Record<ErrorCode, string>> = {
   page_unavailable: "Sitenote is not available on this page.",
   capture_failed: "The screenshot could not be taken.",
   demo_limited: "Demo limit reached — try again later.",
+  recording_failed: "The recording could not be started.",
+  recording_busy: "Another recording is already in progress.",
 };
 
 export interface SuccessResponse<Data> {
