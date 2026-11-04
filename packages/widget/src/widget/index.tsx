@@ -22,6 +22,7 @@ export interface Widget {
   start: ContentController["start"];
   stop: ContentController["stop"];
   toggleCommentMode: ContentController["toggleCommentMode"];
+  enterCommentMode: ContentController["enterCommentMode"];
   commentOnContextTarget: ContentController["commentOnContextTarget"];
   selectThread: ContentController["selectThread"];
   toggleSidebar: ContentController["toggleSidebar"];
@@ -79,6 +80,7 @@ export function createWidget({ backend, document, window }: WidgetOptions): Widg
     start: controller.start,
     stop: controller.stop,
     toggleCommentMode: controller.toggleCommentMode,
+    enterCommentMode: controller.enterCommentMode,
     commentOnContextTarget: controller.commentOnContextTarget,
     selectThread: controller.selectThread,
     toggleSidebar: controller.toggleSidebar,

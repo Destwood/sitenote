@@ -1,5 +1,6 @@
 import { SITENOTE_ROOT_TAG } from "@sitenote/core";
 import {
+  RECORDING_ATTACHED_MESSAGE,
   createWidget,
   failure,
   success,
@@ -14,14 +15,19 @@ import {
   type ShadowRootContentScriptUi,
 } from "wxt/utils/content-script-ui/shadow-root";
 
-import { createToggleListener } from "../comment-mode";
+import { createToggleListener, restoreRecording } from "../comment-mode";
 import { createExtensionBackend } from "../extension-backend";
+import { sendMessage } from "../message-client";
+import { createRecordingPill } from "../recording-pill";
 
 export async function startContentScript(ctx: ContentScriptContext, css: string): Promise<void> {
   let ui: ShadowRootContentScriptUi<() => void> | null = null;
   let mounting = false;
 
   const widget = createWidget({ backend: createExtensionBackend(), document, window });
+  const recordingPill = createRecordingPill(ctx, css, () => {
+    void sendMessage({ type: "recording.stop" });
+  });
 
   function syncHost(state: ContentState): void {
     if (ui === null) {
@@ -113,13 +119,29 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
         }
         return { opened: true };
       }),
+    recording: {
+      show: (startedAt) => {
+        recordingPill.show(startedAt);
+      },
+      hide: () => {
+        recordingPill.hide();
+      },
+      attach: () =>
+        widget.enterCommentMode(RECORDING_ATTACHED_MESSAGE)
+          ? success(null)
+          : failure("page_unavailable"),
+    },
   });
   browser.runtime.onMessage.addListener(toggleListener);
   ctx.onInvalidated(() => {
     browser.runtime.onMessage.removeListener(toggleListener);
     widget.stop();
     unmountUi();
+    recordingPill.hide();
   });
 
   await widget.start();
+  if (widget.store.getState().status === "ready") {
+    await restoreRecording(() => sendMessage({ type: "recording.status" }), recordingPill.show);
+  }
 }

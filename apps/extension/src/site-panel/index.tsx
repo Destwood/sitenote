@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ERROR_CLASS, PRIMARY_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
 import { Icon } from "../icon";
 import { PageThreadsPanel } from "../page-threads-panel";
+import { RecordButton } from "../record-button";
 import { TOGGLE_COMMENT_MODE_SHORTCUT } from "../manifest-config";
 import { sendMessage, toggleCommentMode } from "../message-client";
 import { SiteMenu } from "../site-menu";
@@ -371,21 +372,24 @@ export function SitePanel({ webUrl, onManageSites, onWorkspaceControl }: SitePan
       {enabled ? (
         <>
           <PageThreadsPanel tabId={tab.id} />
-          <button
-            type="button"
-            onClick={() => void toggle(tab)}
-            disabled={busy}
-            aria-keyshortcuts={TOGGLE_COMMENT_MODE_SHORTCUT}
-            className="flex h-11 w-full items-center justify-between rounded-lg bg-neutral-900 px-3 text-sm font-semibold text-white hover:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <span className="flex items-center gap-2">
-              <Icon name="comment" size={17} />
-              Comment mode
-            </span>
-            <kbd className="rounded border border-neutral-600 bg-neutral-800 px-1.5 py-1 font-sans text-[10px] font-normal text-neutral-300">
-              {TOGGLE_COMMENT_MODE_SHORTCUT}
-            </kbd>
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void toggle(tab)}
+              disabled={busy}
+              aria-keyshortcuts={TOGGLE_COMMENT_MODE_SHORTCUT}
+              className="flex h-11 flex-1 items-center justify-between rounded-lg bg-neutral-900 px-3 text-sm font-semibold text-white hover:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span className="flex items-center gap-2">
+                <Icon name="comment" size={17} />
+                Comment mode
+              </span>
+              <kbd className="rounded border border-neutral-600 bg-neutral-800 px-1.5 py-1 font-sans text-[10px] font-normal text-neutral-300">
+                {TOGGLE_COMMENT_MODE_SHORTCUT}
+              </kbd>
+            </button>
+            <RecordButton tabId={tab.id} />
+          </div>
         </>
       ) : view.workspaces.length === 0 ? (
         <p className="text-sm text-neutral-500">

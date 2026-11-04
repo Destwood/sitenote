@@ -11,6 +11,7 @@ import {
   COMMENT_CURSOR_CSS,
   PREFERENCE_FAILED_MESSAGE,
   PENDING_ID,
+  RECORDING_ATTACHED_MESSAGE,
   SCREENSHOT_FAILED_MESSAGE,
   THREAD_NOT_HERE_MESSAGE,
   UNSUPPORTED_SELECTION_MESSAGE,
@@ -606,6 +607,29 @@ describe("comment mode", () => {
 
     expect(state().hover).toBeNull();
     expect(state().commentMode).toBe(false);
+  });
+});
+
+describe("entering comment mode with a notice", () => {
+  it("turns comment mode on and shows the notice as an info toast", async () => {
+    const { controller: api, state } = await setup();
+
+    expect(api.enterCommentMode(RECORDING_ATTACHED_MESSAGE)).toBe(true);
+
+    expect(state().commentMode).toBe(true);
+    expect(document.head.querySelector("style")?.textContent).toBe(COMMENT_CURSOR_CSS);
+    expect(state().toasts.map((toast) => [toast.message, toast.variant])).toEqual([
+      [RECORDING_ATTACHED_MESSAGE, "info"],
+    ]);
+  });
+
+  it("returns false and changes nothing when the site is not enabled", async () => {
+    const { controller: api, state } = await setup([], { getSiteInfo: () => success(null) });
+
+    expect(state().status).toBe("disabled");
+    expect(api.enterCommentMode(RECORDING_ATTACHED_MESSAGE)).toBe(false);
+    expect(state().commentMode).toBe(false);
+    expect(state().toasts).toHaveLength(0);
   });
 });
 

@@ -47,6 +47,7 @@ export const CLICKUP_SCREENSHOT_MISSING_MESSAGE =
   "The ClickUp task was created without the screenshot.";
 export const PREFERENCE_FAILED_MESSAGE = "Could not remember this setting for the next visit.";
 export const SCREENSHOT_FAILED_MESSAGE = "Screenshot could not be saved";
+export const RECORDING_ATTACHED_MESSAGE = "Video attached to your next comment";
 export const THREAD_NOT_HERE_MESSAGE = "This comment is on another page or you do not have access.";
 export const COMMENT_CURSOR_CSS = `html, html * { cursor: crosshair !important; } ${SITENOTE_ROOT_TAG} { cursor: auto !important; }`;
 
@@ -96,6 +97,7 @@ export interface ContentController {
   stop: () => void;
   toggleCommentMode: () => boolean;
   exitCommentMode: () => void;
+  enterCommentMode: (notice: string) => boolean;
   commentOnContextTarget: () => boolean;
   toggleSidebar: () => void;
   closeSidebar: () => void;
@@ -772,6 +774,14 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     },
     exitCommentMode: () => {
       setCommentMode(false);
+    },
+    enterCommentMode: (notice) => {
+      if (store.getState().status !== "ready") {
+        return false;
+      }
+      setCommentMode(true);
+      pushToast({ message: notice, variant: "info" });
+      return true;
     },
     commentOnContextTarget: () => {
       const stored = contextTarget;

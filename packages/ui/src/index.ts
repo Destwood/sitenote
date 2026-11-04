@@ -13,6 +13,8 @@ export type { PinProps } from "./pin";
 export { PinLayer } from "./pin-layer";
 export type { PinLayerPin, PinLayerProps } from "./pin-layer";
 export { placeAbove, placeBelow, placePanel } from "./placement";
+export { RecordingPill } from "./recording-pill";
+export type { RecordingPillProps } from "./recording-pill";
 export { formatRelativeTime } from "./relative-time";
 export type { AnchorRect, PanelPlacement, PanelSide, Size } from "./placement";
 export { DEFAULT_SELECTION_PLACEMENT, SelectionButton } from "./selection-button";

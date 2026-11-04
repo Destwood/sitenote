@@ -45,6 +45,8 @@ vi.mock("../page-threads-panel", () => ({
 
 vi.mock("../selection-placement-control", () => ({ SelectionPlacementControl: () => null }));
 
+vi.mock("../record-button", () => ({ RecordButton: () => null }));
+
 vi.mock("wxt/browser", () => ({ browser: { storage: { local: {} } } }));
 
 const ORIGIN = "https://example.test";
