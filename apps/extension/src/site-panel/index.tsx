@@ -6,6 +6,7 @@ import { PageThreadsPanel } from "../page-threads-panel";
 import { TOGGLE_COMMENT_MODE_SHORTCUT } from "../manifest-config";
 import { sendMessage, toggleCommentMode } from "../message-client";
 import { SiteMenu } from "../site-menu";
+import { WorkspacePicker } from "../workspace-picker";
 import { createPendingEnable } from "../pending-enable";
 import { ERROR_MESSAGES, type ErrorCode } from "@sitenote/widget";
 import { getTargetTab, hasOriginAccess, requestOriginAccess, type TargetTab } from "../tab-access";
@@ -382,31 +383,12 @@ export function SitePanel({ webUrl, onManageSites, onWorkspaceName }: SitePanelP
             ) : null}
           </div>
         ) : view.workspaces.length > 1 ? (
-          <div className="flex items-center gap-2.5 rounded-b-lg border-t border-neutral-200 bg-neutral-50 px-2.5 py-2">
-            <span
-              aria-hidden="true"
-              className="flex size-6 shrink-0 items-center justify-center rounded-md bg-neutral-900 text-[11px] font-bold text-white"
-            >
-              {monogramOf(selected?.name ?? "")}
-            </span>
-            <label className="flex min-w-0 flex-1 flex-col">
-              <span className="text-[11px] text-neutral-500">Workspace</span>
-              <select
-                value={workspaceId}
-                onChange={(event) => {
-                  setWorkspaceId(event.target.value);
-                }}
-                disabled={busy}
-                className="w-full bg-transparent text-xs font-semibold text-neutral-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 disabled:opacity-60"
-              >
-                {view.workspaces.map((workspace) => (
-                  <option key={workspace.id} value={workspace.id}>
-                    {workspace.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          <WorkspacePicker
+            value={workspaceId}
+            options={view.workspaces}
+            onChange={setWorkspaceId}
+            disabled={busy}
+          />
         ) : selected === undefined ? null : (
           <div className="flex items-center gap-2.5 rounded-b-lg border-t border-neutral-200 bg-neutral-50 px-2.5 py-2">
             <span

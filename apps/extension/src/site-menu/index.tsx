@@ -65,7 +65,7 @@ export function SiteMenu({
         >
           <SelectionPlacementControl />
           {captureErrors === null ? null : (
-            <label className="flex cursor-pointer items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-neutral-100">
+            <label className="relative flex cursor-pointer items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-neutral-100">
               <span className="flex flex-col">
                 <span id="capture-console-errors" className="text-sm font-medium text-neutral-900">
                   Capture console errors
@@ -80,9 +80,9 @@ export function SiteMenu({
                 onChange={(event) => {
                   onToggleCapture(event.target.checked);
                 }}
-                className="peer sr-only"
+                className="peer absolute top-1/2 right-2 h-4 w-7 -translate-y-1/2 cursor-pointer opacity-0 disabled:cursor-default"
               />
-              <span className="relative inline-flex h-4 w-7 shrink-0 rounded-full bg-neutral-300 transition-colors after:absolute after:top-0.5 after:left-0.5 after:size-3 after:rounded-full after:bg-white after:shadow-sm after:transition-transform after:content-[''] peer-checked:bg-green-600 peer-checked:after:translate-x-3 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-neutral-900 peer-disabled:opacity-60" />
+              <span className="pointer-events-none relative inline-flex h-4 w-7 shrink-0 rounded-full bg-neutral-300 transition-colors after:absolute after:top-0.5 after:left-0.5 after:size-3 after:rounded-full after:bg-white after:shadow-sm after:transition-transform after:content-[''] peer-checked:bg-green-600 peer-checked:after:translate-x-3 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-neutral-900 peer-disabled:opacity-60" />
             </label>
           )}
           <button

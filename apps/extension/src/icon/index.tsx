@@ -6,6 +6,7 @@ export type IconName =
   | "arrow"
   | "external"
   | "chevron"
+  | "check"
   | "close"
   | "users"
   | "logout"
@@ -37,6 +38,7 @@ const PATHS: Record<IconName, ReactNode> = {
     </>
   ),
   chevron: <path d="m9 18 6-6-6-6" />,
+  check: <path d="M20 6 9 17l-5-5" />,
   close: <path d="m6 6 12 12M18 6 6 18" />,
   users: (
     <>

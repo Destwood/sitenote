@@ -90,6 +90,11 @@ async function openMenu(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole("button", { name: "More options" }));
 }
 
+async function chooseWorkspace(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(await screen.findByRole("button", { name: /Workspace/ }));
+  await user.click(screen.getByRole("option", { name }));
+}
+
 beforeEach(() => {
   localStorage.clear();
   for (const mock of Object.values(mocks)) {
@@ -146,15 +151,19 @@ describe("SitePanel when the site is not enabled", () => {
   }
 
   it("shows the host, the state and a workspace picker when there are two workspaces", async () => {
+    const user = userEvent.setup();
     notEnabled();
 
     renderPanel();
 
     expect((await screen.findByTestId("site-state")).textContent).toBe("Not enabled");
     expect(screen.getByTestId("site-origin").textContent).toBe(HOST);
-    const picker = screen.getByLabelText<HTMLSelectElement>("Workspace");
-    expect([...picker.options].map((option) => option.text)).toEqual(["Northwind", "Agency"]);
-    expect(picker.value).toBe(NORTHWIND.id);
+    await user.click(screen.getByRole("button", { name: /Workspace/ }));
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+    expect(screen.getByRole("option", { name: "Agency" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Northwind" }).getAttribute("aria-selected")).toBe(
+      "true",
+    );
     expect(mocks.sendMessage).toHaveBeenCalledWith({ type: "sites.forOrigin", origin: ORIGIN });
   });
 
@@ -164,7 +173,7 @@ describe("SitePanel when the site is not enabled", () => {
 
     renderPanel();
 
-    expect((await screen.findByLabelText<HTMLSelectElement>("Workspace")).value).toBe(AGENCY.id);
+    expect(await screen.findByRole("button", { name: /Workspace.*Agency/ })).toBeTruthy();
   });
 
   it("falls back to the first workspace when the remembered one is gone", async () => {
@@ -173,17 +182,17 @@ describe("SitePanel when the site is not enabled", () => {
 
     renderPanel();
 
-    expect((await screen.findByLabelText<HTMLSelectElement>("Workspace")).value).toBe(NORTHWIND.id);
+    expect(await screen.findByRole("button", { name: /Workspace.*Northwind/ })).toBeTruthy();
   });
 
   it("explains the limit for guests when a guest workspace is selected", async () => {
     const user = userEvent.setup();
     notEnabled();
     renderPanel();
-    await screen.findByLabelText("Workspace");
+    await screen.findByRole("button", { name: /Workspace/ });
     expect(screen.queryByText(/Guests can enable only sites/)).toBeNull();
 
-    await user.selectOptions(screen.getByLabelText("Workspace"), AGENCY.id);
+    await chooseWorkspace(user, AGENCY.name);
 
     expect(screen.getByText(/Guests can enable only sites/)).toBeTruthy();
   });
@@ -193,7 +202,7 @@ describe("SitePanel when the site is not enabled", () => {
 
     renderPanel();
 
-    expect(await screen.findByLabelText("Workspace")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /Workspace/ })).toBeTruthy();
   });
 
   it("hides the workspace picker when the user has exactly one workspace", async () => {
@@ -202,7 +211,7 @@ describe("SitePanel when the site is not enabled", () => {
     renderPanel();
 
     expect(await screen.findByRole("button", { name: "Enable on this site" })).toBeTruthy();
-    expect(screen.queryByLabelText("Workspace")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Workspace/ })).toBeNull();
     expect(screen.getByText(NORTHWIND.name)).toBeTruthy();
   });
 
@@ -222,7 +231,7 @@ describe("SitePanel when the site is not enabled", () => {
 
     renderPanel();
 
-    await screen.findByLabelText("Workspace");
+    await screen.findByRole("button", { name: /Workspace.*Agency/ });
     expect(mocks.onWorkspaceName).toHaveBeenLastCalledWith(AGENCY.name);
   });
 
@@ -248,8 +257,7 @@ describe("SitePanel when the site is not enabled", () => {
       "workspaces.list": () => success([NORTHWIND, AGENCY]),
     });
     renderPanel();
-    await screen.findByLabelText("Workspace");
-    await user.selectOptions(screen.getByLabelText("Workspace"), AGENCY.id);
+    await chooseWorkspace(user, AGENCY.name);
 
     await user.click(screen.getByRole("button", { name: "Enable on this site" }));
 
@@ -381,7 +389,7 @@ describe("SitePanel when the site is enabled", () => {
     expect(
       screen.getByRole("button", { name: COMMENT_MODE }).getAttribute("aria-keyshortcuts"),
     ).toBe("Alt+Shift+C");
-    expect(screen.queryByLabelText("Workspace")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Workspace/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Disable on this site" })).toBeNull();
     expect(screen.queryByRole("checkbox")).toBeNull();
 
@@ -426,7 +434,7 @@ describe("SitePanel when the site is enabled", () => {
     await user.click(await screen.findByRole("button", { name: "Switch" }));
 
     expect(mocks.sendMessage).toHaveBeenCalledWith({ type: "sites.disable", origin: ORIGIN });
-    expect((await screen.findByLabelText<HTMLSelectElement>("Workspace")).value).toBe(AGENCY.id);
+    expect(await screen.findByRole("button", { name: /Workspace.*Agency/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Enable on this site" })).toBeTruthy();
   });
 
@@ -641,6 +649,7 @@ describe("SitePanel errors", () => {
   });
 
   it("renders a workspace name as text and never as markup", async () => {
+    const user = userEvent.setup();
     route({
       "sites.forOrigin": () => success(null),
       "workspaces.list": () =>
@@ -649,8 +658,8 @@ describe("SitePanel errors", () => {
 
     renderPanel();
 
-    await screen.findByLabelText("Workspace");
+    await user.click(await screen.findByRole("button", { name: /Workspace/ }));
     expect(document.querySelector("img")).toBeNull();
-    expect(screen.getAllByRole("option")[0]?.textContent).toBe("<img src=x onerror=alert(1)>");
+    expect(screen.getByRole("option", { name: "<img src=x onerror=alert(1)>" })).toBeTruthy();
   });
 });
