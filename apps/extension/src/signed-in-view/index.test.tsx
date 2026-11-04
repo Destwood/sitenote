@@ -224,10 +224,20 @@ describe("SignedInView main screen", () => {
     expect(screen.getByTestId("site-panel").textContent).toBe(WEB_URL);
     expect(await screen.findByText("Northwind")).toBeTruthy();
     const link = screen.getByRole("link", { name: "Open dashboard" });
-    expect(link.getAttribute("href")).toBe(`${WEB_URL}/app`);
+    expect(link.getAttribute("href")).toBe(`${WEB_URL}/app/w/${NORTHWIND.id}`);
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toContain("noreferrer");
     expect(screen.queryByRole("heading", { name: "Allowed sites" })).toBeNull();
+  });
+
+  it("points the dashboard link at the workspace selected in the footer picker", async () => {
+    publishControl({ value: AGENCY.id, options: [NORTHWIND, AGENCY] });
+    renderView();
+
+    await screen.findByRole("button", { name: "Workspace" });
+    expect(screen.getByRole("link", { name: "Open dashboard" }).getAttribute("href")).toBe(
+      `${WEB_URL}/app/w/${AGENCY.id}`,
+    );
   });
 
   it("shows a static workspace label in the footer when the user has one workspace", async () => {
@@ -236,6 +246,16 @@ describe("SignedInView main screen", () => {
 
     expect(await screen.findByText("Northwind")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Workspace" })).toBeNull();
+  });
+
+  it("falls back to the generic dashboard link while the site panel publishes no workspace", async () => {
+    publishControl({ value: "" });
+    renderView();
+
+    expect(await screen.findByText("Northwind")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open dashboard" }).getAttribute("href")).toBe(
+      `${WEB_URL}/app`,
+    );
   });
 
   it("shows the workspace picker in the footer when the user has several workspaces", async () => {

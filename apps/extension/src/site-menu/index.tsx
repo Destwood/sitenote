@@ -5,7 +5,7 @@ import { Icon } from "../icon";
 import { SelectionPlacementControl } from "../selection-placement-control";
 
 interface SiteMenuProps {
-  webUrl: string;
+  dashboardUrl: string;
   captureErrors: boolean | null;
   busy: boolean;
   onToggleCapture: (enabled: boolean) => void;
@@ -14,7 +14,7 @@ interface SiteMenuProps {
 }
 
 export function SiteMenu({
-  webUrl,
+  dashboardUrl,
   captureErrors,
   busy,
   onToggleCapture,
@@ -96,7 +96,7 @@ export function SiteMenu({
             <Icon name="sites" size={15} />
             Allowed sites
           </button>
-          <a href={`${webUrl}/app`} target="_blank" rel="noreferrer" className={MENU_ITEM_CLASS}>
+          <a href={dashboardUrl} target="_blank" rel="noreferrer" className={MENU_ITEM_CLASS}>
             <Icon name="external" size={15} />
             Open dashboard
           </a>

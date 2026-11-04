@@ -326,6 +326,9 @@ export function SitePanel({ webUrl, onManageSites, onWorkspaceControl }: SitePan
     view.kind === "disabled"
       ? view.workspaces.find((workspace) => workspace.id === workspaceId)
       : undefined;
+  const dashboardWorkspaceId = enabled ? view.site.workspaceId : workspaceId;
+  const dashboardUrl =
+    dashboardWorkspaceId === "" ? `${webUrl}/app` : `${webUrl}/app/w/${dashboardWorkspaceId}`;
 
   return (
     <section aria-label="This site" className="flex flex-col gap-3">
@@ -356,7 +359,7 @@ export function SitePanel({ webUrl, onManageSites, onWorkspaceControl }: SitePan
             </p>
           </div>
           <SiteMenu
-            webUrl={webUrl}
+            dashboardUrl={dashboardUrl}
             captureErrors={enabled ? view.site.captureErrors : null}
             busy={busy}
             onToggleCapture={(on) => void changeErrorCapture(tab, on)}
