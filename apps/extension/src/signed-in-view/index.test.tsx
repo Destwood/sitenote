@@ -68,6 +68,15 @@ describe("SignedInView", () => {
     expect(screen.queryByRole("heading", { name: "Allowed sites" })).toBeNull();
   });
 
+  it("links to the web dashboard in a new tab on the main screen", () => {
+    renderView();
+
+    const link = screen.getByRole("link", { name: "Open dashboard" });
+    expect(link.getAttribute("href")).toBe(`${WEB_URL}/app`);
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toContain("noreferrer");
+  });
+
   it("opens the allowed sites screen from the site panel and hides the site panel", async () => {
     const user = userEvent.setup();
     renderView();

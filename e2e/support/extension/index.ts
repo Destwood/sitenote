@@ -1,7 +1,7 @@
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 
-import { clearMailbox, waitForOtpCode } from "../mailpit";
+import { signInOnWeb } from "../web-auth";
 
 export function newEmail(): string {
   return `e2e-${randomUUID()}@sitenote.test`;
@@ -29,18 +29,15 @@ export async function openPopup(
   return popup;
 }
 
-export async function requestCode(popup: Page, email: string): Promise<string> {
-  await clearMailbox(email);
-  await popup.getByLabel("Email").fill(email);
-  await popup.getByRole("button", { name: "Email me a code" }).click();
-  await expect(popup.getByLabel("6-digit code")).toBeVisible();
-  return waitForOtpCode(email);
-}
-
 export async function signIn(popup: Page, email: string): Promise<void> {
-  const code = await requestCode(popup, email);
-  await popup.getByLabel("6-digit code").fill(code);
-  await popup.getByRole("button", { name: "Verify code" }).click();
+  const context = popup.context();
+  const page = await context.newPage();
+  await signInOnWeb(page, email, "/extension/connect");
+  await page.getByRole("button", { name: "Connect the extension" }).click();
+  await expect(page.getByTestId("extension-connected")).toBeVisible();
+  await page.close();
+  await context.clearCookies({ name: /^sb-/ });
+  await popup.reload();
   await expect(popup.getByTestId("display-name")).toBeVisible();
 }
 

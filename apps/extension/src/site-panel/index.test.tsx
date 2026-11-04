@@ -329,6 +329,75 @@ describe("SitePanel when the site is enabled", () => {
     expect(screen.getByRole("checkbox", { name: "Capture console errors" })).toBeTruthy();
   });
 
+  it("shows the switch link only when the user belongs to more than one workspace", async () => {
+    route({
+      "sites.forOrigin": () => success(SITE),
+      "workspaces.list": () => success([NORTHWIND]),
+    });
+    const { unmount } = renderPanel();
+    expect(await screen.findByTestId("site-state")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Switch workspace" })).toBeNull();
+    unmount();
+
+    route({
+      "sites.forOrigin": () => success(SITE),
+      "workspaces.list": () => success([NORTHWIND, AGENCY]),
+    });
+    renderPanel();
+
+    expect(await screen.findByRole("button", { name: "Switch workspace" })).toBeTruthy();
+  });
+
+  it("disables the site and preselects another workspace when switching", async () => {
+    const user = userEvent.setup();
+    let isEnabled = true;
+    route({
+      "sites.forOrigin": () => success(isEnabled ? SITE : null),
+      "workspaces.list": () => success([NORTHWIND, AGENCY]),
+      "sites.disable": () => {
+        isEnabled = false;
+        return success(null);
+      },
+    });
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "Switch workspace" }));
+
+    expect(mocks.sendMessage).toHaveBeenCalledWith({ type: "sites.disable", origin: ORIGIN });
+    expect((await screen.findByLabelText<HTMLSelectElement>("Workspace")).value).toBe(AGENCY.id);
+    expect(screen.getByRole("button", { name: "Enable on this site" })).toBeTruthy();
+  });
+
+  it("keeps the enabled state when switching fails", async () => {
+    const user = userEvent.setup();
+    route({
+      "sites.forOrigin": () => success(SITE),
+      "workspaces.list": () => success([NORTHWIND, AGENCY]),
+      "sites.disable": () => failure("unknown"),
+    });
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "Switch workspace" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Something went wrong. Try again.");
+    expect(screen.getByTestId("site-state").textContent).toBe("Enabled in Northwind");
+  });
+
+  it("places the page threads above the comment mode button and the notices below it", async () => {
+    const user = userEvent.setup();
+    enabled();
+    mocks.toggleCommentMode.mockResolvedValueOnce(failure("page_unavailable"));
+    renderPanel();
+
+    const button = await screen.findByRole("button", { name: COMMENT_MODE });
+    await user.click(button);
+    const alert = await screen.findByRole("alert");
+
+    const threads = screen.getByTestId("page-threads-panel");
+    expect(threads.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(button.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("shows the page threads for the tab only when the site is enabled", async () => {
     enabled();
     const { unmount } = renderPanel();

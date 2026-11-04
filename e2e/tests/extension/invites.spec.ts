@@ -238,7 +238,7 @@ test("a guest session that was kept on the web connects after the extension sign
   await expect(joinPage.getByRole("button", { name: "Connect again" })).toBeVisible();
 
   await popup.getByRole("button", { name: "Sign out" }).click();
-  await expect(popup.getByLabel("Email")).toBeVisible();
+  await expect(popup.getByRole("button", { name: "Sign in on the website" })).toBeVisible();
   await joinPage.getByRole("button", { name: "Connect again" }).click();
 
   await expect(joinPage.getByTestId("extension-connected")).toBeVisible();

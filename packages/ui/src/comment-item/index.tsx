@@ -1,9 +1,10 @@
 import { splitMentions } from "@sitenote/core";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 
 import { Avatar } from "../avatar";
 import { Composer } from "../composer";
 import { DANGER_BUTTON, SECONDARY_BUTTON, TEXT_BUTTON } from "../control-classes";
+import { splitLinks } from "../linkify";
 import { formatAbsoluteTime, formatRelativeTime } from "../relative-time";
 import type { CommentView } from "../types";
 
@@ -110,7 +111,23 @@ export function CommentItem({ comment, now, onEdit, onDelete }: CommentItemProps
                   {segment.text}
                 </span>
               ) : (
-                segment.text
+                <Fragment key={index}>
+                  {splitLinks(segment.text).map((piece, pieceIndex) =>
+                    piece.kind === "link" ? (
+                      <a
+                        key={pieceIndex}
+                        href={piece.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-700 underline underline-offset-2 break-all hover:text-blue-900"
+                      >
+                        {piece.text}
+                      </a>
+                    ) : (
+                      <Fragment key={pieceIndex}>{piece.text}</Fragment>
+                    ),
+                  )}
+                </Fragment>
               ),
             )}
           </p>

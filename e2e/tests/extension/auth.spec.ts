@@ -6,7 +6,6 @@ import {
   isRecord,
   newEmail,
   openPopup,
-  requestCode,
   signIn,
   stopServiceWorker,
 } from "../../support/extension";
@@ -84,18 +83,18 @@ test("the e2e build asks for the documented permissions and the fixture, example
   });
 });
 
-test("a signed-out popup offers the email form and no Google button", async ({
+test("a signed-out popup sends the user to the website and has no email field", async ({
   context,
   extensionId,
 }) => {
   const popup = await openPopup(context, extensionId);
 
-  await expect(popup.getByLabel("Email")).toBeVisible();
-  await expect(popup.getByRole("button", { name: "Email me a code" })).toBeVisible();
+  await expect(popup.getByRole("button", { name: "Sign in on the website" })).toBeVisible();
+  await expect(popup.getByRole("textbox")).toHaveCount(0);
   await expect(popup.getByRole("button", { name: "Continue with Google" })).toHaveCount(0);
 });
 
-test("the seeded member signs in with an email code and the popup shows Max Member", async ({
+test("the seeded member signs in through the website and the popup shows Max Member", async ({
   context,
   extensionId,
 }) => {
@@ -106,7 +105,7 @@ test("the seeded member signs in with an email code and the popup shows Max Memb
   await expect(popup.getByTestId("display-name")).toHaveText("Max Member");
   await expect(popup.getByTestId("display-name")).toHaveAttribute("title", SEEDED_MEMBER);
   await expect(popup.getByRole("button", { name: "Sign out" })).toBeVisible();
-  await expect(popup.getByLabel("Email")).toHaveCount(0);
+  await expect(popup.getByRole("button", { name: "Sign in on the website" })).toHaveCount(0);
 });
 
 test("the session survives a popup reload and a new popup", async ({ context, extensionId }) => {
@@ -177,7 +176,7 @@ test("a refresh alarm is scheduled shortly before the access token expires", asy
     .toBeLessThan(2000);
 
   await popup.getByRole("button", { name: "Sign out" }).click();
-  await expect(popup.getByLabel("Email")).toBeVisible();
+  await expect(popup.getByRole("button", { name: "Sign in on the website" })).toBeVisible();
   await expect.poll(() => readAlarmTime(popup)).toBeNull();
 });
 
@@ -191,52 +190,12 @@ test("signing out returns to the form and removes the stored session", async ({
 
   await popup.getByRole("button", { name: "Sign out" }).click();
 
-  await expect(popup.getByLabel("Email")).toBeVisible();
+  await expect(popup.getByRole("button", { name: "Sign in on the website" })).toBeVisible();
   await expect(popup.getByTestId("display-name")).toHaveCount(0);
   await expect.poll(() => storedAuthKeys(popup)).toEqual([]);
 
   await popup.reload();
-  await expect(popup.getByLabel("Email")).toBeVisible();
-});
-
-test("a wrong code shows an error and the right code still works", async ({
-  context,
-  extensionId,
-}) => {
-  const popup = await openPopup(context, extensionId);
-  const email = newEmail();
-  const code = await requestCode(popup, email);
-  const wrong = code === "000000" ? "111111" : "000000";
-
-  await popup.getByLabel("6-digit code").fill(wrong);
-  await popup.getByRole("button", { name: "Verify code" }).click();
-
-  await expect(popup.getByRole("alert")).toContainText("wrong or has expired");
-  await expect(popup.getByLabel("6-digit code")).toHaveValue("");
-
-  await popup.getByLabel("6-digit code").fill(code);
-  await popup.getByRole("button", { name: "Verify code" }).click();
-  await expect(popup.getByTestId("display-name")).toHaveAttribute("title", email);
-});
-
-test("closing the popup while waiting for the e-mail keeps the code step", async ({
-  context,
-  extensionId,
-}) => {
-  const popup = await openPopup(context, extensionId);
-  const email = newEmail();
-  const code = await requestCode(popup, email);
-
-  await popup.close();
-  const reopened = await openPopup(context, extensionId);
-
-  await expect(reopened.getByRole("status")).toContainText(email);
-  await reopened.getByLabel("6-digit code").fill(code);
-  await reopened.getByRole("button", { name: "Verify code" }).click();
-  await expect(reopened.getByTestId("display-name")).toHaveAttribute("title", email);
-
-  await reopened.getByRole("button", { name: "Sign out" }).click();
-  await expect(reopened.getByLabel("Email")).toBeVisible();
+  await expect(popup.getByRole("button", { name: "Sign in on the website" })).toBeVisible();
 });
 
 test("an open popup follows sign-in and sign-out done in another popup", async ({
@@ -251,7 +210,7 @@ test("an open popup follows sign-in and sign-out done in another popup", async (
   await expect(second.getByTestId("display-name")).toHaveAttribute("title", email);
 
   await first.getByRole("button", { name: "Sign out" }).click();
-  await expect(second.getByLabel("Email")).toBeVisible();
+  await expect(second.getByRole("button", { name: "Sign in on the website" })).toBeVisible();
 });
 
 test("the background rejects malformed requests with a typed error", async ({

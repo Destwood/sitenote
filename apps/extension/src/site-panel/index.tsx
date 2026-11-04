@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   ERROR_CLASS,
+  LINK_BUTTON_CLASS,
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
   INPUT_CLASS,
@@ -28,7 +29,7 @@ type View =
   | { kind: "unavailable" }
   | { kind: "error"; code: ErrorCode }
   | { kind: "disabled"; tab: Target; workspaces: WorkspaceInfo[] }
-  | { kind: "enabled"; tab: Target; site: SiteInfo };
+  | { kind: "enabled"; tab: Target; site: SiteInfo; workspaces: WorkspaceInfo[] };
 
 interface Target {
   id: number;
@@ -78,10 +79,15 @@ async function loadView(tab: Target): Promise<View> {
   if (!site.ok) {
     return { kind: "error", code: site.error.code };
   }
-  if (site.data !== null) {
-    return { kind: "enabled", tab, site: site.data };
-  }
   const workspaces = await sendMessage({ type: "workspaces.list" });
+  if (site.data !== null) {
+    return {
+      kind: "enabled",
+      tab,
+      site: site.data,
+      workspaces: workspaces.ok ? workspaces.data : [],
+    };
+  }
   return workspaces.ok
     ? { kind: "disabled", tab, workspaces: workspaces.data }
     : { kind: "error", code: workspaces.error.code };
@@ -179,9 +185,9 @@ export function SitePanel({ webUrl, onManageSites }: SitePanelProps) {
     setBusy(false);
   }
 
-  async function disable(tab: Target) {
+  async function disable(tab: Target): Promise<boolean> {
     if (busy) {
-      return;
+      return false;
     }
     setBusy(true);
     setFailed(null);
@@ -190,10 +196,25 @@ export function SitePanel({ webUrl, onManageSites }: SitePanelProps) {
     if (!result.ok) {
       setFailed(ERROR_MESSAGES[result.error.code]);
       setBusy(false);
-      return;
+      return false;
     }
     await load();
     setBusy(false);
+    return true;
+  }
+
+  async function switchWorkspace(
+    tab: Target,
+    currentWorkspaceId: string,
+    workspaces: WorkspaceInfo[],
+  ) {
+    if (!(await disable(tab))) {
+      return;
+    }
+    const other = workspaces.find((workspace) => workspace.id !== currentWorkspaceId);
+    if (other !== undefined) {
+      setWorkspaceId(other.id);
+    }
   }
 
   async function changeErrorCapture(tab: Target, enabled: boolean) {
@@ -295,6 +316,17 @@ export function SitePanel({ webUrl, onManageSites }: SitePanelProps) {
       </p>
       {view.kind === "enabled" ? (
         <>
+          {view.workspaces.length > 1 ? (
+            <button
+              type="button"
+              onClick={() => void switchWorkspace(tab, view.site.workspaceId, view.workspaces)}
+              disabled={busy}
+              className={`${LINK_BUTTON_CLASS} self-start`}
+            >
+              Switch workspace
+            </button>
+          ) : null}
+          <PageThreadsPanel tabId={tab.id} />
           <button
             type="button"
             onClick={() => void toggle(tab)}
@@ -307,7 +339,6 @@ export function SitePanel({ webUrl, onManageSites }: SitePanelProps) {
               {TOGGLE_COMMENT_MODE_SHORTCUT}
             </span>
           </button>
-          <PageThreadsPanel tabId={tab.id} />
         </>
       ) : (
         <>
