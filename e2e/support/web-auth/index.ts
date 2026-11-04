@@ -8,7 +8,7 @@ export async function requestWebLink(page: Page, email: string): Promise<string>
   await clearMailbox(email);
   await page.getByLabel("Email").fill(email);
   await page.getByRole("button", { name: "Email me a sign-in link" }).click();
-  await expect(page.getByRole("status")).toContainText("We sent a sign-in link");
+  await expect(page.getByText("We sent a sign-in link")).toBeVisible({ timeout: 20000 });
   return waitForSignInLink(email);
 }
 

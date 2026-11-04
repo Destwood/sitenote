@@ -36,6 +36,7 @@ export async function signIn(popup: Page, email: string): Promise<void> {
   await page.getByRole("button", { name: "Connect the extension" }).click();
   await expect(page.getByTestId("extension-connected")).toBeVisible();
   await page.close();
+  await context.clearCookies({ name: /^sb-/ });
   await popup.reload();
   await expect(popup.getByTestId("display-name")).toBeVisible();
 }
