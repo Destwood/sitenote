@@ -2,6 +2,7 @@ const MAILPIT_URL = "http://127.0.0.1:54324";
 const DEFAULT_TIMEOUT_MS = 15000;
 const POLL_INTERVAL_MS = 250;
 const OTP_PATTERN = /\b(\d{6})\b/;
+const SIGN_IN_LINK_PATTERN = /https?:\/\/[^\s<>"')]+\/auth\/v1\/verify[^\s<>"')]*/;
 
 interface MessageSummary {
   ID: string;
@@ -9,6 +10,7 @@ interface MessageSummary {
 
 interface MessageDetail {
   Text: string;
+  HTML?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -41,7 +43,7 @@ export async function clearMailbox(address: string): Promise<void> {
   }
 }
 
-async function latestCode(address: string): Promise<string | null> {
+async function latestMessage(address: string): Promise<MessageDetail | null> {
   const list = await readJson(await fetch(searchUrl(address)));
   if (!isRecord(list) || !Array.isArray(list.messages)) {
     throw new Error("Unexpected Mailpit search response");
@@ -57,7 +59,24 @@ async function latestCode(address: string): Promise<string | null> {
   if (!isMessageDetail(detail)) {
     throw new Error("Unexpected Mailpit message");
   }
+  return detail;
+}
+
+async function latestCode(address: string): Promise<string | null> {
+  const detail = await latestMessage(address);
+  if (detail === null) {
+    return null;
+  }
   return OTP_PATTERN.exec(detail.Text)?.[1] ?? null;
+}
+
+async function latestSignInLink(address: string): Promise<string | null> {
+  const detail = await latestMessage(address);
+  if (detail === null) {
+    return null;
+  }
+  const match = SIGN_IN_LINK_PATTERN.exec(`${detail.HTML ?? ""}\n${detail.Text}`);
+  return match === null ? null : match[0].replaceAll("&amp;", "&");
 }
 
 export async function waitForOtpCode(
@@ -73,4 +92,19 @@ export async function waitForOtpCode(
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
   throw new Error(`No sign-in code arrived for ${address} within ${String(timeoutMs)} ms`);
+}
+
+export async function waitForSignInLink(
+  address: string,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const link = await latestSignInLink(address);
+    if (link !== null) {
+      return link;
+    }
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+  }
+  throw new Error(`No sign-in link arrived for ${address} within ${String(timeoutMs)} ms`);
 }

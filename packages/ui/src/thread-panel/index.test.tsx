@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -339,6 +339,60 @@ describe("ThreadPanel", () => {
       expect(await screen.findByRole("alert")).toBeTruthy();
       expect(screen.getByRole<HTMLTextAreaElement>("textbox").value).toBe("Draft");
     });
+  });
+});
+
+describe("ThreadPanel outside pointer", () => {
+  it("closes an open thread on a pointerdown outside the panel", () => {
+    const { onClose } = renderPanel();
+
+    fireEvent.pointerDown(document.body);
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the thread open on a pointerdown inside the panel", () => {
+    const { onClose } = renderPanel();
+
+    fireEvent.pointerDown(screen.getByRole("dialog"));
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("ignores outside pointers for the new-thread draft", () => {
+    const { onClose } = renderPanel({ thread: null });
+
+    fireEvent.pointerDown(document.body);
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("keeps the thread open on a pointerdown inside the Sitenote shadow host", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const shadow = host.attachShadow({ mode: "open" });
+    const container = document.createElement("div");
+    const pin = document.createElement("button");
+    shadow.append(pin, container);
+    const onClose = vi.fn();
+    render(
+      <ThreadPanel
+        thread={makeThread()}
+        anchorRect={ANCHOR}
+        canChangeStatus
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        onEditComment={vi.fn().mockResolvedValue(undefined)}
+        onDeleteComment={vi.fn().mockResolvedValue(undefined)}
+        onToggleStatus={vi.fn()}
+        onClose={onClose}
+      />,
+      { container },
+    );
+
+    fireEvent.pointerDown(pin);
+
+    expect(onClose).not.toHaveBeenCalled();
+    host.remove();
   });
 });
 

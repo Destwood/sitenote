@@ -1,4 +1,12 @@
-import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 
 import { ClickUpTask, type ClickUpTaskState } from "../clickup-task";
 import { CommentItem } from "../comment-item";
@@ -86,8 +94,36 @@ export function ThreadPanel({
     }
   }
 
-  const { left, top } = placePanel(anchorRect, { width: PANEL_WIDTH, height }, viewport);
+  const closeOnOutsidePointer = useEffectEvent(() => {
+    onClose();
+  });
   const isNew = thread === null;
+
+  useEffect(() => {
+    if (isNew) {
+      return;
+    }
+    function handlePointerDown(event: PointerEvent) {
+      const panel = panelRef.current;
+      if (panel === null) {
+        return;
+      }
+      const root = panel.getRootNode();
+      const inside =
+        root instanceof ShadowRoot
+          ? event.composedPath().includes(root.host)
+          : panel.contains(event.target as Node);
+      if (!inside) {
+        closeOnOutsidePointer();
+      }
+    }
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+    };
+  }, [isNew]);
+
+  const { left, top } = placePanel(anchorRect, { width: PANEL_WIDTH, height }, viewport);
   const resolved = thread?.status === "resolved";
   const title = isNew ? "New thread" : `Thread ${String(thread.number)}`;
 

@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { AccountPanel } from "../account-panel";
 import { AllowedSitesPanel } from "../allowed-sites-panel";
-import { LINK_BUTTON_CLASS } from "../form-controls";
+import { LINK_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from "../form-controls";
 import { type AuthState } from "../messages";
 import { NotificationsRow } from "../notifications-panel";
 import { SitePanel } from "../site-panel";
@@ -53,6 +53,14 @@ export function SignedInView({ user, webUrl, onSignedOut }: SignedInViewProps) {
           setScreen("manage");
         }}
       />
+      <a
+        href={`${webUrl}/app`}
+        target="_blank"
+        rel="noreferrer"
+        className={`${SECONDARY_BUTTON_CLASS} w-full text-center`}
+      >
+        Open dashboard
+      </a>
       <NotificationsRow webUrl={webUrl} />
       <AccountPanel user={user} webUrl={webUrl} onSignedOut={onSignedOut} />
     </div>

@@ -41,15 +41,27 @@ describe("CommentItem", () => {
     expect(screen.getByText(/Hello/).className).toContain("whitespace-pre-wrap");
   });
 
-  it("renders a body with markup and links as plain text", () => {
+  it("renders a body with markup as plain text and only the URL as a link", () => {
     renderItem(
       makeComment({ body: '<img src=x onerror="alert(1)"> https://evil.test <b>bold</b>' }),
     );
 
     expect(document.querySelector("img")).toBeNull();
-    expect(document.querySelector("a")).toBeNull();
     expect(document.querySelector("b")).toBeNull();
-    expect(screen.getByText(/https:\/\/evil\.test/)).toBeTruthy();
+    expect(screen.getByRole("link").getAttribute("href")).toBe("https://evil.test");
+    expect(screen.getByText(/<b>bold<\/b>/)).toBeTruthy();
+  });
+
+  it("links a URL and keeps the trailing period outside the link", () => {
+    renderItem(makeComment({ body: "see https://example.com/a." }));
+
+    const link = screen.getByRole("link");
+
+    expect(link.textContent).toBe("https://example.com/a");
+    expect(link.getAttribute("href")).toBe("https://example.com/a");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toContain("noopener");
+    expect(link.nextSibling?.textContent).toBe(".");
   });
 
   it("highlights mentioned people as styled text and leaves everything else alone", () => {

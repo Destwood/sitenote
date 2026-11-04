@@ -35,9 +35,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
           Sitenote
         </Link>
         <h1 className="text-3xl font-bold tracking-tight">Sign in</h1>
-        <p className="text-neutral-600">
-          We email you a 6-digit code. New here? Entering your email creates your account.
-        </p>
+        <p className="text-neutral-600">Enter your email and we will send you a sign-in link.</p>
       </header>
       <SignInForm
         next={next}

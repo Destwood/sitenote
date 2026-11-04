@@ -4,7 +4,6 @@ import {
   describeCallbackError,
   describeOAuthError,
   describeSendCodeError,
-  describeVerifyCodeError,
   parseCallbackError,
 } from ".";
 
@@ -41,7 +40,6 @@ describe("code errors", () => {
     expect(describeSendCodeError({ code: "over_email_send_rate_limit" })).toContain(
       "Too many attempts",
     );
-    expect(describeVerifyCodeError({ status: 429 })).toContain("Too many attempts");
     expect(describeOAuthError({ code: "over_request_rate_limit" })).toContain("Too many attempts");
   });
 
@@ -51,15 +49,11 @@ describe("code errors", () => {
     );
   });
 
-  it("explains a wrong or expired code", () => {
-    expect(describeVerifyCodeError({ code: "otp_expired", status: 403 })).toContain(
-      "wrong or has expired",
-    );
-  });
-
   it("falls back to a connection hint without leaking raw messages", () => {
-    expect(describeSendCodeError({ status: 500 })).toContain("could not send");
-    expect(describeVerifyCodeError({})).toContain("could not verify");
+    expect(describeSendCodeError({ status: 500 })).toBe(
+      "We could not send the sign-in link. Check your connection and try again.",
+    );
     expect(describeOAuthError({ status: 400 })).toContain("Google sign-in");
+    expect(describeOAuthError({ status: 400 })).toContain("email sign-in link");
   });
 });
