@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   rpc: vi.fn(() => Promise.resolve({ data: false, error: null })),
+  createSignedUrl: vi.fn(),
   getAuthenticatedUser: vi.fn(),
   notFound: vi.fn(() => {
     throw new Error("NEXT_NOT_FOUND");
@@ -16,7 +17,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({ notFound: mocks.notFound, redirect: mocks.redirect }));
 vi.mock("../../../clickup-task-panel", () => ({ ClickUpTaskPanel: () => null }));
 vi.mock("../../../supabase-server", () => ({
-  createSupabaseServerClient: () => Promise.resolve({ from: mocks.from, rpc: mocks.rpc }),
+  createSupabaseServerClient: () =>
+    Promise.resolve({
+      from: mocks.from,
+      rpc: mocks.rpc,
+      storage: { from: () => ({ createSignedUrl: mocks.createSignedUrl }) },
+    }),
   getAuthenticatedUser: mocks.getAuthenticatedUser,
 }));
 vi.mock("../../../env", () => ({
@@ -91,6 +97,10 @@ async function renderPage(threadId = THREAD_ID) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getAuthenticatedUser.mockResolvedValue(USER);
+  mocks.createSignedUrl.mockResolvedValue({
+    data: { signedUrl: "https://storage.example.test/rec.webm" },
+    error: null,
+  });
   useTables({ thread: { data: THREAD, error: null }, access: ACCESS });
 });
 
@@ -140,6 +150,37 @@ describe("thread link", () => {
     expect(screen.getByText("Check the price")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Open in dashboard" }).getAttribute("href")).toBe(
       `/app/w/${WORKSPACE_ID}/threads/${THREAD_ID}`,
+    );
+  });
+
+  it("plays the signed recording named by the thread context", async () => {
+    useTables({
+      thread: {
+        data: {
+          ...THREAD,
+          context: {
+            viewport: { width: 1440, height: 900 },
+            devicePixelRatio: 2,
+            pageTitle: "Pricing",
+            url: "https://example.test/pricing",
+            browser: { name: "Chrome", version: "130" },
+            os: { name: "Windows", version: "11" },
+            userAgent: "ua",
+            consoleErrors: [],
+            capturedAt: "2026-10-22T09:00:00.000Z",
+            recording: { path: "ws/thread.webm", durationMs: 9_000, size: 2048 },
+          },
+        },
+        error: null,
+      },
+      access: ACCESS,
+    });
+
+    await renderPage();
+
+    expect(mocks.createSignedUrl).toHaveBeenCalledWith("ws/thread.webm", 3600);
+    expect(screen.getByLabelText("Screen recording").getAttribute("src")).toBe(
+      "https://storage.example.test/rec.webm",
     );
   });
 

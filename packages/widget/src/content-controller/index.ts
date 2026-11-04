@@ -28,7 +28,7 @@ import { createPicker, type PickPoint } from "../comment-picker";
 import { createPinTracker, type Measurements, type TrackedTarget } from "../pin-tracker";
 import { createStore, type Store } from "../store";
 import { createTextHighlighter } from "../text-highlighter";
-import { ERROR_MESSAGES } from "../result";
+import { ERROR_MESSAGES, type MessageResult } from "../result";
 import { upsertComment, upsertThread } from "../view-model";
 import { watchDom } from "../dom-watcher";
 import { watchPageUrl } from "../url-watcher";
@@ -64,6 +64,7 @@ export interface ContentState {
   threads: ThreadRecord[];
   members: MemberRecord[];
   screenshots: ReadonlyMap<string, ScreenshotState>;
+  recordings: ReadonlyMap<string, ScreenshotState>;
   resolutions: ReadonlyMap<string, Resolution>;
   positions: Measurements;
   commentMode: boolean;
@@ -153,6 +154,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     threads: [],
     members: [],
     screenshots: new Map(),
+    recordings: new Map(),
     resolutions: new Map(),
     positions: new Map(),
     commentMode: false,
@@ -423,26 +425,43 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     }
   }
 
+  async function loadMedia(
+    field: "screenshots" | "recordings",
+    threadId: string,
+    fetchUrl: (id: string) => Promise<MessageResult<string | null>>,
+  ): Promise<void> {
+    const setMedia = (value: ScreenshotState): void => {
+      store.setState((state) => ({
+        ...state,
+        [field]: new Map(state[field]).set(threadId, value),
+      }));
+    };
+    if (!store.getState()[field].has(threadId)) {
+      setMedia({ status: "loading" });
+    }
+    const result = await fetchUrl(threadId);
+    setMedia(
+      result.ok && result.data !== null
+        ? { status: "ready", url: result.data }
+        : { status: "unavailable" },
+    );
+  }
+
   async function loadScreenshot(threadId: string): Promise<void> {
     const thread = store.getState().threads.find((candidate) => candidate.id === threadId);
     if (thread?.hasScreenshot !== true) {
       return;
     }
-    const setScreenshot = (value: ScreenshotState): void => {
-      store.setState((state) => ({
-        ...state,
-        screenshots: new Map(state.screenshots).set(threadId, value),
-      }));
-    };
-    if (!store.getState().screenshots.has(threadId)) {
-      setScreenshot({ status: "loading" });
+    await loadMedia("screenshots", threadId, (id) => deps.backend.getScreenshotUrl(id));
+  }
+
+  async function loadRecording(threadId: string): Promise<void> {
+    const thread = store.getState().threads.find((candidate) => candidate.id === threadId);
+    const getRecordingUrl = deps.backend.getRecordingUrl;
+    if (thread?.context?.recording === undefined || getRecordingUrl === undefined) {
+      return;
     }
-    const result = await deps.backend.getScreenshotUrl(threadId);
-    setScreenshot(
-      result.ok && result.data !== null
-        ? { status: "ready", url: result.data }
-        : { status: "unavailable" },
-    );
+    await loadMedia("recordings", threadId, (id) => getRecordingUrl(id));
   }
 
   function beginPending(pending: PendingThread): void {
@@ -575,6 +594,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       }
       if (state.activeThreadId !== previous.activeThreadId && state.activeThreadId !== null) {
         void loadScreenshot(state.activeThreadId);
+        void loadRecording(state.activeThreadId);
       }
     });
     const handleContextMenu = (event: MouseEvent): void => {

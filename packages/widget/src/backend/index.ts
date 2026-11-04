@@ -75,6 +75,7 @@ export interface WidgetBackend {
     devicePixelRatio: number,
   ) => Promise<MessageResult<CapturedScreenshot>>;
   getScreenshotUrl: (threadId: string) => Promise<MessageResult<string | null>>;
+  getRecordingUrl?: (threadId: string) => Promise<MessageResult<string | null>>;
   collectContext: () => Promise<ThreadContext>;
   getPreference: (siteId: string) => Promise<MessageResult<Preferences>>;
   setPreference: (siteId: string, showResolved: boolean) => Promise<MessageResult<null>>;

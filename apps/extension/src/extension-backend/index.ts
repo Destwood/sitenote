@@ -24,6 +24,7 @@ export function createExtensionBackend(): WidgetBackend {
     captureScreenshot: (rect, devicePixelRatio) =>
       sendMessage({ type: "screenshot.capture", rect, devicePixelRatio }),
     getScreenshotUrl: (threadId) => sendMessage({ type: "threads.screenshotUrl", threadId }),
+    getRecordingUrl: (threadId) => sendMessage({ type: "threads.recordingUrl", threadId }),
     collectContext: createContextCollector({
       win: window,
       doc: document,

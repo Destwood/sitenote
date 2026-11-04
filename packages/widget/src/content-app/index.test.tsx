@@ -93,6 +93,7 @@ function makeState(overrides: Partial<ContentState> = {}): ContentState {
     threads: [],
     members: [],
     screenshots: new Map(),
+    recordings: new Map(),
     resolutions: new Map(),
     positions: new Map(),
     commentMode: false,
@@ -460,6 +461,37 @@ describe("thread panel", () => {
     });
 
     expect(screen.getByText("Loading screenshot…")).toBeTruthy();
+  });
+
+  it("plays the signed recording of the open thread", () => {
+    setup({
+      threads: [
+        thread(FIRST_ID, {
+          context: {
+            viewport: { width: 1440, height: 900 },
+            devicePixelRatio: 2,
+            pageTitle: "Northwind",
+            url: "https://example.test/",
+            browser: { name: "Chrome", version: "130" },
+            os: { name: "Windows", version: "11" },
+            userAgent: "ua",
+            consoleErrors: [],
+            capturedAt: "2026-10-21T10:00:00.000Z",
+            recording: { path: "ws/thread.webm", durationMs: 9_000, size: 2048 },
+          },
+        }),
+      ],
+      resolutions: new Map([[FIRST_ID, RESOLVED]]),
+      positions: new Map([[FIRST_ID, measurement(100, 200)]]),
+      activeThreadId: FIRST_ID,
+      recordings: new Map([[FIRST_ID, { status: "ready", url: "https://storage.test/r.webm" }]]),
+    });
+
+    const section = screen.getByRole("region", { name: "Page context" });
+
+    expect(within(section).getByLabelText("Screen recording").getAttribute("src")).toBe(
+      "https://storage.test/r.webm",
+    );
   });
 
   it("opens the new thread form for a pending thread and submits through the controller", async () => {

@@ -1,4 +1,4 @@
-import type { ConsoleErrorRecord, ThreadContext } from "@sitenote/core";
+import type { ConsoleErrorRecord, RecordingRef, ThreadContext } from "@sitenote/core";
 import { useState } from "react";
 
 import { FOCUS_RING } from "../control-classes";
@@ -10,11 +10,22 @@ export interface ContextSectionProps {
   context: ThreadContext | null;
   hasScreenshot: boolean;
   screenshot?: ScreenshotState | undefined;
+  recording?: ScreenshotState | undefined;
 }
 
 export function formatViewport(context: ThreadContext): string {
   const ratio = Number(context.devicePixelRatio.toFixed(2));
   return `${String(context.viewport.width)}×${String(context.viewport.height)} @${String(ratio)}x`;
+}
+
+export function formatDuration(durationMs: number): string {
+  const totalSeconds = Math.round(durationMs / 1000);
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return `${String(Math.floor(totalSeconds / 60))}:${seconds}`;
+}
+
+export function formatSizeMb(size: number): string {
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function formatSystem(name: string, version: string | undefined): string {
@@ -101,6 +112,40 @@ function ScreenshotBlock({
   );
 }
 
+interface RecordingBlockProps {
+  recording: RecordingRef;
+  state: ScreenshotState | undefined;
+}
+
+function RecordingBlock({ recording, state }: RecordingBlockProps) {
+  if (state === undefined || state.status === "loading") {
+    return (
+      <p role="status" className="text-neutral-600">
+        Loading video...
+      </p>
+    );
+  }
+  const url = state.status === "ready" ? safeScreenshotUrl(state.url) : null;
+  return (
+    <div className="space-y-1">
+      {url === null ? (
+        <p className="text-neutral-600">Video could not be loaded.</p>
+      ) : (
+        <video
+          aria-label="Screen recording"
+          controls
+          preload="metadata"
+          src={url}
+          className="max-h-48 w-full rounded-md bg-black"
+        />
+      )}
+      <p className="text-neutral-600">
+        {formatDuration(recording.durationMs)} · {formatSizeMb(recording.size)}
+      </p>
+    </div>
+  );
+}
+
 interface ErrorItemProps {
   record: ConsoleErrorRecord;
 }
@@ -170,13 +215,21 @@ function Details({ context }: DetailsProps) {
   );
 }
 
-export function ContextSection({ context, hasScreenshot, screenshot }: ContextSectionProps) {
+export function ContextSection({
+  context,
+  hasScreenshot,
+  screenshot,
+  recording,
+}: ContextSectionProps) {
   return (
     <section
       aria-label="Page context"
       className="space-y-2 border-t border-neutral-100 py-3 text-xs text-neutral-700"
     >
       <ScreenshotBlock hasScreenshot={hasScreenshot} screenshot={screenshot} />
+      {context?.recording === undefined ? null : (
+        <RecordingBlock recording={context.recording} state={recording} />
+      )}
       {context === null ? (
         <p className="text-neutral-600">{CONTEXT_UNAVAILABLE_TEXT}</p>
       ) : (

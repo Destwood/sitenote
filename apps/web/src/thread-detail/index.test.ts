@@ -20,6 +20,18 @@ const THREAD = {
   context: {},
 };
 
+const CONTEXT = {
+  viewport: { width: 1440, height: 900 },
+  devicePixelRatio: 2,
+  pageTitle: "Pricing",
+  url: "https://example.test/pricing",
+  browser: { name: "Chrome", version: "130" },
+  os: { name: "Windows", version: "11" },
+  userAgent: "ua",
+  consoleErrors: [],
+  capturedAt: "2026-10-22T09:00:00.000Z",
+};
+
 const COMMENTS = [
   {
     id: "40000000-0000-4000-8000-000000000001",
@@ -69,11 +81,12 @@ function fakeClient(tables: Record<string, Result>, filters: string[] = []) {
   const createSignedUrl = vi.fn(() =>
     Promise.resolve({ data: { signedUrl: "https://storage.example.test/shot.webp" }, error: null }),
   );
+  const storageFrom = vi.fn(() => ({ createSignedUrl }));
   const client = {
     from,
-    storage: { from: () => ({ createSignedUrl }) },
+    storage: { from: storageFrom },
   };
-  return { client: client as unknown as SitenoteClient, from, createSignedUrl };
+  return { client: client as unknown as SitenoteClient, from, createSignedUrl, storageFrom };
 }
 
 function tables(thread: Result, comments: Result = { data: COMMENTS, error: null }) {
@@ -146,6 +159,7 @@ describe("readThreadDetail", () => {
       context: null,
       hasScreenshot: false,
       screenshot: undefined,
+      recording: undefined,
     });
     expect(detail?.comments).toEqual([
       {
@@ -186,5 +200,33 @@ describe("readThreadDetail", () => {
       status: "ready",
       url: "https://storage.example.test/shot.webp",
     });
+  });
+
+  it("signs the recording named by the thread context", async () => {
+    const recording = { path: "ws/thread.webm", durationMs: 9_000, size: 2048 };
+    const { client, createSignedUrl, storageFrom } = fakeClient(
+      tables({ data: { ...THREAD, context: { ...CONTEXT, recording } }, error: null }),
+    );
+
+    const detail = await readThreadDetail(client, THREAD_ID);
+
+    expect(storageFrom).toHaveBeenCalledWith("recordings");
+    expect(createSignedUrl).toHaveBeenCalledWith("ws/thread.webm", 3600);
+    expect(detail?.context?.recording).toEqual(recording);
+    expect(detail?.recording).toEqual({
+      status: "ready",
+      url: "https://storage.example.test/shot.webp",
+    });
+  });
+
+  it("leaves the recording unsigned when the context has none", async () => {
+    const { client, storageFrom } = fakeClient(
+      tables({ data: { ...THREAD, context: CONTEXT }, error: null }),
+    );
+
+    const detail = await readThreadDetail(client, THREAD_ID);
+
+    expect(storageFrom).not.toHaveBeenCalledWith("recordings");
+    expect(detail?.recording).toBeUndefined();
   });
 });
