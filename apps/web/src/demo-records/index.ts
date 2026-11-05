@@ -10,7 +10,7 @@ export const COMMENT_COLUMNS =
   `id, thread_id, author_id, body, mentions, edited_at, deleted_at, created_at, author:profiles!comments_author_id_fkey(${PROFILE_COLUMNS})` as const;
 
 export const THREAD_SELECT =
-  `id, site_id, page_url, anchor, status, context, screenshot_path, clickup_task_url, created_at, created_by, author:profiles!threads_created_by_fkey(${PROFILE_COLUMNS}), comments(${COMMENT_COLUMNS})` as const;
+  `id, site_id, page_url, anchor, status, context, screenshot_path, clickup_task_url, jira_issue_key, jira_issue_url, created_at, created_by, author:profiles!threads_created_by_fkey(${PROFILE_COLUMNS}), comments(${COMMENT_COLUMNS})` as const;
 
 export const MEMBER_SELECT =
   `role, profile:profiles!members_user_id_fkey(${PROFILE_COLUMNS})` as const;
@@ -42,6 +42,8 @@ export interface ThreadRow {
   context: unknown;
   screenshot_path: string | null;
   clickup_task_url: string | null;
+  jira_issue_key: string | null;
+  jira_issue_url: string | null;
   created_at: string;
   created_by: string | null;
   author: ProfileRow | null;
@@ -100,6 +102,8 @@ export function toThread(row: ThreadRow): ThreadRecord {
     context: parseThreadContext(row.context),
     hasScreenshot: row.screenshot_path !== null,
     clickUpTaskUrl: row.clickup_task_url,
+    jiraIssueKey: row.jira_issue_key,
+    jiraIssueUrl: row.jira_issue_url,
     comments: row.comments.map(toComment).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
   };
 }

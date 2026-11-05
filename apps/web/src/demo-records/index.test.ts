@@ -51,6 +51,8 @@ function threadRow(overrides: Partial<ThreadRow> = {}): ThreadRow {
     context: {},
     screenshot_path: null,
     clickup_task_url: null,
+    jira_issue_key: null,
+    jira_issue_url: null,
     created_at: "2026-10-24T09:00:00.000Z",
     created_by: AUTHOR.user_id,
     author: AUTHOR,
@@ -77,6 +79,19 @@ describe("toThread", () => {
     });
     expect(thread.anchor).toEqual(ANCHOR);
     expect(thread.comments.map((comment) => comment.id)).toEqual(["earlier", "later"]);
+  });
+
+  it("maps the linked Jira issue of the thread", () => {
+    const thread = toThread(
+      threadRow({
+        jira_issue_key: "PROJ-123",
+        jira_issue_url: "https://acme.atlassian.net/browse/PROJ-123",
+      }),
+    );
+    expect(thread).toMatchObject({
+      jiraIssueKey: "PROJ-123",
+      jiraIssueUrl: "https://acme.atlassian.net/browse/PROJ-123",
+    });
   });
 
   it("drops an anchor that does not match the schema", () => {

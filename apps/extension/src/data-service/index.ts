@@ -20,6 +20,8 @@ import {
   type ErrorResponse,
   failure,
   isErrorCode,
+  type JiraLinkResult,
+  jiraLinkResultSchema,
   type MessageResult,
   success,
 } from "@sitenote/widget";
@@ -39,7 +41,7 @@ const PROFILE_COLUMNS = "user_id, display_name, avatar_url" as const;
 const COMMENT_COLUMNS =
   `id, thread_id, author_id, body, mentions, edited_at, deleted_at, created_at, author:profiles!comments_author_id_fkey(${PROFILE_COLUMNS})` as const;
 const THREAD_SELECT =
-  `id, site_id, page_url, anchor, status, context, screenshot_path, clickup_task_url, created_at, created_by, author:profiles!threads_created_by_fkey(${PROFILE_COLUMNS}), comments(${COMMENT_COLUMNS})` as const;
+  `id, site_id, page_url, anchor, status, context, screenshot_path, clickup_task_url, jira_issue_key, jira_issue_url, created_at, created_by, author:profiles!threads_created_by_fkey(${PROFILE_COLUMNS}), comments(${COMMENT_COLUMNS})` as const;
 const MEMBER_SELECT = `role, profile:profiles!members_user_id_fkey(${PROFILE_COLUMNS})` as const;
 const NOTIFICATION_SELECT =
   "id, kind, read_at, created_at, thread_id, thread:threads(page_url, status), comment:comments(body, deleted_at, author:profiles!comments_author_id_fkey(display_name))" as const;
@@ -84,6 +86,8 @@ interface ThreadRow {
   context: unknown;
   screenshot_path: string | null;
   clickup_task_url: string | null;
+  jira_issue_key: string | null;
+  jira_issue_url: string | null;
   created_at: string;
   created_by: string | null;
   author: ProfileRow | null;
@@ -153,6 +157,8 @@ export interface DataService {
   clickUpCreateTask: (
     request: Handled<"clickup.createTask">,
   ) => Promise<MessageResult<ClickUpTaskResult>>;
+  jiraStatus: (request: Handled<"jira.status">) => Promise<MessageResult<boolean>>;
+  jiraLinkIssue: (request: Handled<"jira.linkIssue">) => Promise<MessageResult<JiraLinkResult>>;
   createComment: (request: Handled<"comments.create">) => Promise<MessageResult<CommentRecord>>;
   updateComment: (request: Handled<"comments.update">) => Promise<MessageResult<CommentRecord>>;
   deleteComment: (request: Handled<"comments.delete">) => Promise<MessageResult<CommentRecord>>;
@@ -248,6 +254,8 @@ function toThread(row: ThreadRow): ThreadRecord {
     context: toContext(row.context),
     hasScreenshot: row.screenshot_path !== null,
     clickUpTaskUrl: row.clickup_task_url,
+    jiraIssueKey: row.jira_issue_key,
+    jiraIssueUrl: row.jira_issue_url,
     comments: row.comments.map(toComment).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
   };
 }
@@ -484,6 +492,24 @@ export function createDataService(deps: DataServiceDeps): DataService {
           return functionFailure(result.error);
         }
         const parsed = z.safeParse(clickUpTaskResultSchema, result.data);
+        return parsed.success ? success(parsed.data) : failure("unknown");
+      }),
+
+    jiraStatus: ({ workspaceId }) =>
+      guarded(async () => {
+        const result = await client.rpc("jira_configured", { p_workspace_id: workspaceId });
+        return result.error === null ? success(result.data) : fail(result.error);
+      }),
+
+    jiraLinkIssue: ({ threadId, issueKey }) =>
+      guarded(async () => {
+        const result = await client.functions.invoke("jira-link-issue", {
+          body: { threadId, issueKey },
+        });
+        if (result.error !== null) {
+          return functionFailure(result.error);
+        }
+        const parsed = z.safeParse(jiraLinkResultSchema, result.data);
         return parsed.success ? success(parsed.data) : failure("unknown");
       }),
 

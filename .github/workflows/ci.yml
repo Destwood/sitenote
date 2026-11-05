@@ -80,8 +80,8 @@ jobs:
         with:
           deno-version: "2.x"
       - run: deno check --config supabase/functions/deno.json supabase/functions/*/index.ts supabase/functions/*/handler.ts supabase/functions/*/handler.test.ts
-      - run: deno lint supabase/functions/clickup-create-task supabase/functions/clickup-save-settings supabase/functions/clickup-hierarchy supabase/functions/notify-email supabase/functions/_shared/runtime supabase/functions/_shared/supabase supabase/functions/_shared/testing
-      - run: deno test --config supabase/functions/deno.json supabase/functions/clickup-create-task supabase/functions/clickup-save-settings supabase/functions/clickup-hierarchy supabase/functions/notify-email
+      - run: deno lint supabase/functions/clickup-create-task supabase/functions/clickup-save-settings supabase/functions/clickup-hierarchy supabase/functions/jira-save-settings supabase/functions/jira-link-issue supabase/functions/notify-email supabase/functions/_shared/runtime supabase/functions/_shared/supabase supabase/functions/_shared/testing
+      - run: deno test --config supabase/functions/deno.json supabase/functions/clickup-create-task supabase/functions/clickup-save-settings supabase/functions/clickup-hierarchy supabase/functions/jira-save-settings supabase/functions/jira-link-issue supabase/functions/notify-email
 
   e2e:
     name: End-to-end
@@ -89,6 +89,7 @@ jobs:
     timeout-minutes: 35
     env:
       CLICKUP_MOCK_HOST: 0.0.0.0
+      JIRA_MOCK_HOST: 0.0.0.0
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -116,14 +117,25 @@ jobs:
           done
           cat clickup-mock.log
           exit 1
-      - name: Write Edge Function settings for the mock ClickUp server
+      - name: Start the mock Jira server
+        run: |
+          nohup node e2e/fixtures/jira/server.ts > jira-mock.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:4412/health > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat jira-mock.log
+          exit 1
+      - name: Write Edge Function settings for the mock ClickUp and Jira servers
         run: |
           gateway=$(docker network inspect supabase_network_sitenote -f '{{(index .IPAM.Config 0).Gateway}}')
           echo "Mock ClickUp reachable from the Edge runtime at http://$gateway:4411"
+          echo "Mock Jira reachable from the Edge runtime at http://$gateway:4412"
           {
             echo "SITE_URL=http://localhost:3000"
             echo "WEBHOOK_SECRET=ci-webhook-secret"
             echo "CLICKUP_API_BASE=http://$gateway:4411"
+            echo "JIRA_API_BASE=http://$gateway:4412"
           } > supabase/functions/.env
       - name: Serve Edge Functions
         run: |
@@ -158,6 +170,7 @@ jobs:
             e2e/playwright-report
             functions.log
             clickup-mock.log
+            jira-mock.log
             smoke.json
             smoke.headers
           retention-days: 7

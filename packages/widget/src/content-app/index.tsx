@@ -165,6 +165,15 @@ export function ContentApp({ controller }: ContentAppProps) {
             void controller.createClickUpTask(activeView.id);
           },
         }}
+        jira={{
+          issueKey: activeRecord.jiraIssueKey ?? null,
+          issueUrl: activeRecord.jiraIssueUrl ?? null,
+          canLink: state.jiraConfigured,
+          pending: state.jiraPending.has(activeView.id),
+          onLink: (issueKey) => {
+            void controller.linkJiraIssue(activeView.id, issueKey);
+          },
+        }}
         onSubmit={(submission) => controller.reply(activeView.id, submission)}
         onEditComment={controller.editComment}
         onDeleteComment={controller.deleteComment}

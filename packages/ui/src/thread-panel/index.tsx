@@ -13,6 +13,7 @@ import { CommentItem } from "../comment-item";
 import { Composer, type ComposerSubmission } from "../composer";
 import { ContextSection } from "../context-section";
 import { ICON_BUTTON, PANEL_SURFACE, SECONDARY_BUTTON } from "../control-classes";
+import { JiraIssue, type JiraIssueState } from "../jira-issue";
 import { useNow } from "../now";
 import { VIEWPORT_MARGIN, placePanel, type AnchorRect } from "../placement";
 import type { PersonView, ScreenshotState, ThreadView } from "../types";
@@ -30,6 +31,7 @@ export interface ThreadPanelProps {
   screenshot?: ScreenshotState | undefined;
   recording?: ScreenshotState | undefined;
   clickUp?: ClickUpTaskState | undefined;
+  jira?: JiraIssueState | undefined;
   onReplaySteps?: (() => void) | undefined;
   onSubmit: (submission: ComposerSubmission) => Promise<void>;
   onEditComment: (commentId: string, body: string) => Promise<void>;
@@ -55,6 +57,7 @@ export function ThreadPanel({
   screenshot,
   recording,
   clickUp,
+  jira,
   onReplaySteps,
   onSubmit,
   onEditComment,
@@ -183,6 +186,11 @@ export function ThreadPanel({
           {clickUp === undefined ? null : (
             <div className="py-3">
               <ClickUpTask {...clickUp} />
+            </div>
+          )}
+          {jira === undefined ? null : (
+            <div className="py-3">
+              <JiraIssue {...jira} />
             </div>
           )}
           <ContextSection

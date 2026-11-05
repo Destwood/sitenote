@@ -25,6 +25,8 @@ export { PANEL_WIDTH, ThreadPanel } from "./thread-panel";
 export type { ThreadPanelProps } from "./thread-panel";
 export { ClickUpTask } from "./clickup-task";
 export type { ClickUpTaskState } from "./clickup-task";
+export { JiraIssue } from "./jira-issue";
+export type { JiraIssueState } from "./jira-issue";
 export { Toast, ToastRegion } from "./toast";
 export type { ToastProps, ToastRegionProps, ToastVariant, ToastView } from "./toast";
 export type { CommentView, PersonView, ScreenshotState, ThreadStatus, ThreadView } from "./types";

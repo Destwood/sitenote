@@ -163,6 +163,17 @@ describe("createExtensionBackend", () => {
       (backend: ReturnType<typeof createExtensionBackend>) => backend.createClickUpTask(THREAD_ID),
       { type: "clickup.createTask", threadId: THREAD_ID },
     ],
+    [
+      "getJiraStatus",
+      (backend: ReturnType<typeof createExtensionBackend>) => backend.getJiraStatus(WORKSPACE_ID),
+      { type: "jira.status", workspaceId: WORKSPACE_ID },
+    ],
+    [
+      "linkJiraIssue",
+      (backend: ReturnType<typeof createExtensionBackend>) =>
+        backend.linkJiraIssue(THREAD_ID, "PROJ-12"),
+      { type: "jira.linkIssue", threadId: THREAD_ID, issueKey: "PROJ-12" },
+    ],
   ])("sends the runtime message behind %s", async (_name, call, message) => {
     await call(createExtensionBackend());
 

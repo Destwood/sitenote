@@ -69,6 +69,8 @@ const THREAD_ROW = {
   context: {},
   screenshot_path: null,
   clickup_task_url: null,
+  jira_issue_key: null,
+  jira_issue_url: null,
   created_at: "2026-10-24T09:00:00.000Z",
   created_by: USER_ID,
   author: PROFILE,
@@ -496,6 +498,15 @@ describe("members, screenshots and clickup", () => {
     const { backend } = setup();
     expect(await backend.getClickUpStatus(DEMO_WORKSPACE_ID)).toEqual({ ok: true, data: false });
     expect(await backend.createClickUpTask(THREAD_ID)).toMatchObject({
+      ok: false,
+      error: { code: "not_configured" },
+    });
+  });
+
+  it("has no Jira integration in the demo", async () => {
+    const { backend } = setup();
+    expect(await backend.getJiraStatus(DEMO_WORKSPACE_ID)).toEqual({ ok: true, data: false });
+    expect(await backend.linkJiraIssue(THREAD_ID, "PROJ-123")).toMatchObject({
       ok: false,
       error: { code: "not_configured" },
     });

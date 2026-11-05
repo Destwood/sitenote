@@ -4,6 +4,7 @@ const FIXTURE_PORT = 4173;
 const FIXTURE_ORIGIN = `http://127.0.0.1:${String(FIXTURE_PORT)}`;
 const WEB_ORIGIN = "http://localhost:3000";
 const CLICKUP_MOCK_PORT = 4411;
+const JIRA_MOCK_PORT = 4412;
 const isCi = Boolean(process.env.CI);
 
 export default defineConfig({
@@ -56,6 +57,12 @@ export default defineConfig({
       url: `http://127.0.0.1:${String(CLICKUP_MOCK_PORT)}/health`,
       reuseExistingServer: true,
       env: { CLICKUP_MOCK_PORT: String(CLICKUP_MOCK_PORT) },
+    },
+    {
+      command: "node fixtures/jira/server.ts",
+      url: `http://127.0.0.1:${String(JIRA_MOCK_PORT)}/health`,
+      reuseExistingServer: true,
+      env: { JIRA_MOCK_PORT: String(JIRA_MOCK_PORT) },
     },
     {
       command: "pnpm --filter @sitenote/web start",

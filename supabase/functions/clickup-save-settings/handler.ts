@@ -23,10 +23,10 @@ export function handleSaveSettings(
     const body = parseRequest(saveSettingsBody, await readJsonBody(request));
     const user = userClient(env, token, fetchImpl);
     const userId = await authenticate(user, token);
-    await requireOwner(user, body.workspaceId, userId);
+    await requireOwner(user, body.workspaceId, userId, "clickup");
 
     const service = serviceClient(env, fetchImpl);
-    const existing = await loadIntegration(service, body.workspaceId);
+    const existing = await loadIntegration(service, body.workspaceId, "clickup");
     let secretId = existing?.secretId ?? null;
 
     if (body.token !== undefined) {
@@ -38,7 +38,7 @@ export function handleSaveSettings(
       if (!(await clickUp.verifyToken())) {
         throw new ApiError("validation", "ClickUp rejected this token");
       }
-      secretId = await storeToken(service, body.workspaceId, body.token, secretId);
+      secretId = await storeToken(service, body.workspaceId, body.token, secretId, "clickup");
     } else if (secretId === null) {
       throw new ApiError("validation", "Enter a ClickUp token to connect");
     }

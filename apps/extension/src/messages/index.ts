@@ -9,6 +9,7 @@ import {
   ERROR_CODES,
   THREAD_STATUSES,
   clickUpTaskResultSchema,
+  jiraLinkResultSchema,
   httpUrlSchema,
   captureRectSchema,
   capturedScreenshotSchema,
@@ -22,6 +23,7 @@ import {
   type CapturedScreenshot,
   type ClickUpTaskResult,
   type CommentRecord,
+  type JiraLinkResult,
   type MemberRecord,
   type MessageResult,
   type NotificationList,
@@ -75,6 +77,10 @@ const notificationLimitSchema = z.int().check(z.minimum(1), z.maximum(NOTIFICATI
 const notificationIdsSchema = z
   .array(idSchema)
   .check(z.minLength(1), z.maxLength(NOTIFICATIONS_PAGE_MAX));
+const JIRA_ISSUE_KEY_MAX = 64;
+const jiraIssueKeySchema = z
+  .string()
+  .check(z.maxLength(JIRA_ISSUE_KEY_MAX), z.regex(/^[A-Z][A-Z0-9_]+-[0-9]+$/));
 
 export const dataRequestSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("sites.forOrigin"), origin: originSchema }),
@@ -134,6 +140,8 @@ export const dataRequestSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("sites.disable"), origin: originSchema }),
   z.object({ type: z.literal("clickup.status"), workspaceId: idSchema }),
   z.object({ type: z.literal("clickup.createTask"), threadId: idSchema }),
+  z.object({ type: z.literal("jira.status"), workspaceId: idSchema }),
+  z.object({ type: z.literal("jira.linkIssue"), threadId: idSchema, issueKey: jiraIssueKeySchema }),
   z.object({
     type: z.literal("sites.setErrorCapture"),
     tabId: tabIdSchema,
@@ -273,6 +281,8 @@ export interface DataByType {
   "sites.setErrorCapture": null;
   "clickup.status": boolean;
   "clickup.createTask": ClickUpTaskResult;
+  "jira.status": boolean;
+  "jira.linkIssue": JiraLinkResult;
   "recording.start": RecordingStatus;
   "recording.stop": null;
   "recording.status": RecordingStatus;
@@ -319,6 +329,8 @@ export const RESPONSE_SCHEMAS: {
   "sites.setErrorCapture": resultSchema(z.null()),
   "clickup.status": resultSchema(z.boolean()),
   "clickup.createTask": resultSchema(clickUpTaskResultSchema),
+  "jira.status": resultSchema(z.boolean()),
+  "jira.linkIssue": resultSchema(jiraLinkResultSchema),
   "recording.start": resultSchema(recordingStatusSchema),
   "recording.stop": resultSchema(z.null()),
   "recording.status": resultSchema(recordingStatusSchema),

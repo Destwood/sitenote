@@ -7,6 +7,8 @@ import { ClickUpTaskPanel } from "../../../../../../clickup-task-panel";
 import { CopyLink } from "../../../../../../copy-link";
 import { getPublicEnv } from "../../../../../../env";
 import { DASH_CARD_CLASS, DASH_LINK_CLASS } from "../../../../../../dashboard-classes";
+import { isJiraConfigured } from "../../../../../../jira-api";
+import { JiraIssuePanel } from "../../../../../../jira-issue-panel";
 import { PageContext } from "../../../../../../page-context";
 import { PageHeader } from "../../../../../../page-header";
 import { pagePathLabel } from "../../../../../../page-path";
@@ -49,6 +51,7 @@ export default async function ThreadPage({ params }: ThreadPageProps) {
     notFound();
   }
   const canCreateClickUpTask = await isClickUpConfigured(supabase, workspaceId);
+  const canLinkJira = await isJiraConfigured(supabase, workspaceId);
   const { webUrl } = getPublicEnv();
 
   return (
@@ -110,6 +113,12 @@ export default async function ThreadPage({ params }: ThreadPageProps) {
             threadId={threadId}
             taskUrl={detail.clickUpTaskUrl}
             canCreate={canCreateClickUpTask}
+          />
+          <JiraIssuePanel
+            threadId={threadId}
+            issueKey={detail.jiraIssueKey}
+            issueUrl={detail.jiraIssueUrl}
+            canLink={canLinkJira}
           />
         </aside>
       </div>

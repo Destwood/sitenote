@@ -23,7 +23,7 @@ export function handleHierarchy(
     const body = parseRequest(hierarchyBody, await readJsonBody(request));
     const user = userClient(env, token, fetchImpl);
     const userId = await authenticate(user, token);
-    await requireOwner(user, body.workspaceId, userId);
+    await requireOwner(user, body.workspaceId, userId, "clickup");
 
     const clickUpToken = body.token ?? (await storedToken(env, fetchImpl, body.workspaceId));
     const clickUp = createClickUpClient({
@@ -45,7 +45,7 @@ async function storedToken(
   workspaceId: string,
 ): Promise<string> {
   const service = serviceClient(env, fetchImpl);
-  const integration = await loadIntegration(service, workspaceId);
+  const integration = await loadIntegration(service, workspaceId, "clickup");
   if (integration === null || integration.secretId === null) {
     throw new ApiError("not_configured", "Enter a ClickUp token to load the lists");
   }

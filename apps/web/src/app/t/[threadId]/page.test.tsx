@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(() => Promise.resolve({ data: false, error: null })),
   createSignedUrl: vi.fn(),
   getAuthenticatedUser: vi.fn(),
+  jiraPanel: vi.fn<(props: unknown) => null>(() => null),
   notFound: vi.fn(() => {
     throw new Error("NEXT_NOT_FOUND");
   }),
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({ notFound: mocks.notFound, redirect: mocks.redirect }));
 vi.mock("../../../clickup-task-panel", () => ({ ClickUpTaskPanel: () => null }));
+vi.mock("../../../jira-issue-panel", () => ({ JiraIssuePanel: mocks.jiraPanel }));
 vi.mock("../../../supabase-server", () => ({
   createSupabaseServerClient: () =>
     Promise.resolve({
@@ -45,6 +47,8 @@ const THREAD = {
   resolved_at: null,
   screenshot_path: null,
   context: {},
+  jira_issue_key: null,
+  jira_issue_url: null,
 };
 
 const COMMENTS = [
@@ -101,6 +105,7 @@ beforeEach(() => {
     data: { signedUrl: "https://storage.example.test/rec.webm" },
     error: null,
   });
+  mocks.rpc.mockResolvedValue({ data: false, error: null });
   useTables({ thread: { data: THREAD, error: null }, access: ACCESS });
 });
 
@@ -134,6 +139,44 @@ describe("access", () => {
     useTables({ thread: { data: null, error: { message: "down" } }, access: ACCESS });
 
     await expect(renderPage()).rejects.toThrow("Could not read the thread.");
+  });
+});
+
+describe("jira", () => {
+  it("passes the linked issue and the linking permission to the Jira panel", async () => {
+    mocks.rpc.mockResolvedValue({ data: true, error: null });
+    useTables({
+      thread: {
+        data: {
+          ...THREAD,
+          jira_issue_key: "PROJ-123",
+          jira_issue_url: "https://acme.atlassian.net/browse/PROJ-123",
+        },
+        error: null,
+      },
+      access: ACCESS,
+    });
+
+    await renderPage();
+
+    expect(mocks.rpc).toHaveBeenCalledWith("jira_configured", { p_workspace_id: WORKSPACE_ID });
+    expect(mocks.jiraPanel.mock.calls[0]?.[0]).toEqual({
+      threadId: THREAD_ID,
+      issueKey: "PROJ-123",
+      issueUrl: "https://acme.atlassian.net/browse/PROJ-123",
+      canLink: true,
+    });
+  });
+
+  it("offers no Jira linking when Jira is not configured", async () => {
+    await renderPage();
+
+    expect(mocks.jiraPanel.mock.calls[0]?.[0]).toEqual({
+      threadId: THREAD_ID,
+      issueKey: null,
+      issueUrl: null,
+      canLink: false,
+    });
   });
 });
 

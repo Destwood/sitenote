@@ -366,5 +366,9 @@ export function createDemoBackend(deps: DemoBackendDeps): WidgetBackend {
     getClickUpStatus: () => Promise.resolve(success(false)),
 
     createClickUpTask: () => Promise.resolve(failure("not_configured")),
+
+    getJiraStatus: () => Promise.resolve(success(false)),
+
+    linkJiraIssue: () => Promise.resolve(failure("not_configured")),
   };
 }

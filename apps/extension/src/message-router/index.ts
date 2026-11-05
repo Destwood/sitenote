@@ -54,6 +54,8 @@ const PAGE_SCOPED: ReadonlySet<ExtensionRequest["type"]> = new Set([
   "preferences.set",
   "clickup.status",
   "clickup.createTask",
+  "jira.status",
+  "jira.linkIssue",
   "recording.step",
 ]);
 
@@ -252,6 +254,10 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
         return data.clickUpStatus(request);
       case "clickup.createTask":
         return data.clickUpCreateTask(request);
+      case "jira.status":
+        return data.jiraStatus(request);
+      case "jira.linkIssue":
+        return data.jiraLinkIssue(request);
     }
   };
 }

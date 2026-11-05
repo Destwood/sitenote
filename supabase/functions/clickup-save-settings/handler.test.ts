@@ -75,6 +75,7 @@ Deno.test("lets the owner save a validated token and the chosen list", async () 
   );
   assertStringIncludes(save?.body ?? "", '"listId":"789"');
   assertStringIncludes(save?.body ?? "", SECRET_ID);
+  assertStringIncludes(save?.body ?? "", '"provider":"clickup"');
 });
 
 Deno.test("denies a member before calling ClickUp", async () => {

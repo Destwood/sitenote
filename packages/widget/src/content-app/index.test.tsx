@@ -108,6 +108,8 @@ function makeState(overrides: Partial<ContentState> = {}): ContentState {
     fallbackHighlights: false,
     clickUpConfigured: false,
     clickUpPending: new Set<string>(),
+    jiraConfigured: false,
+    jiraPending: new Set<string>(),
     selectionPlacement: "below",
     ...overrides,
   };
@@ -134,6 +136,7 @@ function makeController(store: Store<ContentState>) {
     deleteComment: vi.fn(() => Promise.resolve()),
     toggleStatus: vi.fn(() => Promise.resolve()),
     createClickUpTask: vi.fn(() => Promise.resolve()),
+    linkJiraIssue: vi.fn(() => Promise.resolve()),
     dismissToast: vi.fn(),
   };
   const controller: ContentController = { store, ...actions };
@@ -521,6 +524,42 @@ describe("thread panel", () => {
     setup({ pending, panelError: "Sitenote could not reach the server." });
 
     expect(screen.getByRole("alert").textContent).toBe("Sitenote could not reach the server.");
+  });
+
+  it("links a Jira issue to the open thread through the controller", async () => {
+    const user = userEvent.setup();
+    const { actions } = setup({
+      jiraConfigured: true,
+      threads: [thread(FIRST_ID)],
+      resolutions: new Map([[FIRST_ID, RESOLVED]]),
+      positions: new Map([[FIRST_ID, measurement(100, 200)]]),
+      activeThreadId: FIRST_ID,
+    });
+
+    const dialog = screen.getByRole("dialog", { name: "Thread 1" });
+    await user.type(within(dialog).getByRole("textbox", { name: "Jira issue key" }), "proj-7");
+    await user.click(within(dialog).getByRole("button", { name: "Link Jira issue" }));
+
+    expect(actions.linkJiraIssue).toHaveBeenCalledWith(FIRST_ID, "PROJ-7");
+  });
+
+  it("shows the linked Jira issue of the open thread", () => {
+    setup({
+      threads: [
+        thread(FIRST_ID, {
+          jiraIssueKey: "PROJ-7",
+          jiraIssueUrl: "https://org.atlassian.net/browse/PROJ-7",
+        }),
+      ],
+      resolutions: new Map([[FIRST_ID, RESOLVED]]),
+      positions: new Map([[FIRST_ID, measurement(100, 200)]]),
+      activeThreadId: FIRST_ID,
+    });
+
+    const dialog = screen.getByRole("dialog", { name: "Thread 1" });
+    expect(within(dialog).getByRole("link", { name: "Jira PROJ-7" }).getAttribute("href")).toBe(
+      "https://org.atlassian.net/browse/PROJ-7",
+    );
   });
 
   it("opens the active thread and replies through the controller", async () => {
