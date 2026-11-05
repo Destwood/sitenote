@@ -1,16 +1,25 @@
-import type { ConsoleErrorRecord, RecordingRef, ThreadContext } from "@sitenote/core";
-import { useState } from "react";
+import {
+  stepsToPlaywright,
+  type ConsoleErrorRecord,
+  type RecordingRef,
+  type RecordingStep,
+  type ThreadContext,
+} from "@sitenote/core";
+import { useEffect, useId, useState } from "react";
 
-import { FOCUS_RING } from "../control-classes";
+import { FOCUS_RING, SECONDARY_BUTTON } from "../control-classes";
 import type { ScreenshotState } from "../types";
 
 export const CONTEXT_UNAVAILABLE_TEXT = "Context unavailable";
+
+const COPY_FEEDBACK_MS = 2000;
 
 export interface ContextSectionProps {
   context: ThreadContext | null;
   hasScreenshot: boolean;
   screenshot?: ScreenshotState | undefined;
   recording?: ScreenshotState | undefined;
+  onReplaySteps?: (() => void) | undefined;
 }
 
 export function formatViewport(context: ThreadContext): string {
@@ -146,6 +155,109 @@ function RecordingBlock({ recording, state }: RecordingBlockProps) {
   );
 }
 
+const STEP_KIND_LABELS: Readonly<Record<RecordingStep["kind"], string>> = {
+  click: "Click",
+  input: "Field changed",
+  submit: "Form submitted",
+  navigate: "Page opened",
+};
+
+const COPY_LABELS = {
+  idle: "Copy as Playwright",
+  copied: "Copied",
+  failed: "Copy failed",
+} as const;
+
+function stepText(step: RecordingStep): string {
+  const text = step.kind === "navigate" ? (step.url ?? "") : step.label;
+  return text === "" ? step.selector : text;
+}
+
+interface RecordingStepsBlockProps {
+  steps: readonly RecordingStep[];
+  pageUrl: string;
+  onReplaySteps: (() => void) | undefined;
+}
+
+function RecordingStepsBlock({ steps, pageUrl, onReplaySteps }: RecordingStepsBlockProps) {
+  const headingId = useId();
+  const [copyState, setCopyState] = useState<keyof typeof COPY_LABELS>("idle");
+
+  useEffect(() => {
+    if (copyState === "idle") {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setCopyState("idle");
+    }, COPY_FEEDBACK_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [copyState]);
+
+  async function copyScript() {
+    try {
+      await navigator.clipboard.writeText(stepsToPlaywright(pageUrl, steps));
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <p id={headingId} className="font-medium text-neutral-900">
+        What the reporter did ({String(steps.length)})
+      </p>
+      <ol
+        aria-labelledby={headingId}
+        tabIndex={0}
+        className={`max-h-40 overflow-y-auto rounded-md border border-neutral-200 ${FOCUS_RING}`}
+      >
+        {steps.map((step, index) => {
+          const text = stepText(step);
+          return (
+            <li
+              key={`${String(step.t)}:${String(index)}`}
+              className="flex min-w-0 items-baseline gap-2 border-t border-neutral-100 px-2 py-1.5 first:border-t-0"
+            >
+              <span className="shrink-0 font-mono text-neutral-600">{formatDuration(step.t)}</span>
+              <span className="shrink-0 rounded-sm bg-neutral-100 px-1 text-neutral-700">
+                {STEP_KIND_LABELS[step.kind]}
+              </span>
+              <span title={text} className="min-w-0 truncate">
+                {text}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            void copyScript();
+          }}
+          className={SECONDARY_BUTTON}
+        >
+          {COPY_LABELS[copyState]}
+        </button>
+        {onReplaySteps === undefined ? null : (
+          <button
+            type="button"
+            onClick={() => {
+              onReplaySteps();
+            }}
+            className={SECONDARY_BUTTON}
+          >
+            Replay on page
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface ErrorItemProps {
   record: ConsoleErrorRecord;
 }
@@ -220,7 +332,9 @@ export function ContextSection({
   hasScreenshot,
   screenshot,
   recording,
+  onReplaySteps,
 }: ContextSectionProps) {
+  const steps = context?.recording?.steps ?? [];
   return (
     <section
       aria-label="Page context"
@@ -229,6 +343,9 @@ export function ContextSection({
       <ScreenshotBlock hasScreenshot={hasScreenshot} screenshot={screenshot} />
       {context?.recording === undefined ? null : (
         <RecordingBlock recording={context.recording} state={recording} />
+      )}
+      {context === null || steps.length === 0 ? null : (
+        <RecordingStepsBlock steps={steps} pageUrl={context.url} onReplaySteps={onReplaySteps} />
       )}
       {context === null ? (
         <p className="text-neutral-600">{CONTEXT_UNAVAILABLE_TEXT}</p>

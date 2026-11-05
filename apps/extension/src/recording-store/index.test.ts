@@ -15,6 +15,7 @@ function recording(tabId: number, blobUrl = `blob:${String(tabId)}`): FinishedRe
     blobUrl,
     durationMs: 5000,
     size: 1024,
+    steps: [],
   };
 }
 
@@ -92,6 +93,15 @@ describe("createRecordingStore", () => {
     expect(store.take(1)).toMatchObject({ tabId: 1, blobUrl: "blob:one", at: 1_000 });
     expect(store.take(1)).toBeNull();
     expect(store.query(1)).toEqual({ state: "idle" });
+  });
+
+  it("keeps the steps of the finished recording until it is taken", () => {
+    const { store } = setup();
+    const step = { t: 300, kind: "click" as const, selector: "#save", label: "Save" };
+    store.begin(1);
+    store.finish({ ...recording(1), steps: [step] });
+
+    expect(store.take(1)).toMatchObject({ tabId: 1, steps: [step] });
   });
 
   it("drops a pending recording after ten minutes and tells the caller", () => {

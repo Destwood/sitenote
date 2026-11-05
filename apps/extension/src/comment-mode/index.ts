@@ -13,6 +13,7 @@ import {
   type RecordingStatus,
 } from "../messages";
 import { type MessageResult, type PageThreadSummary } from "@sitenote/widget";
+import type { StepRecorder, StepRecorderOptions } from "../step-recorder";
 
 export interface ToggleSender {
   id?: string | undefined;
@@ -25,6 +26,8 @@ export interface RecordingControls {
   attach: () => MessageResult<null>;
 }
 
+export type StepControls = Pick<StepRecorder, "start" | "stop">;
+
 export interface ToggleListenerDeps {
   extensionId: string;
   toggle: () => MessageResult<CommentModeState>;
@@ -33,6 +36,7 @@ export interface ToggleListenerDeps {
   openThread: (threadId: string) => MessageResult<PageOpenThreadState>;
   openSidebar: () => MessageResult<PageOpenSidebarState>;
   recording: RecordingControls;
+  steps: StepControls;
 }
 
 export type ToggleListener = (
@@ -70,8 +74,10 @@ export function createToggleListener(deps: ToggleListenerDeps): ToggleListener {
       const { recording: active, startedAt } = recording.data;
       if (active && startedAt !== undefined) {
         deps.recording.show(startedAt);
+        deps.steps.start(startedAt, { announceNavigation: false });
       } else {
         deps.recording.hide();
+        deps.steps.stop();
       }
     } else if (recordingReadySchema.safeParse(message).success) {
       sendResponse(deps.recording.attach());
@@ -79,12 +85,20 @@ export function createToggleListener(deps: ToggleListenerDeps): ToggleListener {
   };
 }
 
+export interface RecordingRestoreDeps {
+  show: (startedAt: number) => void;
+  startSteps: (startedAt: number, options: StepRecorderOptions) => void;
+  now: () => number;
+}
+
 export async function restoreRecording(
   readStatus: () => Promise<MessageResult<RecordingStatus>>,
-  show: (startedAt: number) => void,
+  deps: RecordingRestoreDeps,
 ): Promise<void> {
   const status = await readStatus();
-  if (status.ok && status.data.state === "recording" && status.data.startedAt !== undefined) {
-    show(status.data.startedAt);
+  if (status.ok && status.data.state === "recording") {
+    const startedAt = status.data.startedAt ?? deps.now();
+    deps.show(startedAt);
+    deps.startSteps(startedAt, { announceNavigation: true });
   }
 }
