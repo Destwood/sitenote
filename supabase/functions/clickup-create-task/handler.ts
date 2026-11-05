@@ -63,7 +63,7 @@ export function handleCreateTask(
     }
 
     const service = serviceClient(env, fetchImpl);
-    const integration = await loadIntegration(service, thread.workspace_id);
+    const integration = await loadIntegration(service, thread.workspace_id, "clickup");
     if (integration === null || integration.secretId === null) {
       throw new ApiError("not_configured", "ClickUp is not connected to this workspace");
     }

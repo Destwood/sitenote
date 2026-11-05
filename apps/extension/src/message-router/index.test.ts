@@ -72,6 +72,8 @@ function createFakes() {
     setThreadStatus: vi.fn(),
     clickUpStatus: vi.fn(() => Promise.resolve(success(true))),
     clickUpCreateTask: vi.fn(),
+    jiraStatus: vi.fn(() => Promise.resolve(success(true))),
+    jiraLinkIssue: vi.fn(),
     createComment: vi.fn(),
     updateComment: vi.fn(),
     deleteComment: vi.fn(),
@@ -467,6 +469,35 @@ describe("createMessageRouter ClickUp requests", () => {
       type: "clickup.createTask",
       threadId: THREAD_ID,
     });
+  });
+});
+
+describe("createMessageRouter Jira requests", () => {
+  it("routes the Jira status and link requests from an enabled page to the data service", async () => {
+    const { route, data } = setup();
+
+    expect(await route({ type: "jira.status", workspaceId: WORKSPACE_ID }, CONTENT)).toEqual(
+      success(true),
+    );
+    expect(data.jiraStatus).toHaveBeenCalledExactlyOnceWith({
+      type: "jira.status",
+      workspaceId: WORKSPACE_ID,
+    });
+    await route({ type: "jira.linkIssue", threadId: THREAD_ID, issueKey: "PROJ-12" }, CONTENT);
+    expect(data.jiraLinkIssue).toHaveBeenCalledExactlyOnceWith({
+      type: "jira.linkIssue",
+      threadId: THREAD_ID,
+      issueKey: "PROJ-12",
+    });
+  });
+
+  it("rejects a Jira link request with a malformed issue key", async () => {
+    const { route, data } = setup();
+
+    expect(
+      await route({ type: "jira.linkIssue", threadId: THREAD_ID, issueKey: "proj 12" }, CONTENT),
+    ).toEqual(failure("invalid_request"));
+    expect(data.jiraLinkIssue).not.toHaveBeenCalled();
   });
 });
 

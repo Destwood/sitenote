@@ -35,6 +35,9 @@ export function createExtensionBackend(): WidgetBackend {
       sendMessage({ type: "preferences.set", siteId, showResolved }),
     getClickUpStatus: (workspaceId) => sendMessage({ type: "clickup.status", workspaceId }),
     createClickUpTask: (threadId) => sendMessage({ type: "clickup.createTask", threadId }),
+    getJiraStatus: (workspaceId) => sendMessage({ type: "jira.status", workspaceId }),
+    linkJiraIssue: (threadId, issueKey) =>
+      sendMessage({ type: "jira.linkIssue", threadId, issueKey }),
     getSelectionPlacement: () => sendMessage({ type: "preferences.getSelectionPlacement" }),
   };
 }

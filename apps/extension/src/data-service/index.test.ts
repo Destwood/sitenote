@@ -235,6 +235,8 @@ function threadRow(overrides: Record<string, unknown> = {}) {
     status: "open",
     context: CONTEXT,
     screenshot_path: null,
+    jira_issue_key: null,
+    jira_issue_url: null,
     created_at: "2026-10-21T09:00:00+00:00",
     created_by: USER_ID,
     author: profile(USER_ID, "Max Member"),
@@ -342,6 +344,8 @@ describe("listThreads", () => {
           createdAt: "2026-10-21T09:00:00.000Z",
           context: CONTEXT,
           hasScreenshot: false,
+          jiraIssueKey: null,
+          jiraIssueUrl: null,
           comments: [
             {
               id: COMMENT_ID,
@@ -514,6 +518,81 @@ describe("ClickUp", () => {
     expect(
       await service.clickUpCreateTask({ type: "clickup.createTask", threadId: THREAD_ID }),
     ).toEqual(failure("unknown"));
+  });
+});
+
+describe("Jira", () => {
+  const ISSUE_URL = "https://org.atlassian.net/browse/PROJ-12";
+  const LINK = { type: "jira.linkIssue", threadId: THREAD_ID, issueKey: "PROJ-12" } as const;
+  const LINKED = {
+    issueKey: "PROJ-12",
+    issueUrl: ISSUE_URL,
+    linked: true,
+    commentAdded: true,
+  };
+
+  it("reports whether Jira is configured for the workspace", async () => {
+    const { service, queries } = setup({ "rpc:jira_configured": [ok(true)] });
+
+    expect(await service.jiraStatus({ type: "jira.status", workspaceId: WORKSPACE_ID })).toEqual(
+      success(true),
+    );
+    expect(callsOf(queries, "rpc:jira_configured")[0]?.[0]?.args[0]).toEqual({
+      p_workspace_id: WORKSPACE_ID,
+    });
+  });
+
+  it("links the issue through the function and returns its link", async () => {
+    const { service, invokeCalls } = setup({}, { invokes: [ok(LINKED)] });
+
+    expect(await service.jiraLinkIssue(LINK)).toEqual(success(LINKED));
+    expect(invokeCalls).toEqual([
+      { name: "jira-link-issue", body: { threadId: THREAD_ID, issueKey: "PROJ-12" } },
+    ]);
+  });
+
+  it("answers unknown when the function returns something it cannot read", async () => {
+    const { service } = setup({}, { invokes: [ok({ issueKey: "PROJ-12" })] });
+
+    expect(await service.jiraLinkIssue(LINK)).toEqual(failure("unknown"));
+  });
+
+  it("passes on the whitelisted code the function answered with", async () => {
+    const error = new FunctionsHttpError(
+      new globalThis.Response(
+        JSON.stringify({ error: { code: "not_configured", message: "Connect" } }),
+        {
+          status: 409,
+        },
+      ),
+    );
+    const { service } = setup({}, { invokes: [broken(error)] });
+
+    expect(await service.jiraLinkIssue(LINK)).toEqual(failure("not_configured"));
+  });
+
+  it("answers unknown for a code it does not recognise", async () => {
+    const error = new FunctionsHttpError(
+      new globalThis.Response(JSON.stringify({ error: { code: "teapot", message: "x" } }), {
+        status: 418,
+      }),
+    );
+    const { service } = setup({}, { invokes: [broken(error)] });
+
+    expect(await service.jiraLinkIssue(LINK)).toEqual(failure("unknown"));
+  });
+
+  it("maps the linked issue of a thread onto the thread record", async () => {
+    const { service } = setup({
+      threads: [ok([threadRow({ jira_issue_key: "PROJ-12", jira_issue_url: ISSUE_URL })])],
+    });
+
+    const result = await service.listThreads(LIST);
+
+    expect(result.ok && result.data[0]).toMatchObject({
+      jiraIssueKey: "PROJ-12",
+      jiraIssueUrl: ISSUE_URL,
+    });
   });
 });
 
@@ -1409,6 +1488,7 @@ describe("thread context and screenshot mapping", () => {
 
     const select = String(callsOf(queries, "threads")[0]?.[0]?.args[0]);
     expect(select).toContain("context, screenshot_path");
+    expect(select).toContain("jira_issue_key, jira_issue_url");
   });
 });
 

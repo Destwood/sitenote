@@ -18,6 +18,8 @@ const THREAD = {
   resolved_at: null,
   screenshot_path: null,
   context: {},
+  jira_issue_key: null,
+  jira_issue_url: null,
 };
 
 const CONTEXT = {
@@ -172,6 +174,26 @@ describe("readThreadDetail", () => {
         mentions: [{ id: "00000000-0000-4000-8000-000000000002", displayName: "Max" }],
       },
     ]);
+  });
+
+  it("maps the linked Jira issue of the thread", async () => {
+    const { client } = fakeClient(
+      tables({
+        data: {
+          ...THREAD,
+          jira_issue_key: "PROJ-123",
+          jira_issue_url: "https://acme.atlassian.net/browse/PROJ-123",
+        },
+        error: null,
+      }),
+    );
+
+    const detail = await readThreadDetail(client, THREAD_ID);
+
+    expect(detail).toMatchObject({
+      jiraIssueKey: "PROJ-123",
+      jiraIssueUrl: "https://acme.atlassian.net/browse/PROJ-123",
+    });
   });
 
   it("names the author of a thread whose creator left the workspace", async () => {

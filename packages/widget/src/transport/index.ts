@@ -66,6 +66,8 @@ export const threadRecordSchema = z.object({
   context: z.nullable(threadContextSchema),
   hasScreenshot: z.boolean(),
   clickUpTaskUrl: z.optional(z.nullable(z.string())),
+  jiraIssueKey: z.optional(z.nullable(z.string())),
+  jiraIssueUrl: z.optional(z.nullable(z.string())),
   comments: z.array(commentRecordSchema),
 });
 
@@ -130,3 +132,12 @@ export const clickUpTaskResultSchema = z.object({
 });
 
 export type ClickUpTaskResult = z.infer<typeof clickUpTaskResultSchema>;
+
+export const jiraLinkResultSchema = z.object({
+  issueKey: z.string(),
+  issueUrl: httpUrlSchema,
+  linked: z.boolean(),
+  commentAdded: z.boolean(),
+});
+
+export type JiraLinkResult = z.infer<typeof jiraLinkResultSchema>;

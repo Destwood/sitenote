@@ -138,6 +138,22 @@ describe("threads insert", () => {
     }
   });
 
+  it("denies setting Jira fields at creation for a member and an owner", async () => {
+    const forged = [
+      { jira_issue_key: "PROJ-1" },
+      { jira_issue_url: "https://org.atlassian.net/browse/PROJ-1" },
+    ];
+    for (const actor of [scenario.member, scenario.owner]) {
+      for (const overrides of forged) {
+        expectPermissionDenied(
+          await actor.client
+            .from("threads")
+            .insert(buildThread(scenario.site, actor.id, overrides)),
+        );
+      }
+    }
+  });
+
   it("denies planting a thread in a workspace the user does not belong to", async () => {
     const intoOther = buildThread(scenario.otherSite, scenario.member.id);
     expectRlsViolation(await scenario.member.client.from("threads").insert(intoOther));
@@ -399,6 +415,22 @@ describe("threads update", () => {
     }
   });
 
+  it("denies changing the Jira fields for a member and an owner", async () => {
+    const thread = await insertThread(scenario.admin, scenario.site, scenario.member.id);
+    const edits = [
+      { jira_issue_key: "PROJ-1" },
+      { jira_issue_url: "https://org.atlassian.net/browse/PROJ-1" },
+    ];
+    for (const actor of [scenario.member, scenario.owner]) {
+      for (const edit of edits) {
+        expectPermissionDenied(await actor.client.from("threads").update(edit).eq("id", thread.id));
+      }
+    }
+    const row = await threadOf(thread.id);
+    expect(row.jira_issue_key).toBeNull();
+    expect(row.jira_issue_url).toBeNull();
+  });
+
   it("cannot move a thread to another workspace, even with the service role", async () => {
     const thread = await insertThread(scenario.admin, scenario.site, scenario.member.id);
     expectImmutable(
@@ -443,6 +475,32 @@ describe("threads update", () => {
         .eq("id", thread.id),
       CHECK_VIOLATION,
     );
+  });
+
+  it("lets the service role link a Jira issue and rejects malformed keys and urls", async () => {
+    const thread = await insertThread(scenario.admin, scenario.site, scenario.member.id);
+    const url = "https://org.atlassian.net/browse/PROJ-123";
+    const linked = await scenario.admin
+      .from("threads")
+      .update({ jira_issue_key: "PROJ-123", jira_issue_url: url })
+      .eq("id", thread.id)
+      .select("jira_issue_key, jira_issue_url");
+    expectOneRow(linked);
+    expect(linked.data?.[0]).toEqual({ jira_issue_key: "PROJ-123", jira_issue_url: url });
+
+    const malformed = [
+      { jira_issue_key: "proj-123", jira_issue_url: "https://org.atlassian.net/browse/proj-123" },
+      { jira_issue_key: "PROJ-1", jira_issue_url: "javascript:alert(1)" },
+      { jira_issue_key: `AB-${"1".repeat(62)}`, jira_issue_url: url },
+      { jira_issue_key: "PROJ-2", jira_issue_url: null },
+      { jira_issue_key: null, jira_issue_url: url },
+    ];
+    for (const edit of malformed) {
+      expectCode(
+        await scenario.admin.from("threads").update(edit).eq("id", thread.id),
+        CHECK_VIOLATION,
+      );
+    }
   });
 
   it("refreshes updated_at when the status changes", async () => {

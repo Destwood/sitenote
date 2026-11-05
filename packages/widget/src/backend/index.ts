@@ -6,6 +6,7 @@ import type {
   CaptureRect,
   ClickUpTaskResult,
   CommentRecord,
+  JiraLinkResult,
   MemberRecord,
   Preferences,
   SiteInfo,
@@ -81,5 +82,7 @@ export interface WidgetBackend {
   setPreference: (siteId: string, showResolved: boolean) => Promise<MessageResult<null>>;
   getClickUpStatus: (workspaceId: string) => Promise<MessageResult<boolean>>;
   createClickUpTask: (threadId: string) => Promise<MessageResult<ClickUpTaskResult>>;
+  getJiraStatus: (workspaceId: string) => Promise<MessageResult<boolean>>;
+  linkJiraIssue: (threadId: string, issueKey: string) => Promise<MessageResult<JiraLinkResult>>;
   getSelectionPlacement?: () => Promise<MessageResult<SelectionPlacement>>;
 }

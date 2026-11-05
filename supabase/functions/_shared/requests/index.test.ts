@@ -7,8 +7,11 @@ import {
   createTaskBody,
   hierarchyBody,
   insertWebhookBody,
+  linkIssueBody,
+  parseJiraSettings,
   parseRequest,
   readJsonBody,
+  saveJiraSettingsBody,
   saveSettingsBody,
 } from "./index.ts";
 
@@ -143,5 +146,89 @@ describe("readJsonBody", () => {
   it("maps an invalid JSON body to a validation error", async () => {
     const request = new Request("https://functions.test", { method: "POST", body: "{nope" });
     await expect(readJsonBody(request)).rejects.toMatchObject({ code: "validation" });
+  });
+});
+
+describe("saveJiraSettingsBody", () => {
+  const jiraBody = {
+    workspaceId: WORKSPACE_ID,
+    siteUrl: "https://org.atlassian.net",
+    email: "user@example.com",
+    token: "jira-token",
+  };
+
+  it("accepts settings with and without a token", () => {
+    expect(parseRequest(saveJiraSettingsBody, jiraBody)).toEqual(jiraBody);
+    const withoutToken = { ...jiraBody, token: undefined };
+    expect(parseRequest(saveJiraSettingsBody, withoutToken)).toEqual(withoutToken);
+  });
+
+  it("rejects an email without an @, with whitespace or with several @ signs", () => {
+    for (const email of ["user.example.com", "us er@example.com", "a@b@example.com", "a@"]) {
+      expect(() => parseRequest(saveJiraSettingsBody, { ...jiraBody, email })).toThrow(ApiError);
+    }
+  });
+
+  it("rejects an empty token and an empty or oversized site url", () => {
+    expect(() => parseRequest(saveJiraSettingsBody, { ...jiraBody, token: "" })).toThrow(ApiError);
+    expect(() => parseRequest(saveJiraSettingsBody, { ...jiraBody, siteUrl: "" })).toThrow(
+      ApiError,
+    );
+    expect(() =>
+      parseRequest(saveJiraSettingsBody, { ...jiraBody, siteUrl: "x".repeat(201) }),
+    ).toThrow(ApiError);
+  });
+});
+
+describe("linkIssueBody", () => {
+  it("accepts a thread id and an uppercase issue key", () => {
+    expect(parseRequest(linkIssueBody, { threadId: WORKSPACE_ID, issueKey: "PROJ-123" })).toEqual({
+      threadId: WORKSPACE_ID,
+      issueKey: "PROJ-123",
+    });
+  });
+
+  it("rejects keys that are not normalized server side", () => {
+    for (const issueKey of ["proj-123", " PROJ-1", "PROJ-", "../PROJ-1", "P-1", "PROJ-1\n"]) {
+      expect(() => parseRequest(linkIssueBody, { threadId: WORKSPACE_ID, issueKey })).toThrow(
+        ApiError,
+      );
+    }
+  });
+
+  it("rejects a key longer than 64 characters", () => {
+    const issueKey = `AB-${"1".repeat(62)}`;
+    expect(() => parseRequest(linkIssueBody, { threadId: WORKSPACE_ID, issueKey })).toThrow(
+      ApiError,
+    );
+  });
+
+  it("rejects a malformed thread id", () => {
+    expect(() => parseRequest(linkIssueBody, { threadId: "abc", issueKey: "PROJ-1" })).toThrow(
+      ApiError,
+    );
+  });
+});
+
+describe("parseJiraSettings", () => {
+  it("returns the normalized site and the email stored with the integration", () => {
+    expect(
+      parseJiraSettings({ siteUrl: "https://Org.Atlassian.net/", email: "user@example.com" }),
+    ).toEqual({ siteUrl: "https://org.atlassian.net", email: "user@example.com" });
+  });
+
+  it("refuses stored settings whose site is not an atlassian origin", () => {
+    for (const siteUrl of [
+      "http://org.atlassian.net",
+      "https://evil.com",
+      "https://org.atlassian.net:8443",
+    ]) {
+      expect(() => parseJiraSettings({ siteUrl, email: "user@example.com" })).toThrow(ApiError);
+    }
+  });
+
+  it("refuses incomplete stored settings", () => {
+    expect(() => parseJiraSettings({ siteUrl: "https://org.atlassian.net" })).toThrow(ApiError);
+    expect(() => parseJiraSettings(null)).toThrow(ApiError);
   });
 });

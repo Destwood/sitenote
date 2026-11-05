@@ -45,6 +45,7 @@ export const MAX_TOASTS = 3;
 export const UNSUPPORTED_SELECTION_MESSAGE = "That selection cannot be commented on.";
 export const CLICKUP_SCREENSHOT_MISSING_MESSAGE =
   "The ClickUp task was created without the screenshot.";
+export const JIRA_COMMENT_MISSING_MESSAGE = "The issue was linked without the Jira comment.";
 export const PREFERENCE_FAILED_MESSAGE = "Could not remember this setting for the next visit.";
 export const SCREENSHOT_FAILED_MESSAGE = "Screenshot could not be saved";
 export const RECORDING_ATTACHED_MESSAGE = "Video attached to your next comment";
@@ -79,6 +80,8 @@ export interface ContentState {
   fallbackHighlights: boolean;
   clickUpConfigured: boolean;
   clickUpPending: ReadonlySet<string>;
+  jiraConfigured: boolean;
+  jiraPending: ReadonlySet<string>;
   selectionPlacement: SelectionPlacement;
 }
 
@@ -113,6 +116,7 @@ export interface ContentController {
   deleteComment: (commentId: string) => Promise<void>;
   toggleStatus: (threadId: string) => Promise<void>;
   createClickUpTask: (threadId: string) => Promise<void>;
+  linkJiraIssue: (threadId: string, issueKey: string) => Promise<void>;
   dismissToast: (toastId: string) => void;
 }
 
@@ -169,6 +173,8 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     fallbackHighlights: !highlighter.supported,
     clickUpConfigured: false,
     clickUpPending: new Set<string>(),
+    jiraConfigured: false,
+    jiraPending: new Set<string>(),
     selectionPlacement: DEFAULT_SELECTION_PLACEMENT,
   });
 
@@ -368,6 +374,61 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     }
   }
 
+  async function loadJiraStatus(): Promise<void> {
+    const site = store.getState().site;
+    if (site === null) {
+      return;
+    }
+    const result = await deps.backend.getJiraStatus(site.workspaceId);
+    if (!result.ok) {
+      return;
+    }
+    const configured = result.data;
+    store.setState((state) =>
+      state.jiraConfigured === configured ? state : { ...state, jiraConfigured: configured },
+    );
+  }
+
+  async function linkJiraIssue(threadId: string, issueKey: string): Promise<void> {
+    if (store.getState().jiraPending.has(threadId)) {
+      return;
+    }
+    store.setState((state) => ({
+      ...state,
+      jiraPending: new Set(state.jiraPending).add(threadId),
+    }));
+    const result = await deps.backend.linkJiraIssue(threadId, issueKey);
+    store.setState((state) => {
+      const pending = new Set(state.jiraPending);
+      pending.delete(threadId);
+      const threads = result.ok
+        ? state.threads.map((thread) =>
+            thread.id === threadId
+              ? {
+                  ...thread,
+                  jiraIssueKey: result.data.issueKey,
+                  jiraIssueUrl: result.data.issueUrl,
+                }
+              : thread,
+          )
+        : state.threads;
+      return { ...state, jiraPending: pending, threads };
+    });
+    if (!result.ok) {
+      pushToast({
+        message: result.error.message,
+        variant: "error",
+        onRetry: () => {
+          void linkJiraIssue(threadId, issueKey);
+        },
+      });
+      return;
+    }
+    if (!result.data.commentAdded) {
+      pushToast({ message: JIRA_COMMENT_MISSING_MESSAGE, variant: "info" });
+    }
+  }
+
   async function refreshSelectionPlacement(): Promise<void> {
     if (deps.backend.getSelectionPlacement === undefined) {
       return;
@@ -490,6 +551,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     }
     void loadMembers();
     void loadClickUpStatus();
+    void loadJiraStatus();
     const resolution = state.resolutions.get(threadId);
     if (resolution?.status === "resolved" && state.positions.get(threadId)?.visible !== true) {
       scrollTargetIntoView(resolution.target);
@@ -852,6 +914,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     deleteComment,
     toggleStatus,
     createClickUpTask,
+    linkJiraIssue,
     dismissToast,
   };
 }

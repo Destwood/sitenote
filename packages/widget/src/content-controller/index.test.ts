@@ -6,9 +6,16 @@ import type { WidgetBackend, WidgetSubscription, WidgetSubscriptionHandlers } fr
 import type { PreferenceClient } from "../preference-client";
 import { failure, type MessageResult, success } from "../result";
 import type { ScreenshotTaker } from "../screenshot-taker";
-import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "../transport";
+import type {
+  CommentRecord,
+  JiraLinkResult,
+  MemberRecord,
+  SiteInfo,
+  ThreadRecord,
+} from "../transport";
 import {
   COMMENT_CURSOR_CSS,
+  JIRA_COMMENT_MISSING_MESSAGE,
   PREFERENCE_FAILED_MESSAGE,
   PENDING_ID,
   RECORDING_ATTACHED_MESSAGE,
@@ -213,6 +220,8 @@ function fakeBackend(
     setPreference: (siteId, showResolved) => respond("setPreference", [siteId, showResolved]),
     getClickUpStatus: (workspaceId) => respond("getClickUpStatus", [workspaceId]),
     createClickUpTask: (threadId) => respond("createClickUpTask", [threadId]),
+    getJiraStatus: (workspaceId) => respond("getJiraStatus", [workspaceId]),
+    linkJiraIssue: (threadId, issueKey) => respond("linkJiraIssue", [threadId, issueKey]),
     getSelectionPlacement: () => respond("getSelectionPlacement", []),
   };
 }
@@ -1127,6 +1136,130 @@ describe("comments and status", () => {
     api.dismissToast(first?.id ?? "");
 
     expect(state().toasts).toHaveLength(2);
+  });
+});
+
+describe("linking a Jira issue", () => {
+  const JIRA_URL = "https://org.atlassian.net/browse/PROJ-12";
+  const linked = (overrides: Partial<JiraLinkResult> = {}): JiraLinkResult => ({
+    issueKey: "PROJ-12",
+    issueUrl: JIRA_URL,
+    linked: true,
+    commentAdded: true,
+    ...overrides,
+  });
+
+  it("loads whether Jira is configured when a thread is opened", async () => {
+    const {
+      controller: api,
+      state,
+      calls,
+    } = await setup([thread()], {
+      getJiraStatus: () => success(true),
+    });
+
+    api.selectThread(THREAD_ID);
+
+    await vi.waitFor(() => {
+      expect(state().jiraConfigured).toBe(true);
+    });
+    expect(calls()).toContainEqual({ method: "getJiraStatus", args: [SITE.workspaceId] });
+  });
+
+  it("keeps Jira unconfigured when the status cannot be read", async () => {
+    const {
+      controller: api,
+      state,
+      calls,
+    } = await setup([thread()], {
+      getJiraStatus: () => failure("network"),
+    });
+
+    api.selectThread(THREAD_ID);
+
+    await vi.waitFor(() => {
+      expect(calls().some((call) => call.method === "getJiraStatus")).toBe(true);
+    });
+    await Promise.resolve();
+    expect(state().jiraConfigured).toBe(false);
+    expect(state().toasts).toEqual([]);
+  });
+
+  it("stores the linked issue on the thread", async () => {
+    const {
+      controller: api,
+      state,
+      calls,
+    } = await setup([thread()], {
+      linkJiraIssue: () => success(linked()),
+    });
+
+    await api.linkJiraIssue(THREAD_ID, "PROJ-12");
+
+    expect(calls()).toContainEqual({
+      method: "linkJiraIssue",
+      args: [THREAD_ID, "PROJ-12"],
+    });
+    expect(state().threads[0]).toMatchObject({ jiraIssueKey: "PROJ-12", jiraIssueUrl: JIRA_URL });
+    expect(state().jiraPending.has(THREAD_ID)).toBe(false);
+    expect(state().toasts).toHaveLength(0);
+  });
+
+  it("tells the user when the issue was linked without the Jira comment", async () => {
+    const { controller: api, state } = await setup([thread()], {
+      linkJiraIssue: () => success(linked({ commentAdded: false })),
+    });
+
+    await api.linkJiraIssue(THREAD_ID, "PROJ-12");
+
+    expect(state().threads[0]?.jiraIssueKey).toBe("PROJ-12");
+    expect(state().toasts.map((toast) => [toast.message, toast.variant])).toEqual([
+      [JIRA_COMMENT_MISSING_MESSAGE, "info"],
+    ]);
+  });
+
+  it("shows an error toast with a retry when linking fails", async () => {
+    let fail = true;
+    const { controller: api, state } = await setup([thread()], {
+      linkJiraIssue: () => (fail ? failure("not_found") : success(linked())),
+    });
+
+    await api.linkJiraIssue(THREAD_ID, "PROJ-12");
+
+    expect(state().threads[0]?.jiraIssueKey).toBeUndefined();
+    expect(state().jiraPending.has(THREAD_ID)).toBe(false);
+    const toast = state().toasts[0];
+    expect(toast?.variant).toBe("error");
+    expect(toast?.message).toContain("no longer exists");
+
+    fail = false;
+    toast?.onRetry?.();
+    await vi.waitFor(() => {
+      expect(state().threads[0]?.jiraIssueKey).toBe("PROJ-12");
+    });
+  });
+
+  it("marks the thread pending while the issue is being linked and refuses a second request", async () => {
+    let release: (value: MessageResult<JiraLinkResult>) => void = () => undefined;
+    const {
+      controller: api,
+      state,
+      calls,
+    } = await setup([thread()], {
+      linkJiraIssue: () =>
+        new Promise<MessageResult<JiraLinkResult>>((resolve) => {
+          release = resolve;
+        }),
+    });
+
+    const first = api.linkJiraIssue(THREAD_ID, "PROJ-12");
+    expect(state().jiraPending.has(THREAD_ID)).toBe(true);
+    await api.linkJiraIssue(THREAD_ID, "PROJ-12");
+    release(success(linked()));
+    await first;
+
+    expect(calls().filter((call) => call.method === "linkJiraIssue")).toHaveLength(1);
+    expect(state().jiraPending.has(THREAD_ID)).toBe(false);
   });
 });
 

@@ -335,6 +335,8 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           id: string;
+          jira_issue_key: string | null;
+          jira_issue_url: string | null;
           page_url: string;
           resolved_at: string | null;
           resolved_by: string | null;
@@ -353,6 +355,8 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
           id?: string;
+          jira_issue_key?: string | null;
+          jira_issue_url?: string | null;
           page_url: string;
           resolved_at?: string | null;
           resolved_by?: string | null;
@@ -370,6 +374,8 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
           id?: string;
+          jira_issue_key?: string | null;
+          jira_issue_url?: string | null;
           page_url?: string;
           resolved_at?: string | null;
           resolved_by?: string | null;
@@ -500,6 +506,8 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           id: string;
+          jira_issue_key: string | null;
+          jira_issue_url: string | null;
           page_url: string;
           resolved_at: string | null;
           resolved_by: string | null;
@@ -541,6 +549,8 @@ export type Database = {
           workspace_name: string;
         }[];
       };
+      jira_configured: { Args: { p_workspace_id: string }; Returns: boolean };
+      jira_disconnect: { Args: { p_workspace_id: string }; Returns: undefined };
       join_demo: {
         Args: { p_display_name: string };
         Returns: {
@@ -574,7 +584,7 @@ export type Database = {
       };
     };
     Enums: {
-      integration_provider: "clickup";
+      integration_provider: "clickup" | "jira";
       member_role: "owner" | "member" | "guest";
       notification_kind: "reply" | "mention";
       thread_status: "open" | "resolved";
@@ -689,7 +699,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      integration_provider: ["clickup"],
+      integration_provider: ["clickup", "jira"],
       member_role: ["owner", "member", "guest"],
       notification_kind: ["reply", "mention"],
       thread_status: ["open", "resolved"],

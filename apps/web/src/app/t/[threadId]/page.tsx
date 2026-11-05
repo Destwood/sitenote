@@ -5,6 +5,8 @@ import { notFound, redirect } from "next/navigation";
 import { isClickUpConfigured } from "../../../clickup-api";
 import { ClickUpTaskPanel } from "../../../clickup-task-panel";
 import { getPublicEnv } from "../../../env";
+import { isJiraConfigured } from "../../../jira-api";
+import { JiraIssuePanel } from "../../../jira-issue-panel";
 import { Logo } from "../../../logo";
 import { OpenOnPage } from "../../../open-on-page";
 import { PageContext } from "../../../page-context";
@@ -57,6 +59,7 @@ export default async function ThreadLinkPage({ params }: ThreadLinkPageProps) {
   }
   const pageHref = safeExternalHref(detail.pageUrl);
   const canCreateClickUpTask = await isClickUpConfigured(supabase, detail.workspaceId);
+  const canLinkJira = await isJiraConfigured(supabase, detail.workspaceId);
   const { extensionId } = getPublicEnv();
 
   return (
@@ -89,6 +92,12 @@ export default async function ThreadLinkPage({ params }: ThreadLinkPageProps) {
             threadId={threadId}
             taskUrl={detail.clickUpTaskUrl}
             canCreate={canCreateClickUpTask}
+          />
+          <JiraIssuePanel
+            threadId={threadId}
+            issueKey={detail.jiraIssueKey}
+            issueUrl={detail.jiraIssueUrl}
+            canLink={canLinkJira}
           />
           <Link
             href={threadPath(detail.workspaceId, threadId)}

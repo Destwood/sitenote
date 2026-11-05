@@ -16,6 +16,8 @@ const threadRow = z.nullable(
     screenshot_path: z.nullable(z.string()),
     clickup_task_id: z.nullable(z.string()),
     clickup_task_url: z.nullable(z.string()),
+    jira_issue_key: z.nullable(z.string()),
+    jira_issue_url: z.nullable(z.string()),
   }),
 );
 const commentRow = z.nullable(z.object({ body: z.string() }));
@@ -35,6 +37,10 @@ const notificationRow = z.nullable(
   }),
 );
 
+export type IntegrationProvider = "clickup" | "jira";
+
+const PROVIDER_LABEL: Record<IntegrationProvider, string> = { clickup: "ClickUp", jira: "Jira" };
+
 export interface ThreadRecord {
   id: string;
   workspace_id: string;
@@ -43,6 +49,8 @@ export interface ThreadRecord {
   screenshot_path: string | null;
   clickup_task_id: string | null;
   clickup_task_url: string | null;
+  jira_issue_key: string | null;
+  jira_issue_url: string | null;
 }
 
 export interface IntegrationRecord {
@@ -98,6 +106,17 @@ export function clickUpApiBase(env: EnvMap): string {
   return base;
 }
 
+export function jiraApiBase(env: EnvMap, siteUrl: string): string {
+  const override = env.JIRA_API_BASE;
+  const base = override === undefined || override.length === 0 ? siteUrl : override;
+  try {
+    new URL(base);
+  } catch {
+    throw new ApiError("not_configured", "JIRA_API_BASE is not a valid url");
+  }
+  return base;
+}
+
 export async function authenticate(client: SupabaseClient, token: string): Promise<string> {
   const { data, error } = await client.auth.getUser(token);
   if (error !== null || data.user === null) {
@@ -128,13 +147,17 @@ export async function requireOwner(
   client: SupabaseClient,
   workspaceId: string,
   userId: string,
+  provider: IntegrationProvider,
 ): Promise<void> {
   const role = await roleIn(client, workspaceId, userId);
   if (role === null) {
     throw new ApiError("not_found", "The workspace was not found");
   }
   if (role !== "owner") {
-    throw new ApiError("forbidden", "Only the owner can manage the ClickUp integration");
+    throw new ApiError(
+      "forbidden",
+      `Only the owner can manage the ${PROVIDER_LABEL[provider]} integration`,
+    );
   }
 }
 
@@ -142,7 +165,7 @@ export async function loadThread(client: SupabaseClient, threadId: string): Prom
   const { data, error } = await client
     .from("threads")
     .select(
-      "id, workspace_id, page_url, context, screenshot_path, clickup_task_id, clickup_task_url",
+      "id, workspace_id, page_url, context, screenshot_path, clickup_task_id, clickup_task_url, jira_issue_key, jira_issue_url",
     )
     .eq("id", threadId)
     .maybeSingle();
@@ -178,12 +201,13 @@ export async function firstCommentBody(
 export async function loadIntegration(
   client: SupabaseClient,
   workspaceId: string,
+  provider: IntegrationProvider,
 ): Promise<IntegrationRecord | null> {
   const { data, error } = await client
     .from("integrations")
     .select("secret_id, settings")
     .eq("workspace_id", workspaceId)
-    .eq("provider", "clickup")
+    .eq("provider", provider)
     .maybeSingle();
   if (error !== null) {
     throw databaseError(error);
@@ -208,11 +232,12 @@ export async function storeToken(
   workspaceId: string,
   token: string,
   secretId: string | null,
+  provider: IntegrationProvider,
 ): Promise<string> {
   const { data, error } = await client.rpc("integration_secret_upsert", {
     p_value: token,
     p_workspace_id: workspaceId,
-    p_provider: "clickup",
+    p_provider: provider,
     p_secret_id: secretId ?? undefined,
   });
   if (error !== null) {

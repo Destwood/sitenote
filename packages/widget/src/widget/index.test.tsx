@@ -103,6 +103,8 @@ function fakeBackend(threads: ThreadRecord[]) {
     setPreference: vi.fn(() => Promise.resolve(success(null))),
     getClickUpStatus: vi.fn(() => Promise.resolve(success(false))),
     createClickUpTask: unused,
+    getJiraStatus: vi.fn(() => Promise.resolve(success(false))),
+    linkJiraIssue: unused,
   };
   return { backend, createThread };
 }
