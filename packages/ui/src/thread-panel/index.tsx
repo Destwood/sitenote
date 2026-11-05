@@ -32,6 +32,7 @@ export interface ThreadPanelProps {
   recording?: ScreenshotState | undefined;
   clickUp?: ClickUpTaskState | undefined;
   jira?: JiraIssueState | undefined;
+  onReplaySteps?: (() => void) | undefined;
   onSubmit: (submission: ComposerSubmission) => Promise<void>;
   onEditComment: (commentId: string, body: string) => Promise<void>;
   onDeleteComment: (commentId: string) => Promise<void>;
@@ -57,6 +58,7 @@ export function ThreadPanel({
   recording,
   clickUp,
   jira,
+  onReplaySteps,
   onSubmit,
   onEditComment,
   onDeleteComment,
@@ -196,6 +198,7 @@ export function ThreadPanel({
             hasScreenshot={thread.hasScreenshot}
             screenshot={screenshot}
             recording={recording}
+            onReplaySteps={onReplaySteps}
           />
         </div>
       )}

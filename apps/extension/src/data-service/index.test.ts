@@ -745,6 +745,28 @@ describe("createThread", () => {
     expect(recordings.discard).toHaveBeenCalledExactlyOnceWith(4);
   });
 
+  it("stores the steps of the sender's pending recording with its reference", async () => {
+    const STEP = { t: 300, kind: "click" as const, selector: "#buy", label: "Buy" };
+    const { service, queries } = setup(
+      { "rpc:create_thread": [ok({ id: THREAD_ID })], threads: [ok(threadRow())] },
+      {
+        recordAttach: (_tabId, workspaceId, threadId) =>
+          Promise.resolve({
+            path: `${workspaceId}/${threadId}.webm`,
+            durationMs: 5000,
+            size: 1024,
+            steps: [STEP],
+          }),
+      },
+    );
+
+    await service.createThread(REQUEST, { tabId: 4 });
+
+    expect(callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0]).toMatchObject({
+      p_context: { recording: { steps: [STEP] } },
+    });
+  });
+
   it("reuses the screenshot thread id for the recording", async () => {
     const OTHER_THREAD_ID = "30000000-0000-4000-8000-0000000000ff";
     const { service, queries, recordings } = setup(
@@ -774,6 +796,24 @@ describe("createThread", () => {
     const args = callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0];
     expect(args).not.toHaveProperty("p_id");
     expect(storedContext(args)).not.toHaveProperty("recording");
+    expect(recordings.attach).not.toHaveBeenCalled();
+  });
+
+  it("drops steps forged in the request", async () => {
+    const STEP = { t: 300, kind: "click" as const, selector: "#buy", label: "Buy" };
+    const { service, queries, recordings } = setup({
+      "rpc:create_thread": [ok({ id: THREAD_ID })],
+      threads: [ok(threadRow())],
+    });
+
+    await service.createThread({
+      ...REQUEST,
+      context: { ...CONTEXT, recording: { ...RECORDING, steps: [STEP] } },
+    });
+
+    expect(
+      storedContext(callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0]),
+    ).not.toHaveProperty("recording");
     expect(recordings.attach).not.toHaveBeenCalled();
   });
 

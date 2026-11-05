@@ -1,4 +1,10 @@
-import { anchorSchema, parsePageUrl, threadContextSchema } from "@sitenote/core";
+import {
+  RECORDING_STEPS_MAX,
+  anchorSchema,
+  parsePageUrl,
+  recordingStepSchema,
+  threadContextSchema,
+} from "@sitenote/core";
 import {
   ERROR_CODES,
   THREAD_STATUSES,
@@ -158,6 +164,7 @@ export const dataRequestSchema = z.discriminatedUnion("type", [
     reason: z.enum(["user", "time", "size", "ended", "error"]),
   }),
   z.object({ type: z.literal("recording.heartbeat") }),
+  z.object({ type: z.literal("recording.step"), step: recordingStepSchema }),
 ]);
 
 export type DataRequest = z.infer<typeof dataRequestSchema>;
@@ -231,6 +238,7 @@ export const offscreenCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("offscreen.stop"), discard: z.boolean() }),
   z.object({ type: z.literal("offscreen.query"), tabId: z.optional(tabIdSchema) }),
   z.object({ type: z.literal("offscreen.release") }),
+  z.object({ type: z.literal("offscreen.step"), tabId: tabIdSchema, step: recordingStepSchema }),
 ]);
 
 export type OffscreenCommand = z.infer<typeof offscreenCommandSchema>;
@@ -280,6 +288,7 @@ export interface DataByType {
   "recording.status": RecordingStatus;
   "recording.finished": null;
   "recording.heartbeat": null;
+  "recording.step": null;
 }
 
 export type DataByRequestType = AuthDataByType & DataByType;
@@ -327,6 +336,7 @@ export const RESPONSE_SCHEMAS: {
   "recording.status": resultSchema(recordingStatusSchema),
   "recording.finished": resultSchema(z.null()),
   "recording.heartbeat": resultSchema(z.null()),
+  "recording.step": resultSchema(z.null()),
 };
 
 export const pageSubscribeSchema = z.object({
@@ -410,6 +420,7 @@ export const pageOpenSidebarResponseSchema = resultSchema(pageOpenSidebarStateSc
 export const offscreenStatusSchema = z.extend(recordingStatusSchema, {
   blobUrl: z.optional(z.string()),
   size: z.optional(nonNegativeIntSchema),
+  steps: z.optional(z.array(recordingStepSchema).check(z.maxLength(RECORDING_STEPS_MAX))),
 });
 
 export type OffscreenStatus = z.infer<typeof offscreenStatusSchema>;

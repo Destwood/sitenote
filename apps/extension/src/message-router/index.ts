@@ -56,6 +56,7 @@ const PAGE_SCOPED: ReadonlySet<ExtensionRequest["type"]> = new Set([
   "clickup.createTask",
   "jira.status",
   "jira.linkIssue",
+  "recording.step",
 ]);
 
 export function senderOriginOf(sender: RouterSender): string | null {
@@ -188,6 +189,13 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
         return recordings.onFinished(request);
       case "recording.heartbeat":
         return success(null);
+      case "recording.step": {
+        const tabId = sender.tab?.id;
+        if (tabId === undefined) {
+          return failure("forbidden_sender");
+        }
+        return recordings.addStep(tabId, request.step);
+      }
       case "screenshot.capture": {
         const tabId = sender.tab?.id;
         const windowId = sender.tab?.windowId;

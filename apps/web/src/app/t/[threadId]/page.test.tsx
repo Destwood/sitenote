@@ -227,6 +227,42 @@ describe("thread link", () => {
     );
   });
 
+  it("lists the reporter's steps with a copy button", async () => {
+    useTables({
+      thread: {
+        data: {
+          ...THREAD,
+          context: {
+            viewport: { width: 1440, height: 900 },
+            devicePixelRatio: 2,
+            pageTitle: "Pricing",
+            url: "https://example.test/pricing",
+            browser: { name: "Chrome", version: "130" },
+            os: { name: "Windows", version: "11" },
+            userAgent: "ua",
+            consoleErrors: [],
+            capturedAt: "2026-10-22T09:00:00.000Z",
+            recording: {
+              path: "ws/thread.webm",
+              durationMs: 9_000,
+              size: 2048,
+              steps: [{ t: 2_000, kind: "click", selector: "#buy", label: "Buy now" }],
+            },
+          },
+        },
+        error: null,
+      },
+      access: ACCESS,
+    });
+
+    await renderPage();
+
+    expect(screen.getByRole("list", { name: "What the reporter did (1)" })).toBeTruthy();
+    expect(screen.getByText("Buy now")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Copy as Playwright" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Replay on page" })).toBeNull();
+  });
+
   it("offers the install steps and a plain page link when the extension is not in the browser", async () => {
     await renderPage();
 

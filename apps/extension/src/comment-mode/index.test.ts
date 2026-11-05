@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { failure, success, type MessageResult, type PageThreadSummary } from "@sitenote/widget";
-import { createToggleListener, restoreRecording, type RecordingControls } from ".";
+import {
+  createToggleListener,
+  restoreRecording,
+  type RecordingControls,
+  type StepControls,
+} from ".";
 import type {
   CommentModeState,
   CommentOnElementState,
@@ -27,6 +32,10 @@ function recordingControls(): RecordingControls {
   return { show: vi.fn(), hide: vi.fn(), attach: vi.fn(() => success(null)) };
 }
 
+function stepControls(): StepControls {
+  return { start: vi.fn(), stop: vi.fn() };
+}
+
 function listenerWith(
   toggle: () => MessageResult<CommentModeState> = () => success({ active: true }),
   commentOnElement: () => MessageResult<CommentOnElementState> = () => success({ started: true }),
@@ -35,6 +44,7 @@ function listenerWith(
     success({ opened: true }),
   openSidebar: () => MessageResult<PageOpenSidebarState> = () => success({ opened: true }),
   recording: RecordingControls = recordingControls(),
+  steps: StepControls = stepControls(),
 ) {
   return createToggleListener({
     extensionId: EXTENSION_ID,
@@ -44,6 +54,7 @@ function listenerWith(
     openThread,
     openSidebar,
     recording,
+    steps,
   });
 }
 
@@ -156,8 +167,30 @@ describe("createToggleListener", () => {
     expect(respond).not.toHaveBeenCalled();
   });
 
+  it("starts the step collector with the recording and stops it when the recording stops", () => {
+    const steps = stepControls();
+    const listener = listenerWith(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      recordingControls(),
+      steps,
+    );
+
+    listener(RECORDING_STARTED, { id: EXTENSION_ID }, vi.fn());
+    listener(RECORDING_STOPPED, { id: EXTENSION_ID }, vi.fn());
+
+    expect(steps.start).toHaveBeenCalledExactlyOnceWith(1_700_000_000_000, {
+      announceNavigation: false,
+    });
+    expect(steps.stop).toHaveBeenCalledTimes(1);
+  });
+
   it("hides the pill when a recording state has no start time", () => {
     const recording = recordingControls();
+    const steps = stepControls();
 
     listenerWith(
       undefined,
@@ -166,10 +199,13 @@ describe("createToggleListener", () => {
       undefined,
       undefined,
       recording,
+      steps,
     )({ type: "recording.state", recording: true }, { id: EXTENSION_ID }, vi.fn());
 
     expect(recording.show).not.toHaveBeenCalled();
     expect(recording.hide).toHaveBeenCalledTimes(1);
+    expect(steps.start).not.toHaveBeenCalled();
+    expect(steps.stop).toHaveBeenCalledTimes(1);
   });
 
   it("attaches a finished video to the page and answers with the result", () => {
@@ -214,6 +250,7 @@ describe("createToggleListener", () => {
     const commentOnElement = vi.fn(() => success({ started: true }));
     const openSidebar = vi.fn(() => success({ opened: true }));
     const recording = recordingControls();
+    const steps = stepControls();
     const respond = vi.fn();
     const listener = listenerWith(
       toggle,
@@ -222,6 +259,7 @@ describe("createToggleListener", () => {
       undefined,
       openSidebar,
       recording,
+      steps,
     );
 
     listener(TOGGLE, sender, respond);
@@ -235,6 +273,8 @@ describe("createToggleListener", () => {
     expect(openSidebar).not.toHaveBeenCalled();
     expect(recording.show).not.toHaveBeenCalled();
     expect(recording.attach).not.toHaveBeenCalled();
+    expect(steps.start).not.toHaveBeenCalled();
+    expect(steps.stop).not.toHaveBeenCalled();
     expect(respond).not.toHaveBeenCalled();
   });
 
@@ -268,26 +308,48 @@ describe("createToggleListener", () => {
 });
 
 describe("restoreRecording", () => {
-  it("shows the pill when the page loads during a recording", async () => {
-    const show = vi.fn();
+  const NOW = 1_700_000_500_000;
+
+  function restoreDeps() {
+    return { show: vi.fn(), startSteps: vi.fn(), now: vi.fn(() => NOW) };
+  }
+
+  it("shows the pill and starts the steps when the page loads during a recording", async () => {
+    const deps = restoreDeps();
 
     await restoreRecording(
       () => Promise.resolve(success({ state: "recording", startedAt: 1_700_000_000_000 })),
-      show,
+      deps,
     );
 
-    expect(show).toHaveBeenCalledExactlyOnceWith(1_700_000_000_000);
+    expect(deps.show).toHaveBeenCalledExactlyOnceWith(1_700_000_000_000);
+    expect(deps.startSteps).toHaveBeenCalledExactlyOnceWith(1_700_000_000_000, {
+      announceNavigation: true,
+    });
+  });
+
+  it("uses the current time when the recording has no start time", async () => {
+    const deps = restoreDeps();
+
+    await restoreRecording(() => Promise.resolve(success({ state: "recording" })), deps);
+
+    expect(deps.show).toHaveBeenCalledExactlyOnceWith(NOW);
+    expect(deps.startSteps).toHaveBeenCalledExactlyOnceWith(NOW, { announceNavigation: true });
   });
 
   it.each([
     ["idle", () => Promise.resolve(success({ state: "idle" as const }))],
     ["pending", () => Promise.resolve(success({ state: "pending" as const, durationMs: 10 }))],
     ["failed", () => Promise.resolve(failure("unavailable"))],
-  ])("does not show the pill when the state is %s", async (_name, readStatus) => {
-    const show = vi.fn();
+  ])(
+    "does not show the pill or start the steps when the state is %s",
+    async (_name, readStatus) => {
+      const deps = restoreDeps();
 
-    await restoreRecording(readStatus, show);
+      await restoreRecording(readStatus, deps);
 
-    expect(show).not.toHaveBeenCalled();
-  });
+      expect(deps.show).not.toHaveBeenCalled();
+      expect(deps.startSteps).not.toHaveBeenCalled();
+    },
+  );
 });

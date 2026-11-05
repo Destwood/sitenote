@@ -1,4 +1,4 @@
-import type { RecordingRef } from "@sitenote/core";
+import type { RecordingRef, RecordingStep } from "@sitenote/core";
 import { failure, success, type MessageResult } from "@sitenote/widget";
 
 import type { EnabledEntry } from "../enablement-store";
@@ -22,6 +22,7 @@ export interface RecordingService {
   onFinished: (finished: RecordingFinished) => Promise<MessageResult<null>>;
   discard: (tabId: number) => void;
   attach: (tabId: number, workspaceId: string, threadId: string) => Promise<RecordingRef | null>;
+  addStep: (tabId: number, step: RecordingStep) => Promise<MessageResult<null>>;
   onTabRemoved: (tabId: number) => void;
 }
 
@@ -61,6 +62,7 @@ export function createNoopRecordingService(): RecordingService {
     onFinished: () => Promise.resolve(success(null)),
     discard: () => undefined,
     attach: () => Promise.resolve(null),
+    addStep: () => Promise.resolve(success(null)),
     onTabRemoved: () => undefined,
   };
 }
@@ -179,6 +181,12 @@ export function createRecordingService(deps: RecordingServiceDeps): RecordingSer
       void quiet(closeWhenIdle());
     },
     attach: (tabId, workspaceId, threadId) => deps.recordings.attach(tabId, workspaceId, threadId),
+    addStep: async (tabId, step) => {
+      if ((await ask({ type: "offscreen.query", tabId })).state === "recording") {
+        await quiet(deps.sendToOffscreen({ type: "offscreen.step", tabId, step }));
+      }
+      return success(null);
+    },
     onTabRemoved: (tabId) => {
       void quiet(
         (async () => {
