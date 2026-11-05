@@ -447,6 +447,37 @@ describe("ThreadPanel context", () => {
     );
   });
 
+  it("passes the replay handler to the context section", async () => {
+    const user = userEvent.setup();
+    const onReplaySteps = vi.fn();
+    renderPanel({
+      thread: makeThread({
+        context: {
+          viewport: { width: 1440, height: 900 },
+          devicePixelRatio: 2,
+          pageTitle: "Northwind",
+          url: "https://example.test/",
+          browser: { name: "Chrome", version: "130" },
+          os: { name: "Windows", version: "11" },
+          userAgent: "ua",
+          consoleErrors: [],
+          capturedAt: "2026-10-22T09:30:00.000Z",
+          recording: {
+            path: "ws/thread.webm",
+            durationMs: 9_000,
+            size: 2048,
+            steps: [{ t: 1_000, kind: "click", selector: "#go", label: "Go" }],
+          },
+        },
+      }),
+      onReplaySteps,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Replay on page" }));
+
+    expect(onReplaySteps).toHaveBeenCalledTimes(1);
+  });
+
   it("says the context is unavailable for a thread without a valid context", () => {
     renderPanel();
 

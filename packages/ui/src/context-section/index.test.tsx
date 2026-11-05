@@ -1,7 +1,12 @@
-import type { ConsoleErrorRecord, ThreadContext } from "@sitenote/core";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  stepsToPlaywright,
+  type ConsoleErrorRecord,
+  type RecordingStep,
+  type ThreadContext,
+} from "@sitenote/core";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   CONTEXT_UNAVAILABLE_TEXT,
@@ -326,5 +331,163 @@ describe("recording formatters", () => {
   it("formats the size in megabytes", () => {
     expect(formatSizeMb(0)).toBe("0.0 MB");
     expect(formatSizeMb(1_572_864)).toBe("1.5 MB");
+  });
+});
+
+describe("ContextSection recording steps", () => {
+  const steps: RecordingStep[] = [
+    { t: 0, kind: "click", selector: "#buy", label: "Buy now" },
+    { t: 4_200, kind: "input", selector: "#email", label: "" },
+    { t: 9_000, kind: "submit", selector: "form", label: "Checkout" },
+    { t: 65_000, kind: "navigate", selector: "body", label: "", url: "/thanks" },
+  ];
+  const recording = { path: "ws/thread.webm", durationMs: 65_000, size: 1_572_864, steps };
+
+  function stubClipboard(clipboard: { writeText: ReturnType<typeof vi.fn> } | undefined) {
+    Object.defineProperty(navigator, "clipboard", { value: clipboard, configurable: true });
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, "clipboard");
+    vi.useRealTimers();
+  });
+
+  it("lists every step with its time, kind and label", () => {
+    render(<ContextSection context={context({ recording })} hasScreenshot={false} />);
+
+    const list = screen.getByRole("list", { name: "What the reporter did (4)" });
+    const items = within(list).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "0:00ClickBuy now",
+      "0:04Field changed#email",
+      "0:09Form submittedCheckout",
+      "1:05Page opened/thanks",
+    ]);
+  });
+
+  it("falls back to the selector without a label and to the url for navigation", () => {
+    render(<ContextSection context={context({ recording })} hasScreenshot={false} />);
+
+    expect(screen.getByText("#email")).toBeTruthy();
+    expect(screen.getByText("/thanks")).toBeTruthy();
+  });
+
+  it("keeps the full text of a step in its title", () => {
+    render(<ContextSection context={context({ recording })} hasScreenshot={false} />);
+
+    expect(screen.getByTitle("Buy now").textContent).toBe("Buy now");
+    expect(screen.getByTitle("/thanks").textContent).toBe("/thanks");
+  });
+
+  it("renders step text as plain text", () => {
+    const { container } = render(
+      <ContextSection
+        context={context({
+          recording: {
+            ...recording,
+            steps: [{ t: 0, kind: "click", selector: "a", label: "<img src=x onerror=alert(1)>" }],
+          },
+        })}
+        hasScreenshot={false}
+      />,
+    );
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(screen.getByText("<img src=x onerror=alert(1)>")).toBeTruthy();
+  });
+
+  it("is hidden when the recording has no steps", () => {
+    const { rerender } = render(
+      <ContextSection
+        context={context({ recording: { path: "ws/thread.webm", durationMs: 1_000, size: 1 } })}
+        hasScreenshot={false}
+      />,
+    );
+    expect(screen.queryByText(/What the reporter did/)).toBeNull();
+
+    rerender(
+      <ContextSection
+        context={context({ recording: { ...recording, steps: [] } })}
+        hasScreenshot={false}
+      />,
+    );
+    expect(screen.queryByText(/What the reporter did/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Copy as Playwright" })).toBeNull();
+  });
+
+  it("copies the Playwright script of the page and the steps", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard({ writeText });
+    render(
+      <ContextSection
+        context={context({ url: "https://example.com/pricing", recording })}
+        hasScreenshot={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy as Playwright" }));
+
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeTruthy();
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(writeText).toHaveBeenCalledWith(stepsToPlaywright("https://example.com/pricing", steps));
+    expect(writeText.mock.calls[0]?.[0]).toContain('await page.locator("#buy").click();');
+  });
+
+  it("returns to the copy label two seconds after copying", async () => {
+    vi.useFakeTimers();
+    stubClipboard({ writeText: vi.fn().mockResolvedValue(undefined) });
+    render(<ContextSection context={context({ recording })} hasScreenshot={false} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy as Playwright" }));
+    await act(() => Promise.resolve());
+    expect(screen.getByRole("button", { name: "Copied" })).toBeTruthy();
+
+    act(() => {
+      vi.advanceTimersByTime(1_999);
+    });
+    expect(screen.getByRole("button", { name: "Copied" })).toBeTruthy();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.getByRole("button", { name: "Copy as Playwright" })).toBeTruthy();
+  });
+
+  it("says the copy failed when the clipboard rejects", async () => {
+    stubClipboard({ writeText: vi.fn().mockRejectedValue(new Error("denied")) });
+    render(<ContextSection context={context({ recording })} hasScreenshot={false} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy as Playwright" }));
+
+    expect(await screen.findByRole("button", { name: "Copy failed" })).toBeTruthy();
+  });
+
+  it("says the copy failed when the clipboard API is missing", async () => {
+    stubClipboard(undefined);
+    render(<ContextSection context={context({ recording })} hasScreenshot={false} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy as Playwright" }));
+
+    expect(await screen.findByRole("button", { name: "Copy failed" })).toBeTruthy();
+  });
+
+  it("shows the replay button only when a replay handler is passed", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <ContextSection context={context({ recording })} hasScreenshot={false} />,
+    );
+    expect(screen.queryByRole("button", { name: "Replay on page" })).toBeNull();
+
+    const onReplaySteps = vi.fn();
+    rerender(
+      <ContextSection
+        context={context({ recording })}
+        hasScreenshot={false}
+        onReplaySteps={onReplaySteps}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Replay on page" }));
+
+    expect(onReplaySteps).toHaveBeenCalledTimes(1);
   });
 });
