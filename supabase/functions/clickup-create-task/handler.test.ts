@@ -50,6 +50,8 @@ function backendFor(scenario: Scenario) {
         clickup_task_id: scenario.taskId ?? null,
         clickup_task_url:
           scenario.taskId === undefined ? null : `https://app.clickup.com/t/${scenario.taskId}`,
+        jira_issue_key: null,
+        jira_issue_url: null,
       });
     }
     if (path === "/rest/v1/threads" && req.method === "PATCH") {
