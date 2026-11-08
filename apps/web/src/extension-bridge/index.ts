@@ -9,13 +9,18 @@ export interface SessionTokens {
 }
 
 export type ExtensionResult =
-  { status: "ok" } | { status: "unavailable" } | { status: "rejected"; code: string };
+  | { status: "ok"; version?: string | undefined }
+  | { status: "unavailable" }
+  | { status: "rejected"; code: string };
 
 type Callback = (response: unknown) => void;
 type SendMessage = (extensionId: string, message: unknown, callback: Callback) => void;
 
 const responseSchema = z.union([
-  z.object({ ok: z.literal(true) }),
+  z.object({
+    ok: z.literal(true),
+    data: z.optional(z.nullable(z.object({ version: z.string() }))),
+  }),
   z.object({ ok: z.literal(false), error: z.object({ code: z.string() }) }),
 ]);
 
@@ -70,7 +75,7 @@ function request(
         } else {
           settle(
             parsed.data.ok
-              ? { status: "ok" }
+              ? { status: "ok", version: parsed.data.data?.version }
               : { status: "rejected", code: parsed.data.error.code },
           );
         }
@@ -83,6 +88,11 @@ function request(
 
 export function pingExtension(extensionId: string): Promise<ExtensionResult> {
   return request(extensionId, { type: "external.ping" }, PING_TIMEOUT_MS);
+}
+
+export async function readExtensionVersion(extensionId: string): Promise<string | null> {
+  const ping = await pingExtension(extensionId);
+  return ping.status === "ok" ? (ping.version ?? null) : null;
 }
 
 export async function sendSessionToExtension(

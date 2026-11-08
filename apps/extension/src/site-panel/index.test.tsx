@@ -47,7 +47,11 @@ vi.mock("../selection-placement-control", () => ({ SelectionPlacementControl: ()
 
 vi.mock("../record-button", () => ({ RecordButton: () => null }));
 
-vi.mock("wxt/browser", () => ({ browser: { storage: { local: {} } } }));
+vi.mock("../update-notice", () => ({ ExtensionUpdateNotice: () => null }));
+
+vi.mock("wxt/browser", () => ({
+  browser: { storage: { local: {} }, runtime: { getManifest: () => ({ version: "0.1.7" }) } },
+}));
 
 const ORIGIN = "https://example.test";
 const HOST = "example.test";

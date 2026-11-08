@@ -1,2 +1,1 @@
-export const EXTENSION_DOWNLOAD_URL =
-  "https://github.com/Destwood/sitenote/releases/download/extension-latest/sitenote-extension.zip";
+export { EXTENSION_DOWNLOAD_URL } from "@sitenote/core";
