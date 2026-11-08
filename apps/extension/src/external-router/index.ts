@@ -22,12 +22,13 @@ export type ExternalRequest = z.infer<typeof externalRequestSchema>;
 export interface ExternalRouterDeps {
   webOrigin: string;
   handoff: SessionHandoff;
+  version: string;
 }
 
 export type ExternalRouter = (
   message: unknown,
   sender: RouterSender,
-) => Promise<MessageResult<null>>;
+) => Promise<MessageResult<{ version: string } | null>>;
 
 export function createExternalRouter(deps: ExternalRouterDeps): ExternalRouter {
   return async (message, sender) => {
@@ -41,7 +42,7 @@ export function createExternalRouter(deps: ExternalRouterDeps): ExternalRouter {
     const request = parsed.data;
     switch (request.type) {
       case "external.ping":
-        return success(null);
+        return success({ version: deps.version });
       case "external.session":
         return deps.handoff.accept({
           accessToken: request.accessToken,

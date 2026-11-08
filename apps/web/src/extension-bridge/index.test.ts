@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PING_TIMEOUT_MS, SESSION_TIMEOUT_MS, pingExtension, sendSessionToExtension } from ".";
+import {
+  PING_TIMEOUT_MS,
+  SESSION_TIMEOUT_MS,
+  pingExtension,
+  readExtensionVersion,
+  sendSessionToExtension,
+} from ".";
 
 const EXTENSION_ID = "abcdefghijklmnopabcdefghijklmnop";
 const TOKENS = { accessToken: "access", refreshToken: "refresh" };
@@ -52,6 +58,14 @@ describe("pingExtension", () => {
       { type: "external.ping" },
       expect.any(Function),
     );
+  });
+
+  it("carries the version the extension answers with", async () => {
+    installRuntime((_message, callback) => {
+      callback({ ok: true, data: { version: "0.1.7" } });
+    });
+
+    expect(await pingExtension(EXTENSION_ID)).toEqual({ status: "ok", version: "0.1.7" });
   });
 
   it("is unavailable when the extension does not answer", async () => {
@@ -163,5 +177,39 @@ describe("sendSessionToExtension", () => {
     await vi.advanceTimersByTimeAsync(SESSION_TIMEOUT_MS);
 
     expect(await pending).toEqual({ status: "unavailable" });
+  });
+});
+
+describe("readExtensionVersion", () => {
+  it("returns the version the extension reports", async () => {
+    installRuntime((_message, callback) => {
+      callback({ ok: true, data: { version: "0.1.7" } });
+    });
+
+    expect(await readExtensionVersion(EXTENSION_ID)).toBe("0.1.7");
+  });
+
+  it("is null when the extension is missing", async () => {
+    installRuntime((_message, callback) => {
+      callback(undefined);
+    });
+
+    expect(await readExtensionVersion(EXTENSION_ID)).toBeNull();
+  });
+
+  it("is null when the extension answers without a version", async () => {
+    installRuntime((_message, callback) => {
+      callback({ ok: true, data: null });
+    });
+
+    expect(await readExtensionVersion(EXTENSION_ID)).toBeNull();
+  });
+
+  it("is null when the ping is rejected", async () => {
+    installRuntime((_message, callback) => {
+      callback({ ok: false, error: { code: "forbidden_sender", message: "x" } });
+    });
+
+    expect(await readExtensionVersion(EXTENSION_ID)).toBeNull();
   });
 });

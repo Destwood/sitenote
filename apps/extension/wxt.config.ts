@@ -27,6 +27,11 @@ export default defineConfig({
       strictPort: true,
     },
   },
-  manifest: () => createManifest({ e2e: false, webUrl: process.env.WXT_WEB_URL }),
+  manifest: () =>
+    createManifest({
+      e2e: false,
+      webUrl: process.env.WXT_WEB_URL,
+      extensionVersion: process.env.WXT_EXTENSION_VERSION,
+    }),
   vite: () => createViteConfig(false),
 });

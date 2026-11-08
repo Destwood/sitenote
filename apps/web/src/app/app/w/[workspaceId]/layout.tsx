@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 
 import { AppAccount } from "../../../../app-header";
 import { BrandLink } from "../../../../brand-mark";
+import { getPublicEnv } from "../../../../env";
+import { ExtensionUpdateBanner } from "../../../../extension-update-banner";
 import { createSupabaseServerClient, getAuthenticatedUser } from "../../../../supabase-server";
 import { parseUuid } from "../../../../uuid";
 import { readMemberships } from "../../../../workspace-access";
@@ -50,7 +52,10 @@ export default async function WorkspaceLayout({ children, params }: WorkspaceLay
         </div>
       </aside>
       <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 md:py-8">
-        <div className="mx-auto flex max-w-5xl flex-col gap-6">{children}</div>
+        <div className="mx-auto flex max-w-5xl flex-col gap-6">
+          <ExtensionUpdateBanner extensionId={getPublicEnv().extensionId} />
+          {children}
+        </div>
       </main>
     </div>
   );

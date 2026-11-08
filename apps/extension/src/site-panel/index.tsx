@@ -8,6 +8,7 @@ import { TOGGLE_COMMENT_MODE_SHORTCUT } from "../manifest-config";
 import { sendMessage, toggleCommentMode } from "../message-client";
 import { SiteMenu } from "../site-menu";
 import { createPendingEnable } from "../pending-enable";
+import { ExtensionUpdateNotice } from "../update-notice";
 import { ERROR_MESSAGES, type ErrorCode } from "@sitenote/widget";
 import { getTargetTab, hasOriginAccess, requestOriginAccess, type TargetTab } from "../tab-access";
 import type { SiteInfo, WorkspaceInfo } from "@sitenote/widget";
@@ -333,6 +334,7 @@ export function SitePanel({ webUrl, onManageSites, onWorkspaceControl }: SitePan
 
   return (
     <section aria-label="This site" className="flex flex-col gap-3">
+      <ExtensionUpdateNotice version={browser.runtime.getManifest().version} />
       <div className="rounded-lg border border-neutral-200 bg-white">
         <div className="flex items-center gap-2.5 p-2.5">
           <span

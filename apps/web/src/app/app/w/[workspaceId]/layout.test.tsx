@@ -23,6 +23,14 @@ vi.mock("../../../../supabase-server", () => ({
   getAuthenticatedUser: mocks.getAuthenticatedUser,
 }));
 vi.mock("../../../../workspace-access", () => ({ readMemberships: mocks.readMemberships }));
+vi.mock("../../../../env", () => ({
+  getPublicEnv: () => ({ extensionId: "abcdefghijklmnopabcdefghijklmnop" }),
+}));
+vi.mock("../../../../extension-update-banner", () => ({
+  ExtensionUpdateBanner: (props: { extensionId: string }) => (
+    <p data-testid="update-banner">{props.extensionId}</p>
+  ),
+}));
 vi.mock("../../../../workspace-switcher", () => ({
   WorkspaceSwitcher: (props: { currentId: string }) => (
     <p data-testid="switcher">{props.currentId}</p>
@@ -95,6 +103,9 @@ describe("frame", () => {
     expect(screen.getByTestId("display-name").textContent).toBe("Olena Owner");
     expect(screen.getByTestId("switcher").textContent).toBe(WORKSPACE_ID);
     expect(screen.getByRole("link", { name: "Invites" })).toBeTruthy();
+    expect(screen.getByTestId("update-banner").textContent).toBe(
+      "abcdefghijklmnopabcdefghijklmnop",
+    );
     expect(screen.getByText("Workspace body")).toBeTruthy();
   });
 });

@@ -261,6 +261,7 @@ export function startBackground(): void {
 
   const routeExternal = createExternalRouter({
     webOrigin: new URL(env.webUrl).origin,
+    version: browser.runtime.getManifest().version,
     handoff: createSessionHandoff({
       client,
       createProbe: (accessToken) =>

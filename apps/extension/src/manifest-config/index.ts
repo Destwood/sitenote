@@ -19,7 +19,10 @@ export const E2E_WEB_MATCHES: readonly string[] = [
 export interface ManifestOptions {
   e2e: boolean;
   webUrl: string | undefined;
+  extensionVersion: string | undefined;
 }
+
+const EXTENSION_VERSION_PATTERN = /^\d+(\.\d+){0,3}$/;
 
 export function webMatchOf(webUrl: string | undefined): string | null {
   const url = webUrl === undefined ? null : URL.parse(webUrl);
@@ -36,10 +39,13 @@ function connectableMatches(e2e: boolean, webUrl: string | undefined): string[] 
   return match === null ? [] : [match];
 }
 
-export function createManifest({ e2e, webUrl }: ManifestOptions): UserManifest {
+export function createManifest({ e2e, webUrl, extensionVersion }: ManifestOptions): UserManifest {
   const matches = connectableMatches(e2e, webUrl);
   return {
     name: "Sitenote",
+    ...(extensionVersion !== undefined && EXTENSION_VERSION_PATTERN.test(extensionVersion)
+      ? { version: extensionVersion }
+      : {}),
     description: "Figma-style comments on any live website.",
     key: EXTENSION_PUBLIC_KEY,
     permissions: [

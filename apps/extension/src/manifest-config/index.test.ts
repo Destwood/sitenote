@@ -13,7 +13,7 @@ const WEB_URL = "https://app.sitenote.test";
 
 describe("createManifest", () => {
   it("asks for no host access at install time in the production build", () => {
-    const manifest = createManifest({ e2e: false, webUrl: WEB_URL });
+    const manifest = createManifest({ e2e: false, webUrl: WEB_URL, extensionVersion: undefined });
 
     expect(manifest.host_permissions).toBeUndefined();
     expect(manifest.content_scripts).toBeUndefined();
@@ -21,7 +21,9 @@ describe("createManifest", () => {
   });
 
   it("never lists the local test hosts in the production build", () => {
-    const serialized = JSON.stringify(createManifest({ e2e: false, webUrl: WEB_URL }));
+    const serialized = JSON.stringify(
+      createManifest({ e2e: false, webUrl: WEB_URL, extensionVersion: undefined }),
+    );
 
     expect(serialized).not.toContain("127.0.0.1");
     expect(serialized).not.toContain("localhost");
@@ -30,7 +32,7 @@ describe("createManifest", () => {
   });
 
   it("adds the fixture hosts, example.com and the capture permission as host permissions in the e2e build", () => {
-    const manifest = createManifest({ e2e: true, webUrl: WEB_URL });
+    const manifest = createManifest({ e2e: true, webUrl: WEB_URL, extensionVersion: undefined });
 
     expect(manifest.host_permissions).toEqual([
       "http://127.0.0.1/*",
@@ -46,13 +48,14 @@ describe("createManifest", () => {
     const manifest = createManifest({
       e2e: false,
       webUrl: "https://app.sitenote.test/some/path?x=1",
+      extensionVersion: undefined,
     });
 
     expect(manifest.externally_connectable).toEqual({ matches: ["https://app.sitenote.test/*"] });
   });
 
   it("connects the e2e build to the local web app on both loopback names", () => {
-    const manifest = createManifest({ e2e: true, webUrl: undefined });
+    const manifest = createManifest({ e2e: true, webUrl: undefined, extensionVersion: undefined });
 
     expect(manifest.externally_connectable).toEqual({
       matches: ["http://localhost:3000/*", "http://127.0.0.1:3000/*"],
@@ -63,13 +66,15 @@ describe("createManifest", () => {
   it.each([undefined, "", "not a url", "ftp://app.sitenote.test", "javascript:alert(1)"])(
     "leaves externally_connectable out of the production manifest for the web URL %s",
     (webUrl) => {
-      expect(createManifest({ e2e: false, webUrl }).externally_connectable).toBeUndefined();
+      expect(
+        createManifest({ e2e: false, webUrl, extensionVersion: undefined }).externally_connectable,
+      ).toBeUndefined();
       expect(webMatchOf(webUrl)).toBeNull();
     },
   );
 
   it.each([false, true])("uses the same API permissions and key when e2e is %s", (e2e) => {
-    const manifest = createManifest({ e2e, webUrl: WEB_URL });
+    const manifest = createManifest({ e2e, webUrl: WEB_URL, extensionVersion: undefined });
 
     expect(manifest.permissions).toEqual([
       "storage",
@@ -86,7 +91,7 @@ describe("createManifest", () => {
   });
 
   it.each([false, true])("declares the comment mode shortcut when e2e is %s", (e2e) => {
-    expect(createManifest({ e2e, webUrl: WEB_URL }).commands).toEqual({
+    expect(createManifest({ e2e, webUrl: WEB_URL, extensionVersion: undefined }).commands).toEqual({
       [TOGGLE_COMMENT_MODE_COMMAND]: {
         suggested_key: { default: TOGGLE_COMMENT_MODE_SHORTCUT },
         description: "Toggle comment mode",
@@ -94,8 +99,28 @@ describe("createManifest", () => {
     });
   });
 
+  it.each(["0.1.1", "0.1.1234", "1", "1.2.3.4"])(
+    "sets the version %s in the manifest",
+    (version) => {
+      expect(
+        createManifest({ e2e: false, webUrl: WEB_URL, extensionVersion: version }).version,
+      ).toBe(version);
+    },
+  );
+
+  it.each([undefined, "", "0.1.", "v0.1.1", "0.1.1-beta", "1.2.3.4.5", "0.1.1 "])(
+    "leaves the version out for %j",
+    (extensionVersion) => {
+      expect(createManifest({ e2e: false, webUrl: WEB_URL, extensionVersion })).not.toHaveProperty(
+        "version",
+      );
+    },
+  );
+
   it("suggests the comment mode shortcut from the constant", () => {
-    expect(createManifest({ e2e: false, webUrl: WEB_URL }).commands).toMatchObject({
+    expect(
+      createManifest({ e2e: false, webUrl: WEB_URL, extensionVersion: undefined }).commands,
+    ).toMatchObject({
       [TOGGLE_COMMENT_MODE_COMMAND]: { suggested_key: { default: TOGGLE_COMMENT_MODE_SHORTCUT } },
     });
   });

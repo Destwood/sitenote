@@ -11,7 +11,11 @@ const SESSION = { type: "external.session", accessToken: "a", refreshToken: "r" 
 
 function setup() {
   const accept = vi.fn<SessionHandoff["accept"]>(() => Promise.resolve(success(null)));
-  const route = createExternalRouter({ webOrigin: WEB_ORIGIN, handoff: { accept } });
+  const route = createExternalRouter({
+    webOrigin: WEB_ORIGIN,
+    handoff: { accept },
+    version: "0.1.7",
+  });
   return { route, accept };
 }
 
@@ -40,10 +44,13 @@ describe("sender origin", () => {
 });
 
 describe("requests", () => {
-  it("answers a ping from the web origin", async () => {
+  it("answers a ping from the web origin with the installed version", async () => {
     const { route } = setup();
 
-    expect(await route({ type: "external.ping" }, FROM_WEB)).toEqual({ ok: true, data: null });
+    expect(await route({ type: "external.ping" }, FROM_WEB)).toEqual({
+      ok: true,
+      data: { version: "0.1.7" },
+    });
   });
 
   it("hands the tokens of a session message to the handoff", async () => {
@@ -89,7 +96,7 @@ describe("requests", () => {
 
     expect(await route({ type: "external.ping", extra: true }, FROM_WEB)).toEqual({
       ok: true,
-      data: null,
+      data: { version: "0.1.7" },
     });
   });
 });
