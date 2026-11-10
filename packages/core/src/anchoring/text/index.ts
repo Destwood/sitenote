@@ -173,7 +173,8 @@ export function resolveTextAnchorHeading(anchor: TextAnchor, doc: Document): Ele
     return undefined;
   }
   const container = findContainer(anchor.container, doc);
-  if (container === undefined || container === doc.body || doc.body === null) {
+  const body = doc.body as HTMLElement | null;
+  if (container === undefined || body === null || container === body) {
     return undefined;
   }
   const headings = "h1, h2, h3, h4, h5, h6";
@@ -186,7 +187,7 @@ export function resolveTextAnchorHeading(anchor: TextAnchor, doc: Document): Ele
   if (heading === undefined || others.length > 0) {
     return undefined;
   }
-  const model = buildTextModel(doc.body);
+  const model = buildTextModel(body);
   return elementTextBounds(model, heading).start === anchor.position.start ? heading : undefined;
 }
 
