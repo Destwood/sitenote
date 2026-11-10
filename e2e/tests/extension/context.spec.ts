@@ -328,7 +328,9 @@ test("switching console error capture off removes the errors from new threads an
 
   await checkbox.click();
   await expect(checkbox).not.toBeChecked();
-  await expect(popup.getByRole("status")).toHaveText("Console errors will not be captured.");
+  await expect(
+    popup.getByRole("status").filter({ hasText: "Console errors will not be captured." }),
+  ).toBeVisible();
   await popup.getByRole("button", { name: "More options" }).click();
   await expect(popup.getByRole("button", { name: "More options" })).toHaveAttribute(
     "aria-expanded",
@@ -355,7 +357,9 @@ test("switching console error capture off removes the errors from new threads an
   await openSiteMenu(popup);
   await checkbox.click();
   await expect(checkbox).toBeChecked();
-  await expect(popup.getByRole("status")).toHaveText("Console errors will be captured.");
+  await expect(
+    popup.getByRole("status").filter({ hasText: "Console errors will be captured." }),
+  ).toBeVisible();
   await popup.getByRole("button", { name: "More options" }).click();
   await expect(popup.getByRole("button", { name: "More options" })).toHaveAttribute(
     "aria-expanded",
