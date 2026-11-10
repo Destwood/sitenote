@@ -6,6 +6,7 @@ const contextSchema = z.object({
   browser: z.object({ name: z.string(), version: z.string() }),
   os: z.object({ name: z.string(), version: z.optional(z.string()) }),
   consoleErrors: z.array(z.unknown()),
+  networkErrors: z.optional(z.array(z.unknown())),
 });
 
 export interface ThreadContextSummary {

@@ -1,10 +1,15 @@
 import {
   SITENOTE_ROOT_TAG,
+  appendThreadHash,
   createElementAnchor,
   createTextAnchor,
   parsePageUrl,
+  parseReplayMode,
   parseThreadHash,
   type Anchor,
+  type RecordingStep,
+  type ReplaySource,
+  type ReplayMode,
 } from "@sitenote/core";
 import {
   DEFAULT_SELECTION_PLACEMENT,
@@ -33,23 +38,29 @@ import { upsertComment, upsertThread } from "../view-model";
 import { watchDom } from "../dom-watcher";
 import { watchPageUrl } from "../url-watcher";
 import { watchSelection } from "../selection-watcher";
-import type { MemberRecord, SiteInfo, ThreadRecord } from "../transport";
+import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "../transport";
 
 import type { WidgetBackend } from "../backend";
 import { createPageSession, type PageSessionState, type PageSessionStatus } from "../page-session";
 import type { PreferenceClient } from "../preference-client";
 import type { ScreenshotTaker } from "../screenshot-taker";
+import { createReplayRunner, type ReplayRunner, type ReplayView } from "../replay-runner";
 export const PENDING_ID = "pending";
 export const SELECTION_ID = "selection";
 export const MAX_TOASTS = 3;
 export const UNSUPPORTED_SELECTION_MESSAGE = "That selection cannot be commented on.";
 export const CLICKUP_SCREENSHOT_MISSING_MESSAGE =
   "The ClickUp task was created without the screenshot.";
-export const JIRA_COMMENT_MISSING_MESSAGE = "The issue was linked without the Jira comment.";
+export const JIRA_LINK_MISSING_MESSAGE =
+  "The issue was linked, but the link could not be added to the Jira issue.";
 export const PREFERENCE_FAILED_MESSAGE = "Could not remember this setting for the next visit.";
 export const SCREENSHOT_FAILED_MESSAGE = "Screenshot could not be saved";
 export const RECORDING_ATTACHED_MESSAGE = "Video attached to your next comment";
 export const THREAD_NOT_HERE_MESSAGE = "This comment is on another page or you do not have access.";
+const OPEN_START_PAGE_MESSAGE = "Opening the page where the recording started.";
+const NO_RECORDED_STEPS_MESSAGE = "This comment has no recorded steps.";
+const ROUTE_COPIED_MESSAGE = "Route copied";
+const ROUTE_COPY_FAILED_MESSAGE = "Could not copy the route";
 export const COMMENT_CURSOR_CSS = `html, html * { cursor: crosshair !important; } ${SITENOTE_ROOT_TAG} { cursor: auto !important; }`;
 
 export interface PendingThread {
@@ -58,14 +69,36 @@ export interface PendingThread {
   captureId: string | null;
 }
 
+export interface ReplayState {
+  view: Omit<ReplayView, "target">;
+  highlight: AnchorRect | null;
+}
+
+export interface ReplayGateState {
+  threadId: string;
+  mode: ReplayMode;
+  steps: RecordingStep[];
+  startUrl: string | null;
+}
+
+interface ReplayRequest {
+  threadId: string;
+  steps: RecordingStep[];
+  mode: ReplayMode;
+  startUrl: string | null;
+  startsSignedOut: boolean;
+}
+
 export interface ContentState {
   status: PageSessionStatus;
   site: SiteInfo | null;
   live: boolean;
   threads: ThreadRecord[];
+  siteThreads: ThreadRecord[];
   members: MemberRecord[];
   screenshots: ReadonlyMap<string, ScreenshotState>;
   recordings: ReadonlyMap<string, ScreenshotState>;
+  recordingAttached: boolean;
   resolutions: ReadonlyMap<string, Resolution>;
   positions: Measurements;
   commentMode: boolean;
@@ -83,6 +116,10 @@ export interface ContentState {
   jiraConfigured: boolean;
   jiraPending: ReadonlySet<string>;
   selectionPlacement: SelectionPlacement;
+  replayAvailable: boolean;
+  replay: ReplayState | null;
+  replayGate: ReplayGateState | null;
+  offPageThreadId: string | null;
 }
 
 export interface ContentControllerDeps {
@@ -102,11 +139,13 @@ export interface ContentController {
   toggleCommentMode: () => boolean;
   exitCommentMode: () => void;
   enterCommentMode: (notice: string) => boolean;
+  attachRecording: () => boolean;
   commentOnContextTarget: () => boolean;
   toggleSidebar: () => void;
   closeSidebar: () => void;
   setShowResolved: (show: boolean) => void;
   selectThread: (threadId: string) => void;
+  openThread: (threadId: string) => boolean;
   togglePin: (threadId: string) => void;
   closePanel: () => void;
   startTextComment: () => void;
@@ -118,6 +157,20 @@ export interface ContentController {
   createClickUpTask: (threadId: string) => Promise<void>;
   linkJiraIssue: (threadId: string, issueKey: string) => Promise<void>;
   dismissToast: (toastId: string) => void;
+  startReplay: (threadId: string, mode: ReplayMode) => void;
+  gateRun: () => void;
+  gateClose: () => void;
+  closeOffPage: () => void;
+  openOffPagePage: (threadId: string) => void;
+  reproduceOffPage: (threadId: string, mode: ReplayMode) => void;
+  copyRoute: (route: string) => void;
+  replayNext: () => void;
+  replayBack: () => void;
+  replayPause: () => void;
+  replayResume: () => void;
+  replaySkip: () => void;
+  replayRetry: () => void;
+  replayStop: () => void;
 }
 
 export function reconcileResolutions(
@@ -129,11 +182,26 @@ export function reconcileResolutions(
   let changed = previous.size !== threads.length;
   for (const thread of threads) {
     const existing = previous.get(thread.id);
-    if (existing?.status === "resolved" && isTargetAlive(existing.target)) {
+    if (
+      existing?.status === "resolved" &&
+      isTargetAlive(existing.target) &&
+      (thread.anchor?.kind !== "text" ||
+        (existing.target.kind === "text" &&
+          existing.target.range.toString().trim() === thread.anchor.quote.exact))
+    ) {
       next.set(thread.id, existing);
       continue;
     }
-    const fresh = thread.anchor === null ? ORPHANED : resolveAnchor(thread.anchor, doc);
+    let fresh = thread.anchor === null ? ORPHANED : resolveAnchor(thread.anchor, doc);
+    if (
+      existing?.status === "resolved" &&
+      existing.target.kind === "element" &&
+      fresh.status === "resolved" &&
+      fresh.target.kind === "element" &&
+      existing.target.element === fresh.target.element
+    ) {
+      fresh = existing;
+    }
     next.set(thread.id, fresh);
     if (existing !== fresh) {
       changed = true;
@@ -156,9 +224,11 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     site: null,
     live: false,
     threads: [],
+    siteThreads: [],
     members: [],
     screenshots: new Map(),
     recordings: new Map(),
+    recordingAttached: false,
     resolutions: new Map(),
     positions: new Map(),
     commentMode: false,
@@ -176,6 +246,10 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     jiraConfigured: false,
     jiraPending: new Set<string>(),
     selectionPlacement: DEFAULT_SELECTION_PLACEMENT,
+    replayAvailable: deps.backend.replayProgress !== undefined,
+    replay: null,
+    replayGate: null,
+    offPageThreadId: null,
   });
 
   let sessionThreads: ThreadRecord[] | null = null;
@@ -187,6 +261,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
   let pageLoaded = false;
   let deactivate: (() => void) | null = null;
   let contextTarget: { element: Element; point: PickPoint } | null = null;
+  let replayTarget: Element | null = null;
 
   const tracker = createPinTracker({
     win,
@@ -207,6 +282,165 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       beginOnElement(element, point);
     },
   });
+
+  function replayRect(): AnchorRect | null {
+    if (replayTarget === null) {
+      return null;
+    }
+    const { x, y, width, height } = replayTarget.getBoundingClientRect();
+    return { x, y, width, height };
+  }
+
+  function refreshReplayHighlight(): void {
+    const highlight = replayRect();
+    store.setState((state) =>
+      state.replay === null ? state : { ...state, replay: { ...state.replay, highlight } },
+    );
+  }
+
+  function setReplayTarget(target: Element | null): void {
+    if (replayTarget !== null) {
+      win.removeEventListener("scroll", refreshReplayHighlight, true);
+      win.removeEventListener("resize", refreshReplayHighlight);
+    }
+    replayTarget = target;
+    if (target !== null) {
+      win.addEventListener("scroll", refreshReplayHighlight, { capture: true, passive: true });
+      win.addEventListener("resize", refreshReplayHighlight);
+    }
+  }
+
+  function handleReplayChange(view: ReplayView | null): void {
+    setReplayTarget(view?.target ?? null);
+    if (view === null) {
+      store.setState((state) => ({ ...state, replay: null }));
+      return;
+    }
+    const replayView: Omit<ReplayView, "target"> = {
+      mode: view.mode,
+      index: view.index,
+      total: view.total,
+      status: view.status,
+      label: view.label,
+      ...(view.message === undefined ? {} : { message: view.message }),
+    };
+    store.setState((state) => ({
+      ...state,
+      replay: { view: replayView, highlight: replayRect() },
+    }));
+  }
+
+  const replayRunner: ReplayRunner | null =
+    deps.backend.replayProgress === undefined
+      ? null
+      : createReplayRunner({
+          doc,
+          win,
+          store: deps.backend.replayProgress,
+          now: () => Date.now(),
+          onChange: handleReplayChange,
+        });
+
+  function startReplay(threadId: string, mode: ReplayMode): void {
+    const recording = store.getState().threads.find((thread) => thread.id === threadId)
+      ?.context?.recording;
+    const steps = recording?.steps;
+    if (replayRunner === null || steps === undefined || steps.length === 0) {
+      return;
+    }
+    const startUrl = recording?.startUrl;
+    if (startUrl !== undefined && parsePageUrl(startUrl)?.page !== readPageUrl()) {
+      const url = appendThreadHash(startUrl, threadId, mode);
+      if (url !== null) {
+        win.open(url, "_blank", "noopener");
+        pushToast({ message: OPEN_START_PAGE_MESSAGE, variant: "info" });
+      }
+      return;
+    }
+    beginReplay({
+      threadId,
+      steps,
+      mode,
+      startUrl: startUrl ?? null,
+      startsSignedOut: recording?.startsSignedOut === true,
+    });
+  }
+
+  function beginReplay(request: ReplayRequest): void {
+    const { threadId, steps, mode, startUrl, startsSignedOut } = request;
+    setCommentMode(false);
+    closePanel();
+    if (startsSignedOut) {
+      store.setState((state) => ({
+        ...state,
+        replayGate: { threadId, mode, steps, startUrl },
+      }));
+      return;
+    }
+    replayRunner?.start(threadId, steps, mode);
+  }
+
+  function runReplayGate(): void {
+    const gate = store.getState().replayGate;
+    if (gate === null) {
+      return;
+    }
+    store.setState((state) => ({ ...state, replayGate: null }));
+    replayRunner?.start(gate.threadId, gate.steps, gate.mode);
+  }
+
+  function closeOffPage(): void {
+    store.setState((state) => ({ ...state, offPageThreadId: null }));
+  }
+
+  function openOffPagePage(threadId: string): void {
+    const thread = store.getState().siteThreads.find((candidate) => candidate.id === threadId);
+    const href = thread === undefined ? null : appendThreadHash(thread.pageUrl, thread.id);
+    if (href !== null) {
+      win.location.assign(href);
+    }
+  }
+
+  async function replayOffPage(threadId: string, mode: ReplayMode): Promise<void> {
+    const getReplaySource = deps.backend.getReplaySource;
+    const result =
+      getReplaySource === undefined ? null : await getReplaySource(threadId).catch(() => null);
+    const source = result?.ok === true ? result.data : null;
+    closeOffPage();
+    if (source === null || source.steps.length === 0) {
+      pushToast({ message: NO_RECORDED_STEPS_MESSAGE, variant: "info" });
+      return;
+    }
+    const startPage = source.startUrl ?? source.pageUrl;
+    if (parsePageUrl(startPage)?.page !== readPageUrl()) {
+      const url = appendThreadHash(startPage, threadId, mode);
+      if (url !== null) {
+        win.open(url, "_blank", "noopener");
+        pushToast({ message: OPEN_START_PAGE_MESSAGE, variant: "info" });
+      }
+      return;
+    }
+    beginReplay({
+      threadId,
+      steps: source.steps,
+      mode,
+      startUrl: source.startUrl,
+      startsSignedOut: source.startsSignedOut,
+    });
+  }
+
+  function copyRoute(route: string): void {
+    void Promise.resolve()
+      .then(() => win.navigator.clipboard.writeText(route))
+      .then(
+        () => {
+          pushToast({ message: ROUTE_COPIED_MESSAGE, variant: "info" });
+        },
+        () => {
+          pushToast({ message: ROUTE_COPY_FAILED_MESSAGE, variant: "error" });
+        },
+      );
+  }
 
   function beginOnElement(element: Element, point: PickPoint): void {
     const anchor = createElementAnchor(element, point);
@@ -424,8 +658,8 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       });
       return;
     }
-    if (!result.data.commentAdded) {
-      pushToast({ message: JIRA_COMMENT_MISSING_MESSAGE, variant: "info" });
+    if (!result.data.linkAdded) {
+      pushToast({ message: JIRA_LINK_MISSING_MESSAGE, variant: "info" });
     }
   }
 
@@ -536,6 +770,15 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     }));
   }
 
+  function enterCommentModeWith(notice: string): boolean {
+    if (store.getState().status !== "ready") {
+      return false;
+    }
+    setCommentMode(true);
+    pushToast({ message: notice, variant: "info" });
+    return true;
+  }
+
   function closePanel(): void {
     store.setState((state) =>
       state.pending === null && state.activeThreadId === null
@@ -564,6 +807,18 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     }));
   }
 
+  function openThread(threadId: string): boolean {
+    if (store.getState().threads.some((thread) => thread.id === threadId)) {
+      selectThread(threadId);
+      return true;
+    }
+    if (!store.getState().siteThreads.some((thread) => thread.id === threadId)) {
+      return false;
+    }
+    store.setState((state) => ({ ...state, offPageThreadId: threadId }));
+    return true;
+  }
+
   function prefersReducedMotion(): boolean {
     return win.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
@@ -574,14 +829,48 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     win.history.replaceState(win.history.state, "", url.href);
   }
 
+  async function replayFromSource(
+    threadId: string,
+    mode: ReplayMode,
+    getReplaySource: (id: string) => Promise<MessageResult<ReplaySource | null>>,
+  ): Promise<void> {
+    const result = await getReplaySource(threadId);
+    if (store.getState().status !== "ready") {
+      return;
+    }
+    const source = result.ok ? result.data : null;
+    const startKey = source === null ? null : parsePageUrl(source.startUrl ?? source.pageUrl)?.page;
+    if (
+      source === null ||
+      replayRunner === null ||
+      source.steps.length === 0 ||
+      startKey !== readPageUrl()
+    ) {
+      pushToast({ message: THREAD_NOT_HERE_MESSAGE, variant: "info" });
+      return;
+    }
+    beginReplay({
+      threadId: source.threadId,
+      steps: source.steps,
+      mode,
+      startUrl: source.startUrl,
+      startsSignedOut: source.startsSignedOut,
+    });
+  }
+
   function openThreadFromHash(): void {
     const threadId = parseThreadHash(win.location.hash);
+    const replayMode = parseReplayMode(win.location.hash);
     const state = store.getState();
     if (threadId === null || !pageLoaded || state.status !== "ready") {
       return;
     }
     clearThreadHash();
     if (!state.threads.some((thread) => thread.id === threadId)) {
+      if (replayMode !== null && deps.backend.getReplaySource !== undefined) {
+        void replayFromSource(threadId, replayMode, deps.backend.getReplaySource);
+        return;
+      }
       pushToast({ message: THREAD_NOT_HERE_MESSAGE, variant: "info" });
       return;
     }
@@ -597,6 +886,9 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       panelError: undefined,
       sidebarOpen: current.sidebarOpen || resolution?.status !== "resolved",
     }));
+    if (replayMode !== null) {
+      startReplay(threadId, replayMode);
+    }
   }
 
   function handleKeyDown(event: KeyboardEvent): void {
@@ -697,6 +989,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       status: next.status,
       site: next.site,
       live: next.live,
+      siteThreads: next.siteThreads,
     }));
     if (next.threads !== sessionThreads) {
       sessionThreads = next.threads;
@@ -722,6 +1015,14 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     cursorStyle.detach();
     tracker.stop();
     highlighter.dispose();
+    replayRunner?.detach();
+    setReplayTarget(null);
+    store.setState((state) => ({
+      ...state,
+      replay: null,
+      replayGate: null,
+      offPageThreadId: null,
+    }));
     session.stop();
   }
 
@@ -750,6 +1051,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
         ...(pending.captureId === null ? {} : { captureId: pending.captureId }),
         body: submission.body,
         mentions: submission.mentions,
+        ...(submission.startsSignedOut === true ? { startsSignedOut: true } : {}),
       });
       if (!result.ok) {
         const message = result.error.message;
@@ -777,15 +1079,25 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
         return {
           ...state,
           threads: upsertThread(state.threads, record),
+          siteThreads: upsertThread(state.siteThreads, record),
           resolutions,
           pending: stillPending ? null : state.pending,
           activeThreadId: stillPending ? record.id : state.activeThreadId,
+          recordingAttached: false,
           panelError: undefined,
         };
       });
     } finally {
       creating = false;
     }
+  }
+
+  function applyComment(comment: CommentRecord): void {
+    store.setState((state) => ({
+      ...state,
+      threads: upsertComment(state.threads, comment),
+      siteThreads: upsertComment(state.siteThreads, comment),
+    }));
   }
 
   async function reply(threadId: string, submission: ComposerSubmission): Promise<void> {
@@ -800,8 +1112,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       store.setState((state) => ({ ...state, panelError: message }));
       throw new Error(message);
     }
-    const comment = result.data;
-    store.setState((state) => ({ ...state, threads: upsertComment(state.threads, comment) }));
+    applyComment(result.data);
   }
 
   async function editComment(commentId: string, body: string): Promise<void> {
@@ -809,8 +1120,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     if (!result.ok) {
       throw new Error(result.error.message);
     }
-    const comment = result.data;
-    store.setState((state) => ({ ...state, threads: upsertComment(state.threads, comment) }));
+    applyComment(result.data);
   }
 
   async function deleteComment(commentId: string): Promise<void> {
@@ -818,12 +1128,14 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     if (!result.ok) {
       throw new Error(result.error.message);
     }
-    const comment = result.data;
-    store.setState((state) => ({ ...state, threads: upsertComment(state.threads, comment) }));
+    applyComment(result.data);
   }
 
   async function toggleStatus(threadId: string): Promise<void> {
-    const thread = store.getState().threads.find((candidate) => candidate.id === threadId);
+    const { threads, siteThreads } = store.getState();
+    const thread =
+      threads.find((candidate) => candidate.id === threadId) ??
+      siteThreads.find((candidate) => candidate.id === threadId);
     if (thread === undefined) {
       return;
     }
@@ -842,12 +1154,23 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       return;
     }
     const record = result.data;
-    store.setState((state) => ({ ...state, threads: upsertThread(state.threads, record) }));
+    store.setState((state) => ({
+      ...state,
+      threads: state.threads.some((candidate) => candidate.id === record.id)
+        ? upsertThread(state.threads, record)
+        : state.threads,
+      siteThreads: upsertThread(state.siteThreads, record),
+    }));
   }
 
   return {
     store,
-    start: () => session.start(),
+    start: async () => {
+      await session.start();
+      if (store.getState().status === "ready") {
+        void replayRunner?.resumeSaved();
+      }
+    },
     stop: shutdown,
     toggleCommentMode: () => {
       const next = !store.getState().commentMode;
@@ -857,13 +1180,13 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     exitCommentMode: () => {
       setCommentMode(false);
     },
-    enterCommentMode: (notice) => {
-      if (store.getState().status !== "ready") {
-        return false;
+    enterCommentMode: enterCommentModeWith,
+    attachRecording: () => {
+      const entered = enterCommentModeWith(RECORDING_ATTACHED_MESSAGE);
+      if (entered) {
+        store.setState((state) => ({ ...state, recordingAttached: true }));
       }
-      setCommentMode(true);
-      pushToast({ message: notice, variant: "info" });
-      return true;
+      return entered;
     },
     commentOnContextTarget: () => {
       const stored = contextTarget;
@@ -883,6 +1206,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     },
     setShowResolved,
     selectThread,
+    openThread,
     togglePin: (threadId) => {
       if (threadId === PENDING_ID) {
         return;
@@ -916,5 +1240,37 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     createClickUpTask,
     linkJiraIssue,
     dismissToast,
+    startReplay,
+    gateRun: runReplayGate,
+    gateClose: () => {
+      store.setState((state) => ({ ...state, replayGate: null }));
+    },
+    closeOffPage,
+    openOffPagePage,
+    reproduceOffPage: (threadId, mode) => {
+      void replayOffPage(threadId, mode);
+    },
+    copyRoute,
+    replayNext: () => {
+      replayRunner?.next();
+    },
+    replayBack: () => {
+      replayRunner?.back();
+    },
+    replayPause: () => {
+      replayRunner?.pause();
+    },
+    replayResume: () => {
+      replayRunner?.resume();
+    },
+    replaySkip: () => {
+      replayRunner?.skip();
+    },
+    replayRetry: () => {
+      replayRunner?.retry();
+    },
+    replayStop: () => {
+      replayRunner?.stop();
+    },
   };
 }

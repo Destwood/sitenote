@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -81,11 +81,19 @@ function useTables({ thread, access }: Results) {
   const chain = (table: string) => {
     const link: Record<string, unknown> = {
       eq: () => link,
+      gt: () => link,
       order: () =>
         Promise.resolve(
           table === "comments" ? { data: COMMENTS, error: null } : { data: MEMBERS, error: null },
         ),
-      maybeSingle: () => Promise.resolve(table === "threads" ? thread : access),
+      maybeSingle: () =>
+        Promise.resolve(
+          table === "threads"
+            ? thread
+            : table === "thread_shares"
+              ? { data: null, error: null }
+              : access,
+        ),
     };
     return link;
   };
@@ -162,6 +170,7 @@ describe("jira", () => {
     expect(mocks.rpc).toHaveBeenCalledWith("jira_configured", { p_workspace_id: WORKSPACE_ID });
     expect(mocks.jiraPanel.mock.calls[0]?.[0]).toEqual({
       threadId: THREAD_ID,
+      workspaceId: WORKSPACE_ID,
       issueKey: "PROJ-123",
       issueUrl: "https://acme.atlassian.net/browse/PROJ-123",
       canLink: true,
@@ -173,6 +182,7 @@ describe("jira", () => {
 
     expect(mocks.jiraPanel.mock.calls[0]?.[0]).toEqual({
       threadId: THREAD_ID,
+      workspaceId: WORKSPACE_ID,
       issueKey: null,
       issueUrl: null,
       canLink: false,
@@ -257,6 +267,7 @@ describe("thread link", () => {
 
     await renderPage();
 
+    fireEvent.click(screen.getByRole("tab", { name: "Steps (1)" }));
     expect(screen.getByRole("list", { name: "What the reporter did (1)" })).toBeTruthy();
     expect(screen.getByText("Buy now")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Copy as Playwright" })).toBeTruthy();
@@ -269,9 +280,11 @@ describe("thread link", () => {
     expect(
       await screen.findByRole("heading", { name: "Install the Sitenote extension" }),
     ).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Open page" }).getAttribute("href")).toBe(
-      "https://example.test/pricing",
-    );
+    expect(
+      screen
+        .getByRole("link", { name: "Open the page where this was recorded" })
+        .getAttribute("href"),
+    ).toBe("https://example.test/pricing");
   });
 
   it("offers no page link for an address that is not http or https", async () => {
@@ -282,7 +295,9 @@ describe("thread link", () => {
 
     await renderPage();
 
-    expect(screen.queryByRole("link", { name: "Open page" })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Open the page where this was recorded" }),
+    ).toBeNull();
     expect(screen.queryByRole("heading", { name: "Install the Sitenote extension" })).toBeNull();
     expect(screen.getByText("javascript:alert(1)")).toBeTruthy();
   });

@@ -212,4 +212,38 @@ describe("createContextCollector", () => {
     expect(context.consoleErrors.length).toBeLessThan(20);
     expect(threadContextSchema.safeParse(context).success).toBe(true);
   });
+
+  it("adds the network records of the page diagnostics when there are any", async () => {
+    const network = {
+      kind: "fetch" as const,
+      method: "GET",
+      url: "https://example.test/api",
+      status: 0,
+      at: AT,
+    };
+    const collect = createContextCollector({
+      win: windowWith(),
+      doc: documentWith("t"),
+      requestErrors: () => Promise.resolve([]),
+      requestDiagnostics: () => Promise.resolve({ consoleErrors: [], networkErrors: [network] }),
+      now: () => NOW,
+    });
+
+    const context = await collect();
+
+    expect(context.networkErrors).toEqual([network]);
+    expect(threadContextSchema.safeParse(context).success).toBe(true);
+  });
+
+  it("leaves the network records out when the page diagnostics have none", async () => {
+    const collect = createContextCollector({
+      win: windowWith(),
+      doc: documentWith("t"),
+      requestErrors: () => Promise.resolve([]),
+      requestDiagnostics: () => Promise.resolve({ consoleErrors: [], networkErrors: [] }),
+      now: () => NOW,
+    });
+
+    expect(await collect()).not.toHaveProperty("networkErrors");
+  });
 });

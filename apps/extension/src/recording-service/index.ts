@@ -1,4 +1,9 @@
-import type { RecordingRef, RecordingStep } from "@sitenote/core";
+import {
+  parsePageUrl,
+  RECORDING_START_URL_MAX,
+  type RecordingRef,
+  type RecordingStep,
+} from "@sitenote/core";
 import { failure, success, type MessageResult } from "@sitenote/widget";
 
 import type { EnabledEntry } from "../enablement-store";
@@ -54,6 +59,12 @@ type QueryCommand = Extract<OffscreenCommand, { type: "offscreen.query" }>;
 
 export const RECORDING_BADGE_COLOR = "#dc2626";
 
+function startUrlOf(url: string | undefined): string | undefined {
+  return url === undefined || parsePageUrl(url) === null
+    ? undefined
+    : url.slice(0, RECORDING_START_URL_MAX);
+}
+
 export function createNoopRecordingService(): RecordingService {
   return {
     start: () => Promise.resolve(failure("recording_failed")),
@@ -76,6 +87,7 @@ function quiet(task: Promise<unknown>): Promise<void> {
 
 export function createRecordingService(deps: RecordingServiceDeps): RecordingService {
   let creating: Promise<void> | null = null;
+  const startUrls = new Map<number, string>();
 
   function ensureDocument(): Promise<void> {
     creating ??= (async () => {
@@ -122,7 +134,8 @@ export function createRecordingService(deps: RecordingServiceDeps): RecordingSer
 
   return {
     start: async ({ tabId, streamId }) => {
-      const origin = originOfTabUrl((await deps.tabs.get(tabId))?.url);
+      const url = (await deps.tabs.get(tabId))?.url;
+      const origin = originOfTabUrl(url);
       if (origin === null || (await deps.getEnabledSite(origin)) === null) {
         return failure("forbidden");
       }
@@ -143,6 +156,11 @@ export function createRecordingService(deps: RecordingServiceDeps): RecordingSer
         const { startedAt } = reply.data;
         await quiet(deps.badge.set(tabId, "REC"));
         await quiet(deps.sendToTab(tabId, { type: "recording.state", recording: true, startedAt }));
+        const startUrl = startUrlOf(url);
+        startUrls.delete(tabId);
+        if (startUrl !== undefined) {
+          startUrls.set(tabId, startUrl);
+        }
         return success({ state: "recording", startedAt });
       } catch {
         return failure("recording_failed");
@@ -177,10 +195,16 @@ export function createRecordingService(deps: RecordingServiceDeps): RecordingSer
       return success(null);
     },
     discard: (tabId) => {
+      startUrls.delete(tabId);
       deps.recordings.discard(tabId);
       void quiet(closeWhenIdle());
     },
-    attach: (tabId, workspaceId, threadId) => deps.recordings.attach(tabId, workspaceId, threadId),
+    attach: async (tabId, workspaceId, threadId) => {
+      const startUrl = startUrls.get(tabId);
+      startUrls.delete(tabId);
+      const ref = await deps.recordings.attach(tabId, workspaceId, threadId);
+      return ref === null || startUrl === undefined ? ref : { ...ref, startUrl };
+    },
     addStep: async (tabId, step) => {
       if ((await ask({ type: "offscreen.query", tabId })).state === "recording") {
         await quiet(deps.sendToOffscreen({ type: "offscreen.step", tabId, step }));
@@ -188,6 +212,7 @@ export function createRecordingService(deps: RecordingServiceDeps): RecordingSer
       return success(null);
     },
     onTabRemoved: (tabId) => {
+      startUrls.delete(tabId);
       void quiet(
         (async () => {
           if ((await ask({ type: "offscreen.query", tabId })).state === "recording") {

@@ -80,7 +80,7 @@ jobs:
         with:
           deno-version: "2.x"
       - run: deno check --config supabase/functions/deno.json supabase/functions/*/index.ts supabase/functions/*/handler.ts supabase/functions/*/handler.test.ts
-      - run: deno lint supabase/functions/clickup-create-task supabase/functions/clickup-save-settings supabase/functions/clickup-hierarchy supabase/functions/jira-save-settings supabase/functions/jira-link-issue supabase/functions/notify-email supabase/functions/_shared/runtime supabase/functions/_shared/supabase supabase/functions/_shared/testing
+      - run: deno lint supabase/functions/clickup-create-task supabase/functions/clickup-save-settings supabase/functions/clickup-hierarchy supabase/functions/jira-save-settings supabase/functions/jira-link-issue supabase/functions/jira-search-issues supabase/functions/notify-email supabase/functions/_shared/runtime supabase/functions/_shared/supabase supabase/functions/_shared/testing
       - run: deno test --config supabase/functions/deno.json supabase/functions/clickup-create-task supabase/functions/clickup-save-settings supabase/functions/clickup-hierarchy supabase/functions/jira-save-settings supabase/functions/jira-link-issue supabase/functions/notify-email
 
   e2e:

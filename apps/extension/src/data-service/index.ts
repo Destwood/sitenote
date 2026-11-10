@@ -6,6 +6,7 @@ import {
   withoutConsoleErrors,
   withRecording,
   type Anchor,
+  type ReplaySource,
   type ThreadContext,
 } from "@sitenote/core";
 import type { SitenoteClient } from "@sitenote/db";
@@ -144,6 +145,7 @@ type Handled<Type extends DataRequest["type"]> = Extract<DataRequest, { type: Ty
 export interface DataService {
   forOrigin: (request: Handled<"sites.forOrigin">) => Promise<MessageResult<SiteInfo | null>>;
   listThreads: (request: Handled<"threads.list">) => Promise<MessageResult<ThreadRecord[]>>;
+  listSiteThreads: (request: Handled<"threads.listSite">) => Promise<MessageResult<ThreadRecord[]>>;
   createThread: (
     request: Handled<"threads.create">,
     sender?: { tabId?: number | undefined },
@@ -152,6 +154,9 @@ export interface DataService {
     request: Handled<"threads.screenshotUrl">,
   ) => Promise<MessageResult<string | null>>;
   recordingUrl: (request: Handled<"threads.recordingUrl">) => Promise<MessageResult<string | null>>;
+  replaySource: (
+    request: Handled<"threads.replaySource">,
+  ) => Promise<MessageResult<ReplaySource | null>>;
   setThreadStatus: (request: Handled<"threads.setStatus">) => Promise<MessageResult<ThreadRecord>>;
   clickUpStatus: (request: Handled<"clickup.status">) => Promise<MessageResult<boolean>>;
   clickUpCreateTask: (
@@ -402,7 +407,21 @@ export function createDataService(deps: DataServiceDeps): DataService {
         return result.error === null ? success(result.data.map(toThread)) : fail(result.error);
       }),
 
-    createThread: ({ siteId, pageUrl, anchor, context, captureId, body, mentions }, sender) =>
+    listSiteThreads: ({ siteId }) =>
+      guarded(async () => {
+        const result = await client
+          .from("threads")
+          .select(THREAD_SELECT)
+          .eq("site_id", siteId)
+          .order("created_at", { ascending: true })
+          .limit(500);
+        return result.error === null ? success(result.data.map(toThread)) : fail(result.error);
+      }),
+
+    createThread: (
+      { siteId, pageUrl, anchor, context, captureId, body, mentions, startsSignedOut },
+      sender,
+    ) =>
       guarded(async () => {
         const origin = parsePageUrl(pageUrl)?.site;
         const enabled = origin === undefined ? null : await deps.getEnabledSite(origin);
@@ -420,7 +439,13 @@ export function createDataService(deps: DataServiceDeps): DataService {
           tabId === undefined
             ? null
             : await deps.recordings.attach(tabId, enabled.workspaceId, threadId);
-        const stored = recording === null ? fitted : withRecording(fitted, recording);
+        const stored =
+          recording === null
+            ? fitted
+            : withRecording(fitted, {
+                ...recording,
+                ...(startsSignedOut === true ? { startsSignedOut: true } : {}),
+              });
         const created = await client.rpc("create_thread", {
           p_site_id: siteId,
           p_page_url: pageUrl,
@@ -478,6 +503,32 @@ export function createDataService(deps: DataServiceDeps): DataService {
           return success(parseThreadContext(row.data.context)?.recording?.path ?? null);
         }),
       ),
+
+    replaySource: ({ threadId }) =>
+      guarded(async () => {
+        const row = await client
+          .from("threads")
+          .select("id, page_url, context")
+          .eq("id", threadId)
+          .maybeSingle();
+        if (row.error !== null) {
+          return fail(row.error);
+        }
+        if (row.data === null) {
+          return failure("not_found");
+        }
+        const recording = parseThreadContext(row.data.context)?.recording;
+        if (recording?.steps === undefined || recording.steps.length === 0) {
+          return success(null);
+        }
+        return success({
+          threadId: row.data.id,
+          pageUrl: row.data.page_url,
+          startUrl: recording.startUrl ?? null,
+          startsSignedOut: recording.startsSignedOut === true,
+          steps: recording.steps,
+        });
+      }),
 
     clickUpStatus: ({ workspaceId }) =>
       guarded(async () => {

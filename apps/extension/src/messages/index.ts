@@ -4,6 +4,7 @@ import {
   parsePageUrl,
   recordingStepSchema,
   threadContextSchema,
+  type ReplaySource,
 } from "@sitenote/core";
 import {
   ERROR_CODES,
@@ -28,6 +29,7 @@ import {
   type MessageResult,
   type NotificationList,
   type Preferences,
+  type ReplayProgress,
   type SiteInfo,
   type ThreadRecord,
   type WorkspaceInfo,
@@ -77,6 +79,22 @@ const notificationLimitSchema = z.int().check(z.minimum(1), z.maximum(NOTIFICATI
 const notificationIdsSchema = z
   .array(idSchema)
   .check(z.minLength(1), z.maxLength(NOTIFICATIONS_PAGE_MAX));
+export const replaySourceSchema = z.object({
+  threadId: idSchema,
+  pageUrl: z.string(),
+  startUrl: z.nullable(z.string()),
+  startsSignedOut: z.boolean(),
+  steps: z.array(recordingStepSchema).check(z.maxLength(RECORDING_STEPS_MAX)),
+});
+
+export const replayProgressSchema = z.object({
+  threadId: idSchema,
+  mode: z.enum(["step", "auto"]),
+  steps: z.array(recordingStepSchema).check(z.maxLength(RECORDING_STEPS_MAX)),
+  nextIndex: nonNegativeIntSchema,
+  at: nonNegativeIntSchema,
+});
+
 const JIRA_ISSUE_KEY_MAX = 64;
 const jiraIssueKeySchema = z
   .string()
@@ -85,6 +103,7 @@ const jiraIssueKeySchema = z
 export const dataRequestSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("sites.forOrigin"), origin: originSchema }),
   z.object({ type: z.literal("threads.list"), siteId: idSchema, pageUrl: pageUrlSchema }),
+  z.object({ type: z.literal("threads.listSite"), siteId: idSchema }),
   z.object({
     type: z.literal("threads.create"),
     siteId: idSchema,
@@ -94,9 +113,11 @@ export const dataRequestSchema = z.discriminatedUnion("type", [
     captureId: z.optional(idSchema),
     body: bodySchema,
     mentions: mentionsSchema,
+    startsSignedOut: z.optional(z.boolean()),
   }),
   z.object({ type: z.literal("threads.screenshotUrl"), threadId: idSchema }),
   z.object({ type: z.literal("threads.recordingUrl"), threadId: idSchema }),
+  z.object({ type: z.literal("threads.replaySource"), threadId: idSchema }),
   z.object({
     type: z.literal("screenshot.capture"),
     rect: captureRectSchema,
@@ -165,6 +186,9 @@ export const dataRequestSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("recording.heartbeat") }),
   z.object({ type: z.literal("recording.step"), step: recordingStepSchema }),
+  z.object({ type: z.literal("replay.save"), progress: replayProgressSchema }),
+  z.object({ type: z.literal("replay.load") }),
+  z.object({ type: z.literal("replay.clear") }),
 ]);
 
 export type DataRequest = z.infer<typeof dataRequestSchema>;
@@ -259,9 +283,11 @@ export interface AuthDataByType {
 export interface DataByType {
   "sites.forOrigin": SiteInfo | null;
   "threads.list": ThreadRecord[];
+  "threads.listSite": ThreadRecord[];
   "threads.create": ThreadRecord;
   "threads.screenshotUrl": string | null;
   "threads.recordingUrl": string | null;
+  "threads.replaySource": ReplaySource | null;
   "screenshot.capture": CapturedScreenshot;
   "preferences.get": Preferences;
   "preferences.set": null;
@@ -289,6 +315,9 @@ export interface DataByType {
   "recording.finished": null;
   "recording.heartbeat": null;
   "recording.step": null;
+  "replay.save": null;
+  "replay.load": ReplayProgress | null;
+  "replay.clear": null;
 }
 
 export type DataByRequestType = AuthDataByType & DataByType;
@@ -307,9 +336,11 @@ export const RESPONSE_SCHEMAS: {
   "auth.signOut": resultSchema(authStateSchema),
   "sites.forOrigin": resultSchema(z.nullable(siteInfoSchema)),
   "threads.list": resultSchema(z.array(threadRecordSchema)),
+  "threads.listSite": resultSchema(z.array(threadRecordSchema)),
   "threads.create": resultSchema(threadRecordSchema),
   "threads.screenshotUrl": resultSchema(z.nullable(httpUrlSchema)),
   "threads.recordingUrl": resultSchema(z.nullable(httpUrlSchema)),
+  "threads.replaySource": resultSchema(z.nullable(replaySourceSchema)),
   "screenshot.capture": resultSchema(capturedScreenshotSchema),
   "preferences.get": resultSchema(preferencesSchema),
   "preferences.set": resultSchema(z.null()),
@@ -337,6 +368,9 @@ export const RESPONSE_SCHEMAS: {
   "recording.finished": resultSchema(z.null()),
   "recording.heartbeat": resultSchema(z.null()),
   "recording.step": resultSchema(z.null()),
+  "replay.save": resultSchema(z.null()),
+  "replay.load": resultSchema(z.nullable(replayProgressSchema)),
+  "replay.clear": resultSchema(z.null()),
 };
 
 export const pageSubscribeSchema = z.object({
@@ -394,6 +428,8 @@ export const pageThreadSummarySchema = z.object({
   authorName: z.string(),
   replies: z.int().check(z.nonnegative()),
   detached: z.boolean(),
+  route: z.string(),
+  current: z.boolean(),
 });
 
 export const pageThreadsResponseSchema = resultSchema(z.array(pageThreadSummarySchema));

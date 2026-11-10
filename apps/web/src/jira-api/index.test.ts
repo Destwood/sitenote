@@ -124,14 +124,14 @@ describe("disconnectJira", () => {
 });
 
 describe("linkJiraIssue", () => {
-  it("returns the linked issue and whether the comment was added", async () => {
+  it("returns the linked issue and whether the link was added", async () => {
     const invoke = vi.fn(() =>
       Promise.resolve({
         data: {
           issueKey: "PROJ-123",
           issueUrl: "https://acme.atlassian.net/browse/PROJ-123",
           linked: true,
-          commentAdded: false,
+          linkAdded: false,
         },
         error: null,
       }),
@@ -142,7 +142,7 @@ describe("linkJiraIssue", () => {
         issueKey: "PROJ-123",
         issueUrl: "https://acme.atlassian.net/browse/PROJ-123",
         linked: true,
-        commentAdded: false,
+        linkAdded: false,
       },
     });
     expect(invoke).toHaveBeenCalledWith("jira-link-issue", {

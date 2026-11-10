@@ -1,9 +1,13 @@
+import { formatThreadContextMarkdown, parsePageUrl } from "@sitenote/core";
 import {
   CommentModeBanner,
   HighlightBox,
   Launcher,
+  OffPageThreadCard,
   PIN_SIZE,
   PinLayer,
+  ReplayBar,
+  ReplayGateModal,
   SIDEBAR_WIDTH,
   SelectionButton,
   Sidebar,
@@ -11,6 +15,7 @@ import {
   ToastRegion,
   type AnchorRect,
   type PinLayerPin,
+  type SiteThreadItem,
   type ThreadView,
 } from "@sitenote/ui";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
@@ -21,12 +26,19 @@ import {
   type ContentController,
   type ContentState,
 } from "../content-controller";
-import { buildMentionCandidates, buildThreadViews, canChangeStatus } from "../view-model";
+import {
+  buildMentionCandidates,
+  buildThreadViews,
+  canChangeStatus,
+  numberingOrder,
+} from "../view-model";
 import { useStore } from "../store";
 import type { PinMeasurement } from "../pin-tracker";
+import type { ThreadRecord } from "../transport";
 
 export const PANEL_FALLBACK_MARGIN = 16;
 export const PANEL_FALLBACK_TOP = 72;
+const EXCERPT_LIMIT = 80;
 
 export interface ContentAppProps {
   controller: ContentController;
@@ -83,6 +95,63 @@ function buildPins(state: ContentState, views: readonly ThreadView[]): PinLayerP
   return pins;
 }
 
+function routeOf(url: string): string {
+  return URL.parse(url)?.pathname ?? "/";
+}
+
+function excerptOf(thread: ThreadRecord): string {
+  const first = thread.comments.find((comment) => !comment.deleted);
+  if (first === undefined) {
+    return "Comment deleted";
+  }
+  const text = first.body.replace(/\s+/g, " ").trim();
+  return text.length > EXCERPT_LIMIT ? `${text.slice(0, EXCERPT_LIMIT)}…` : text;
+}
+
+function copyContextOf(thread: ThreadRecord): () => Promise<boolean> {
+  return async () => {
+    try {
+      await navigator.clipboard.writeText(
+        formatThreadContextMarkdown({
+          excerpt: thread.comments.find((comment) => !comment.deleted)?.body ?? "",
+          authorName: thread.author.displayName,
+          status: thread.status,
+          pageUrl: thread.pageUrl,
+          context: thread.context,
+          anchor: thread.anchor,
+        }),
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  };
+}
+
+function buildOtherPages(
+  siteThreads: readonly ThreadRecord[],
+  currentPageKey: string | null,
+): SiteThreadItem[] {
+  const groups = new Map<string, ThreadRecord[]>();
+  for (const thread of siteThreads) {
+    if (thread.pageUrl !== currentPageKey) {
+      groups.set(thread.pageUrl, [...(groups.get(thread.pageUrl) ?? []), thread]);
+    }
+  }
+  return [...groups].flatMap(([pageUrl, group]) =>
+    numberingOrder(group).map((thread, index) => ({
+      id: thread.id,
+      number: index + 1,
+      status: thread.status,
+      authorName: thread.author.displayName,
+      excerpt: excerptOf(thread),
+      replies: Math.max(0, thread.comments.filter((comment) => !comment.deleted).length - 1),
+      route: routeOf(pageUrl),
+      hasSteps: (thread.context?.recording?.steps?.length ?? 0) > 0,
+    })),
+  );
+}
+
 function focusFirstButton(container: HTMLElement | null): void {
   container?.querySelector("button")?.focus();
 }
@@ -114,7 +183,25 @@ export function ContentApp({ controller }: ContentAppProps) {
   }, [sidebarOpen]);
 
   const pins = buildPins(state, views);
+  const currentPageKey = parsePageUrl(window.location.href)?.page ?? null;
+  const currentRoute = routeOf(window.location.href);
+  const otherPages = useMemo(
+    () => buildOtherPages(state.siteThreads, currentPageKey),
+    [state.siteThreads, currentPageKey],
+  );
+  const offPageItem =
+    state.offPageThreadId === null
+      ? undefined
+      : otherPages.find((item) => item.id === state.offPageThreadId);
+  const offPageRecord =
+    offPageItem === undefined
+      ? undefined
+      : state.siteThreads.find((thread) => thread.id === offPageItem.id);
   const openCount = views.filter((view) => view.status === "open").length;
+  const siteOpenCount =
+    state.siteThreads.length === 0
+      ? openCount
+      : state.siteThreads.filter((thread) => thread.status === "open").length;
   const activeView = views.find((view) => view.id === state.activeThreadId);
   const activeRecord = threads.find((thread) => thread.id === state.activeThreadId);
   const activeMeasurement =
@@ -135,6 +222,7 @@ export function ContentApp({ controller }: ContentAppProps) {
         canChangeStatus={false}
         error={state.panelError}
         mentionCandidates={mentionCandidates}
+        recordingAttached={state.recordingAttached}
         onSubmit={controller.submitNewThread}
         onEditComment={() => Promise.resolve()}
         onDeleteComment={() => Promise.resolve()}
@@ -157,6 +245,14 @@ export function ContentApp({ controller }: ContentAppProps) {
         mentionCandidates={mentionCandidates}
         screenshot={state.screenshots.get(activeView.id)}
         recording={state.recordings.get(activeView.id)}
+        onReplaySteps={
+          state.replayAvailable
+            ? (mode) => {
+                controller.startReplay(activeView.id, mode);
+              }
+            : undefined
+        }
+        onCopyContext={copyContextOf(activeRecord)}
         clickUp={{
           taskUrl: activeRecord.clickUpTaskUrl ?? null,
           canCreate: state.clickUpConfigured,
@@ -215,6 +311,12 @@ export function ContentApp({ controller }: ContentAppProps) {
           <Sidebar
             key="sidebar"
             threads={views}
+            otherPages={otherPages}
+            currentRoute={currentRoute}
+            onOpenOtherPage={(threadId) => {
+              controller.openThread(threadId);
+            }}
+            onCopyRoute={controller.copyRoute}
             activeThreadId={state.activeThreadId}
             showResolved={state.showResolved}
             onShowResolvedChange={controller.setShowResolved}
@@ -224,10 +326,51 @@ export function ContentApp({ controller }: ContentAppProps) {
         </div>
       ) : (
         <div ref={launcherRef} style={{ display: "contents" }}>
-          <Launcher openCount={openCount} expanded={false} onClick={controller.toggleSidebar} />
+          <Launcher openCount={siteOpenCount} expanded={false} onClick={controller.toggleSidebar} />
         </div>
       )}
+      {state.replay !== null && state.replay.highlight !== null ? (
+        <HighlightBox rect={state.replay.highlight} />
+      ) : null}
+      {state.replay === null ? null : (
+        <ReplayBar
+          mode={state.replay.view.mode}
+          index={state.replay.view.index}
+          total={state.replay.view.total}
+          status={state.replay.view.status}
+          label={state.replay.view.label}
+          message={state.replay.view.message}
+          onBack={controller.replayBack}
+          onNext={controller.replayNext}
+          onPause={controller.replayPause}
+          onResume={controller.replayResume}
+          onSkip={controller.replaySkip}
+          onRetry={controller.replayRetry}
+          onStop={controller.replayStop}
+        />
+      )}
       {panel}
+      {offPageItem === undefined ? null : (
+        <OffPageThreadCard
+          item={offPageItem}
+          sidebarOpen={sidebarOpen}
+          onReproduce={(mode) => {
+            controller.reproduceOffPage(offPageItem.id, mode);
+          }}
+          onOpenPage={() => {
+            controller.openOffPagePage(offPageItem.id);
+          }}
+          onToggleStatus={() => {
+            void controller.toggleStatus(offPageItem.id);
+          }}
+          onCopyRoute={controller.copyRoute}
+          onCopyContext={offPageRecord === undefined ? undefined : copyContextOf(offPageRecord)}
+          onClose={controller.closeOffPage}
+        />
+      )}
+      {state.replayGate === null ? null : (
+        <ReplayGateModal onRun={controller.gateRun} onClose={controller.gateClose} />
+      )}
       <ToastRegion toasts={state.toasts} onDismiss={controller.dismissToast} />
     </>
   );

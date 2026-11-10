@@ -149,6 +149,49 @@ async function selectionRect(page: Page): Promise<{ top: number; bottom: number 
   });
 }
 
+test("a comment on a heading remains visible after reloading the same URL in another language", async ({
+  context,
+  extensionId,
+}) => {
+  const path = "/p/translated-comment";
+  const pageUrl = `${FIXTURE_ORIGIN}${path}`;
+  const owner = await ownerCleanup(pageUrl);
+  const { page } = await openReviewPage(context, extensionId, OWNER, path);
+  const heading = page.getByRole("heading", { level: 1 });
+  const original = await heading.innerText();
+  const translated = "Персональний тренер у залі та онлайн";
+
+  await heading.click({ clickCount: 3 });
+  await page.getByRole("button", { name: "Comment", exact: true }).click();
+  await submitNewThread(page, "Keep this comment across translations");
+  await expect(pinOf(page, 1)).toBeVisible();
+  expect((await threadsOnPage(owner, pageUrl))[0]?.anchor).toMatchObject({
+    kind: "text",
+    container: "h1",
+  });
+
+  await page.route(
+    pageUrl,
+    async (route) => {
+      const response = await route.fetch();
+      const body = (await response.text())
+        .replace('lang="en"', 'lang="uk"')
+        .replace(original, translated);
+      await route.fulfill({ response, body });
+    },
+    { times: 1 },
+  );
+  await page.reload();
+
+  await expect(page).toHaveURL(pageUrl);
+  await expect(heading).toHaveText(translated);
+  await expect(pinOf(page, 1)).toBeVisible();
+  await pinOf(page, 1).click();
+  await expect(page.getByRole("dialog", { name: "Thread 1" })).toContainText(
+    "Keep this comment across translations",
+  );
+});
+
 test("the Comment button sits below the selected text by default", async ({
   context,
   extensionId,
@@ -202,8 +245,8 @@ test("the popup summarises the page's comments and opens the sidebar on the page
   await page.getByRole("button", { name: "Close thread" }).click();
 
   await popup.reload();
-  await expect(popup.getByTestId("comments-summary")).toHaveText("1 open comment");
-  await popup.getByRole("button", { name: "Open all comments on page" }).click();
+  await expect(popup.getByRole("tabpanel")).toContainText("The popup should list this");
+  await popup.getByRole("button", { name: "Show all" }).click();
 
   const sidebar = page.getByRole("complementary", { name: "Comments", exact: true });
   await expect(sidebar).toBeVisible();
@@ -363,7 +406,12 @@ test("only people who may change the status see Resolve, and the pin follows it 
     await expect(ownerDialog.getByRole("button", { name: "Reopen" })).toBeVisible();
 
     await expect(pinOf(guestPage, 1)).toHaveCount(0);
-    await expect(guestPage.getByRole("button", { name: "Comments, 0 open" })).toBeVisible();
+    await guestPage.getByRole("button", { name: /^Comments, \d+ open$/ }).click();
+    const sidebar = guestPage.getByRole("complementary", { name: "Comments", exact: true });
+    await sidebar.getByRole("button", { name: /^Show resolved/ }).click();
+    await expect(sidebar.getByRole("region", { name: "On this page" })).toContainText(
+      "Is this final?",
+    );
 
     await ownerDialog.getByRole("button", { name: "Reopen" }).click();
 

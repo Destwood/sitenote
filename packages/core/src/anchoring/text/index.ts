@@ -67,6 +67,7 @@ export function createTextAnchor(range: Range, doc: Document = document): TextAn
   if (end <= start) {
     return null;
   }
+  const quoteRange = offsetsToRange(start, end, model) ?? range;
   return {
     kind: "text",
     quote: {
@@ -75,7 +76,7 @@ export function createTextAnchor(range: Range, doc: Document = document): TextAn
       suffix: model.text.slice(end, end + CONTEXT_LENGTH),
     },
     position: { start, end },
-    container: buildCssSelector(blockContainerOf(range, body, doc), doc),
+    container: buildCssSelector(blockContainerOf(quoteRange, body, doc), doc),
   };
 }
 
@@ -165,6 +166,29 @@ function findContainer(selector: string, doc: Document): Element | undefined {
   } catch {
     return undefined;
   }
+}
+
+export function resolveTextAnchorHeading(anchor: TextAnchor, doc: Document): Element | undefined {
+  if (anchor.container.includes(":nth-")) {
+    return undefined;
+  }
+  const container = findContainer(anchor.container, doc);
+  const body = doc.body as HTMLElement | null;
+  if (container === undefined || body === null || container === body) {
+    return undefined;
+  }
+  const headings = "h1, h2, h3, h4, h5, h6";
+  if (container.matches(headings)) {
+    return container;
+  }
+  const [heading, ...others] = [...container.querySelectorAll(headings)].filter(
+    (candidate) => !isInsideIgnoredElement(candidate),
+  );
+  if (heading === undefined || others.length > 0) {
+    return undefined;
+  }
+  const model = buildTextModel(body);
+  return elementTextBounds(model, heading).start === anchor.position.start ? heading : undefined;
 }
 
 export function resolveTextAnchor(anchor: TextAnchor, doc: Document = document): TextResolution {

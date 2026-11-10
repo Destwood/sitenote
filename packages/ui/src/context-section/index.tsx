@@ -1,13 +1,16 @@
 import {
   stepsToPlaywright,
   type ConsoleErrorRecord,
+  type NetworkErrorRecord,
   type RecordingRef,
   type RecordingStep,
+  type ReplayMode,
   type ThreadContext,
 } from "@sitenote/core";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, type KeyboardEvent } from "react";
 
 import { FOCUS_RING, SECONDARY_BUTTON } from "../control-classes";
+import { ReplayButton } from "../replay-button";
 import type { ScreenshotState } from "../types";
 
 export const CONTEXT_UNAVAILABLE_TEXT = "Context unavailable";
@@ -19,7 +22,9 @@ export interface ContextSectionProps {
   hasScreenshot: boolean;
   screenshot?: ScreenshotState | undefined;
   recording?: ScreenshotState | undefined;
-  onReplaySteps?: (() => void) | undefined;
+  largeVideo?: boolean | undefined;
+  onReplaySteps?: ((mode: ReplayMode) => void) | undefined;
+  onCopyContext?: (() => Promise<boolean> | boolean) | undefined;
 }
 
 export function formatViewport(context: ThreadContext): string {
@@ -39,6 +44,14 @@ export function formatSizeMb(size: number): string {
 
 export function formatSystem(name: string, version: string | undefined): string {
   return version === undefined || version === "" ? name : `${name} ${version}`;
+}
+
+export function formatTimeUtc(at: string): string {
+  return `${new Date(at).toISOString().slice(11, 19)} UTC`;
+}
+
+export function formatRequestStatus(status: number): string {
+  return status === 0 ? "Failed" : String(status);
 }
 
 export function safeScreenshotUrl(value: string): string | null {
@@ -124,9 +137,10 @@ function ScreenshotBlock({
 interface RecordingBlockProps {
   recording: RecordingRef;
   state: ScreenshotState | undefined;
+  largeVideo?: boolean | undefined;
 }
 
-function RecordingBlock({ recording, state }: RecordingBlockProps) {
+function RecordingBlock({ recording, state, largeVideo }: RecordingBlockProps) {
   if (state === undefined || state.status === "loading") {
     return (
       <p role="status" className="text-neutral-600">
@@ -145,12 +159,24 @@ function RecordingBlock({ recording, state }: RecordingBlockProps) {
           controls
           preload="metadata"
           src={url}
-          className="max-h-48 w-full rounded-md bg-black"
+          className={`${largeVideo === true ? "max-h-[28rem]" : "max-h-48"} w-full rounded-md bg-black`}
         />
       )}
-      <p className="text-neutral-600">
-        {formatDuration(recording.durationMs)} · {formatSizeMb(recording.size)}
-      </p>
+      <div className="flex flex-wrap items-baseline gap-x-2 text-neutral-600">
+        <span>
+          {formatDuration(recording.durationMs)} · {formatSizeMb(recording.size)}
+        </span>
+        {url === null ? null : (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`rounded-sm font-medium text-neutral-900 underline underline-offset-2 ${FOCUS_RING}`}
+          >
+            Open video
+          </a>
+        )}
+      </div>
     </div>
   );
 }
@@ -176,7 +202,7 @@ function stepText(step: RecordingStep): string {
 interface RecordingStepsBlockProps {
   steps: readonly RecordingStep[];
   pageUrl: string;
-  onReplaySteps: (() => void) | undefined;
+  onReplaySteps: ((mode: ReplayMode) => void) | undefined;
 }
 
 function RecordingStepsBlock({ steps, pageUrl, onReplaySteps }: RecordingStepsBlockProps) {
@@ -206,13 +232,18 @@ function RecordingStepsBlock({ steps, pageUrl, onReplaySteps }: RecordingStepsBl
 
   return (
     <div className="space-y-2">
-      <p id={headingId} className="font-medium text-neutral-900">
-        What the reporter did ({String(steps.length)})
-      </p>
+      <div className="space-y-1">
+        <p id={headingId} className="font-medium text-neutral-900">
+          What the reporter did ({String(steps.length)})
+        </p>
+        <p className="text-neutral-600">
+          Open the page where the recording started, then play the steps.
+        </p>
+      </div>
       <ol
         aria-labelledby={headingId}
         tabIndex={0}
-        className={`max-h-40 overflow-y-auto rounded-md border border-neutral-200 ${FOCUS_RING}`}
+        className={`max-h-56 overflow-y-auto rounded-md border border-neutral-200 ${FOCUS_RING}`}
       >
         {steps.map((step, index) => {
           const text = stepText(step);
@@ -243,15 +274,85 @@ function RecordingStepsBlock({ steps, pageUrl, onReplaySteps }: RecordingStepsBl
           {COPY_LABELS[copyState]}
         </button>
         {onReplaySteps === undefined ? null : (
-          <button
-            type="button"
-            onClick={() => {
-              onReplaySteps();
-            }}
-            className={SECONDARY_BUTTON}
-          >
-            Replay on page
-          </button>
+          <ReplayButton onReplay={onReplaySteps} label="Reproduce" />
+        )}
+      </div>
+    </div>
+  );
+}
+
+type RecordingTab = "screenshot" | "steps";
+
+interface RecordingTabsProps {
+  hasScreenshot: boolean;
+  screenshot: ScreenshotState | undefined;
+  steps: readonly RecordingStep[];
+  pageUrl: string;
+  onReplaySteps: ((mode: ReplayMode) => void) | undefined;
+}
+
+function RecordingTabs({
+  hasScreenshot,
+  screenshot,
+  steps,
+  pageUrl,
+  onReplaySteps,
+}: RecordingTabsProps) {
+  const id = useId();
+  const [tab, setTab] = useState<RecordingTab>("screenshot");
+  const panelId = `${id}-panel`;
+  const tabIdOf = (value: RecordingTab) => `${id}-tab-${value}`;
+  const tabs = [
+    { value: "screenshot", label: "Screenshot" },
+    { value: "steps", label: `Steps (${String(steps.length)})` },
+  ] as const;
+
+  function onTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+      return;
+    }
+    event.preventDefault();
+    const next: RecordingTab = tab === "screenshot" ? "steps" : "screenshot";
+    setTab(next);
+    document.getElementById(tabIdOf(next))?.focus();
+  }
+
+  return (
+    <div className="space-y-2">
+      <div
+        role="tablist"
+        aria-label="Recording details"
+        className="grid grid-cols-2 border-b border-neutral-200"
+      >
+        {tabs.map(({ value, label }) => {
+          const selected = tab === value;
+          return (
+            <button
+              key={value}
+              id={tabIdOf(value)}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              aria-controls={panelId}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => {
+                setTab(value);
+              }}
+              onKeyDown={onTabKeyDown}
+              className={`h-8 border-b-2 text-xs ${FOCUS_RING} ${selected ? "border-blue-600 font-semibold text-neutral-900" : "border-transparent text-neutral-600 hover:text-neutral-900"}`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+      <div role="tabpanel" id={panelId} aria-labelledby={tabIdOf(tab)}>
+        {tab === "screenshot" ? (
+          <ScreenshotBlock hasScreenshot={hasScreenshot} screenshot={screenshot} />
+        ) : steps.length === 0 ? (
+          <p className="text-neutral-600">No steps were recorded for this video.</p>
+        ) : (
+          <RecordingStepsBlock steps={steps} pageUrl={pageUrl} onReplaySteps={onReplaySteps} />
         )}
       </div>
     </div>
@@ -267,6 +368,9 @@ function ErrorItem({ record }: ErrorItemProps) {
   return (
     <li className="space-y-1 border-t border-neutral-100 px-2 py-1.5 first:border-t-0">
       <p className="font-medium text-neutral-900">{KIND_LABELS[record.kind]}</p>
+      {record.at === undefined ? null : (
+        <p className="text-neutral-600">{formatTimeUtc(record.at)}</p>
+      )}
       <p className="font-mono break-words whitespace-pre-wrap">{record.message}</p>
       {location === null ? null : <p className="break-all text-neutral-600">{location}</p>}
       {record.stack === undefined ? null : (
@@ -296,7 +400,50 @@ function ConsoleErrors({ records }: ConsoleErrorsProps) {
       </summary>
       <ul className="max-h-60 overflow-y-auto border-t border-neutral-200">
         {records.map((record, index) => (
-          <ErrorItem key={`${record.at}:${String(index)}`} record={record} />
+          <ErrorItem key={`${String(record.at)}:${String(index)}`} record={record} />
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+interface NetworkErrorItemProps {
+  record: NetworkErrorRecord;
+}
+
+function NetworkErrorItem({ record }: NetworkErrorItemProps) {
+  return (
+    <li className="space-y-1 border-t border-neutral-100 px-2 py-1.5 first:border-t-0">
+      <div className="flex min-w-0 items-baseline gap-2">
+        <span className="shrink-0 font-mono font-semibold text-neutral-900">{record.method}</span>
+        <span className="min-w-0 font-mono break-all">{record.url}</span>
+      </div>
+      <div className="flex flex-wrap items-baseline gap-2 text-neutral-600">
+        <span className="rounded-sm bg-red-100 px-1 font-medium text-red-900">
+          {formatRequestStatus(record.status)}
+        </span>
+        {record.at === undefined ? null : <span>{formatTimeUtc(record.at)}</span>}
+      </div>
+    </li>
+  );
+}
+
+interface NetworkErrorsProps {
+  records: readonly NetworkErrorRecord[];
+}
+
+function NetworkErrors({ records }: NetworkErrorsProps) {
+  if (records.length === 0) {
+    return null;
+  }
+  return (
+    <details className="rounded-md border border-neutral-200">
+      <summary className={`cursor-pointer rounded-md px-2 py-1 font-medium ${FOCUS_RING}`}>
+        Failed requests ({records.length})
+      </summary>
+      <ul className="max-h-60 overflow-y-auto border-t border-neutral-200">
+        {records.map((record, index) => (
+          <NetworkErrorItem key={`${String(index)}:${record.url}`} record={record} />
         ))}
       </ul>
     </details>
@@ -322,8 +469,57 @@ function Details({ context }: DetailsProps) {
         <dt className="font-medium text-neutral-900">Page title</dt>
         <dd className="break-words">{context.pageTitle === "" ? "Untitled" : context.pageTitle}</dd>
       </dl>
+      <NetworkErrors records={context.networkErrors ?? []} />
       <ConsoleErrors records={context.consoleErrors} />
     </>
+  );
+}
+
+const COPY_CONTEXT_LABELS = {
+  idle: "Copy context",
+  copied: "Copied",
+  failed: "Could not copy",
+} as const;
+
+export interface CopyContextButtonProps {
+  onCopyContext: () => Promise<boolean> | boolean;
+}
+
+export function CopyContextButton({ onCopyContext }: CopyContextButtonProps) {
+  const [copyState, setCopyState] = useState<keyof typeof COPY_CONTEXT_LABELS>("idle");
+
+  useEffect(() => {
+    if (copyState === "idle") {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setCopyState("idle");
+    }, COPY_FEEDBACK_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [copyState]);
+
+  async function copyContext() {
+    try {
+      setCopyState((await onCopyContext()) ? "copied" : "failed");
+    } catch {
+      setCopyState("failed");
+    }
+  }
+
+  return (
+    <div role="status" className="flex justify-end">
+      <button
+        type="button"
+        onClick={() => {
+          void copyContext();
+        }}
+        className={SECONDARY_BUTTON}
+      >
+        {COPY_CONTEXT_LABELS[copyState]}
+      </button>
+    </div>
   );
 }
 
@@ -332,20 +528,29 @@ export function ContextSection({
   hasScreenshot,
   screenshot,
   recording,
+  largeVideo,
   onReplaySteps,
+  onCopyContext,
 }: ContextSectionProps) {
-  const steps = context?.recording?.steps ?? [];
   return (
     <section
       aria-label="Page context"
       className="space-y-2 border-t border-neutral-100 py-3 text-xs text-neutral-700"
     >
-      <ScreenshotBlock hasScreenshot={hasScreenshot} screenshot={screenshot} />
-      {context?.recording === undefined ? null : (
-        <RecordingBlock recording={context.recording} state={recording} />
-      )}
-      {context === null || steps.length === 0 ? null : (
-        <RecordingStepsBlock steps={steps} pageUrl={context.url} onReplaySteps={onReplaySteps} />
+      {onCopyContext === undefined ? null : <CopyContextButton onCopyContext={onCopyContext} />}
+      {context?.recording === undefined ? (
+        <ScreenshotBlock hasScreenshot={hasScreenshot} screenshot={screenshot} />
+      ) : (
+        <>
+          <RecordingTabs
+            hasScreenshot={hasScreenshot}
+            screenshot={screenshot}
+            steps={context.recording.steps ?? []}
+            pageUrl={context.url}
+            onReplaySteps={onReplaySteps}
+          />
+          <RecordingBlock recording={context.recording} state={recording} largeVideo={largeVideo} />
+        </>
       )}
       {context === null ? (
         <p className="text-neutral-600">{CONTEXT_UNAVAILABLE_TEXT}</p>

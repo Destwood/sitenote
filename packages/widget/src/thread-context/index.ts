@@ -6,6 +6,7 @@ import {
   fitThreadContext,
   parseUserAgentData,
   type ConsoleErrorRecord,
+  type NetworkErrorRecord,
   type ThreadContext,
   type UserAgentBrand,
   type UserAgentInput,
@@ -15,10 +16,16 @@ export const HIGH_ENTROPY_HINTS = ["platformVersion", "fullVersionList"];
 export const HIGH_ENTROPY_TIMEOUT_MS = 300;
 const MAX_DEVICE_PIXEL_RATIO = 16;
 
+export interface PageDiagnosticsRecords {
+  consoleErrors: ConsoleErrorRecord[];
+  networkErrors: NetworkErrorRecord[];
+}
+
 export interface ContextCollectorDeps {
   win: Window;
   doc: Document;
   requestErrors: () => Promise<ConsoleErrorRecord[]>;
+  requestDiagnostics?: () => Promise<PageDiagnosticsRecords>;
   now?: () => Date;
   highEntropyTimeoutMs?: number;
 }
@@ -98,9 +105,15 @@ function normalizedRatio(ratio: number): number {
 export function createContextCollector(deps: ContextCollectorDeps): () => Promise<ThreadContext> {
   const { win, doc } = deps;
   const now = deps.now ?? (() => new Date());
+  const requestDiagnostics =
+    deps.requestDiagnostics ??
+    (async () => ({
+      consoleErrors: await deps.requestErrors(),
+      networkErrors: [],
+    }));
   return async () => {
-    const [consoleErrors, agent] = await Promise.all([
-      deps.requestErrors(),
+    const [{ consoleErrors, networkErrors }, agent] = await Promise.all([
+      requestDiagnostics(),
       readUserAgentInput(win.navigator, deps.highEntropyTimeoutMs),
     ]);
     const { browser, os } = parseUserAgentData(agent);
@@ -119,6 +132,7 @@ export function createContextCollector(deps: ContextCollectorDeps): () => Promis
           : { name: clip(os.name, CONTEXT_NAME_MAX), version: clip(os.version, CONTEXT_NAME_MAX) },
       userAgent: clip(win.navigator.userAgent, CONTEXT_USER_AGENT_MAX),
       consoleErrors,
+      ...(networkErrors.length === 0 ? {} : { networkErrors }),
       capturedAt: now().toISOString(),
     });
   };

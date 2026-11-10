@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "sitenote-web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@sitenote/web", "dev"],
+      "port": 3000
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parsePageUrl } from ".";
+import { abbreviateRoute, parsePageUrl } from ".";
 
 describe("parsePageUrl", () => {
   it.each([
@@ -60,5 +60,34 @@ describe("parsePageUrl", () => {
     "",
   ])("returns null for %j", (input) => {
     expect(parsePageUrl(input)).toBeNull();
+  });
+});
+
+describe("abbreviateRoute", () => {
+  it("abbreviates a UUID after a static segment into a named placeholder", () => {
+    expect(abbreviateRoute("/template/3f2504e0-4f89-11d3-9a0c-0305e82c3301")).toEqual([
+      { text: "template", full: "template", dynamic: false },
+      {
+        text: "{templateId}",
+        full: "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+        dynamic: true,
+      },
+    ]);
+  });
+
+  it("uses a generic placeholder for a number without a named predecessor", () => {
+    expect(abbreviateRoute("/12345")).toEqual([{ text: "{id}", full: "12345", dynamic: true }]);
+  });
+
+  it("keeps a static route as is", () => {
+    expect(abbreviateRoute("/user-profiles/settings")).toEqual([
+      { text: "user-profiles", full: "user-profiles", dynamic: false },
+      { text: "settings", full: "settings", dynamic: false },
+    ]);
+  });
+
+  it("returns no segments for the root", () => {
+    expect(abbreviateRoute("/")).toEqual([]);
+    expect(abbreviateRoute("")).toEqual([]);
   });
 });

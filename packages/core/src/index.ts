@@ -1,5 +1,6 @@
 export * from "./anchoring";
 export * from "./context";
+export * from "./context-markdown";
 export * from "./deep-link";
 export * from "./extension-update";
 export * from "./mentions";

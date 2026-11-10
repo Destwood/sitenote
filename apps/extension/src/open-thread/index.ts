@@ -1,9 +1,10 @@
-import { appendThreadHash } from "@sitenote/core";
+import { appendThreadHash, type ReplayMode } from "@sitenote/core";
 import { browser } from "wxt/browser";
 
 export interface ThreadTarget {
   pageUrl: string;
   threadId: string;
+  replay?: ReplayMode;
 }
 
 export function isOpenable(pageUrl: string): boolean {
@@ -12,7 +13,7 @@ export function isOpenable(pageUrl: string): boolean {
 }
 
 export async function openThread(target: ThreadTarget): Promise<boolean> {
-  const url = appendThreadHash(target.pageUrl, target.threadId);
+  const url = appendThreadHash(target.pageUrl, target.threadId, target.replay);
   if (url === null || !isOpenable(url)) {
     return false;
   }

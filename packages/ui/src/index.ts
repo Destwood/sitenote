@@ -8,6 +8,8 @@ export { HighlightBox } from "./highlight-box";
 export type { HighlightBoxProps } from "./highlight-box";
 export { Launcher } from "./launcher";
 export type { LauncherProps } from "./launcher";
+export { OffPageThreadCard } from "./off-page-thread-card";
+export type { OffPageThreadCardProps } from "./off-page-thread-card";
 export { PIN_SIZE, Pin } from "./pin";
 export type { PinProps } from "./pin";
 export { PinLayer } from "./pin-layer";
@@ -15,7 +17,15 @@ export type { PinLayerPin, PinLayerProps } from "./pin-layer";
 export { placeAbove, placeBelow, placePanel } from "./placement";
 export { RecordingPill } from "./recording-pill";
 export type { RecordingPillProps } from "./recording-pill";
+export { RouteLabel, routeDisplayText } from "./route-label";
+export type { RouteLabelProps } from "./route-label";
 export { formatRelativeTime } from "./relative-time";
+export { ReplayBar } from "./replay-bar";
+export type { ReplayBarProps, ReplayBarStatus } from "./replay-bar";
+export { ReplayButton } from "./replay-button";
+export type { ReplayButtonProps } from "./replay-button";
+export { ReplayGateModal } from "./replay-gate-modal";
+export type { ReplayGateModalProps } from "./replay-gate-modal";
 export type { AnchorRect, PanelPlacement, PanelSide, Size } from "./placement";
 export { DEFAULT_SELECTION_PLACEMENT, SelectionButton } from "./selection-button";
 export type { SelectionButtonProps, SelectionPlacement } from "./selection-button";
@@ -29,5 +39,12 @@ export { JiraIssue } from "./jira-issue";
 export type { JiraIssueState } from "./jira-issue";
 export { Toast, ToastRegion } from "./toast";
 export type { ToastProps, ToastRegionProps, ToastVariant, ToastView } from "./toast";
-export type { CommentView, PersonView, ScreenshotState, ThreadStatus, ThreadView } from "./types";
+export type {
+  CommentView,
+  PersonView,
+  ScreenshotState,
+  SiteThreadItem,
+  ThreadStatus,
+  ThreadView,
+} from "./types";
 export { Z_INDEX } from "./z-index";

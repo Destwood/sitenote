@@ -24,8 +24,10 @@ export interface Widget {
   stop: ContentController["stop"];
   toggleCommentMode: ContentController["toggleCommentMode"];
   enterCommentMode: ContentController["enterCommentMode"];
+  attachRecording: ContentController["attachRecording"];
   commentOnContextTarget: ContentController["commentOnContextTarget"];
   selectThread: ContentController["selectThread"];
+  openThread: ContentController["openThread"];
   toggleSidebar: ContentController["toggleSidebar"];
   render: (container: HTMLElement) => () => void;
 }
@@ -96,8 +98,10 @@ export function createWidget({ backend, document, window }: WidgetOptions): Widg
     stop: controller.stop,
     toggleCommentMode: controller.toggleCommentMode,
     enterCommentMode: controller.enterCommentMode,
+    attachRecording: controller.attachRecording,
     commentOnContextTarget: controller.commentOnContextTarget,
     selectThread: controller.selectThread,
+    openThread: controller.openThread,
     toggleSidebar: controller.toggleSidebar,
     render: (target) => {
       container = target;

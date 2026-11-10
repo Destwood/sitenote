@@ -35,6 +35,7 @@ export {
   TIE_CONFIDENCE_FACTOR,
   createTextAnchor,
   resolveTextAnchor,
+  resolveTextAnchorHeading,
   type TextResolution,
   type TextResolutionMethod,
 } from "./text";

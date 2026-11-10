@@ -18,6 +18,8 @@ import {
   PUBLIC_LINK_BUTTON_CLASS,
 } from "../../../public-styles";
 import { safeExternalHref } from "../../../safe-external-link";
+import { readThreadShare } from "../../../share-access";
+import { SharePanel } from "../../../share-panel";
 import { createSupabaseServerClient, getAuthenticatedUser } from "../../../supabase-server";
 import { ThreadComments } from "../../../thread-comments";
 import { readThreadDetail } from "../../../thread-detail";
@@ -60,7 +62,9 @@ export default async function ThreadLinkPage({ params }: ThreadLinkPageProps) {
   const pageHref = safeExternalHref(detail.pageUrl);
   const canCreateClickUpTask = await isClickUpConfigured(supabase, detail.workspaceId);
   const canLinkJira = await isJiraConfigured(supabase, detail.workspaceId);
-  const { extensionId } = getPublicEnv();
+  const share = await readThreadShare(supabase, threadId);
+  const canManage = access.role === "owner" || access.role === "member";
+  const { extensionId, webUrl } = getPublicEnv();
 
   return (
     <main
@@ -86,7 +90,13 @@ export default async function ThreadLinkPage({ params }: ThreadLinkPageProps) {
         />
         <div className="flex flex-col gap-4">
           {pageHref === null ? null : (
-            <OpenOnPage pageUrl={pageHref} threadId={threadId} extensionId={extensionId} />
+            <OpenOnPage
+              pageUrl={pageHref}
+              startUrl={detail.context?.recording?.startUrl}
+              threadId={threadId}
+              extensionId={extensionId}
+              hasSteps={(detail.context?.recording?.steps?.length ?? 0) > 0}
+            />
           )}
           <ClickUpTaskPanel
             threadId={threadId}
@@ -95,10 +105,12 @@ export default async function ThreadLinkPage({ params }: ThreadLinkPageProps) {
           />
           <JiraIssuePanel
             threadId={threadId}
+            workspaceId={detail.workspaceId}
             issueKey={detail.jiraIssueKey}
             issueUrl={detail.jiraIssueUrl}
             canLink={canLinkJira}
           />
+          <SharePanel threadId={threadId} share={share} canManage={canManage} webUrl={webUrl} />
           <Link
             href={threadPath(detail.workspaceId, threadId)}
             className={`${PUBLIC_LINK_BUTTON_CLASS} w-fit`}
@@ -115,10 +127,18 @@ export default async function ThreadLinkPage({ params }: ThreadLinkPageProps) {
           Context
         </h2>
         <PageContext
+          thread={{
+            excerpt: detail.excerpt,
+            authorName: detail.authorName,
+            status: detail.status,
+            pageUrl: detail.pageUrl,
+            anchor: detail.anchor,
+          }}
           context={detail.context}
           hasScreenshot={detail.hasScreenshot}
           screenshot={detail.screenshot}
           recording={detail.recording}
+          largeVideo
         />
       </section>
       <section

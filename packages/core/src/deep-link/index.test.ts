@@ -8,6 +8,10 @@ describe("buildThreadHash", () => {
   it("names the thread in the sitenote hash parameter", () => {
     expect(buildThreadHash(THREAD_ID)).toBe(`#sitenote=${THREAD_ID}`);
   });
+
+  it("adds the replay mode when given", () => {
+    expect(buildThreadHash(THREAD_ID, "auto")).toBe(`#sitenote=${THREAD_ID}&replay=auto`);
+  });
 });
 
 describe("appendThreadHash", () => {
@@ -31,6 +35,12 @@ describe("appendThreadHash", () => {
 
   it("returns null for an address that is not a URL", () => {
     expect(appendThreadHash("not a url", THREAD_ID)).toBeNull();
+  });
+
+  it("adds the replay mode when given", () => {
+    expect(appendThreadHash("https://example.com/pricing", THREAD_ID, "step")).toBe(
+      `https://example.com/pricing#sitenote=${THREAD_ID}&replay=step`,
+    );
   });
 });
 

@@ -16,13 +16,49 @@ export interface JiraIssue {
   key: string;
 }
 
+export interface JiraIssueSummary {
+  key: string;
+  summary: string;
+  status: string;
+  projectKey: string;
+  projectName: string;
+}
+
+export interface JiraProject {
+  key: string;
+  name: string;
+}
+
+export interface RemoteLink {
+  globalId: string;
+  url: string;
+  title: string;
+}
+
 export interface JiraClient {
   verifyCredentials(): Promise<boolean>;
   getIssue(issueKey: string): Promise<JiraIssue>;
   addComment(issueKey: string, body: AdfDocument): Promise<void>;
+  addRemoteLink(issueKey: string, link: RemoteLink): Promise<void>;
+  searchIssues(jql: string, limit: number): Promise<JiraIssueSummary[]>;
+  listProjects(): Promise<JiraProject[]>;
 }
 
 const issueSchema = z.object({ key: z.string() });
+const searchSchema = z.object({ issues: z.array(z.unknown()) });
+const issueRowSchema = z.object({
+  key: z.string(),
+  fields: z.object({
+    summary: z.string(),
+    status: z.object({ name: z.string() }),
+    project: z.object({ key: z.string(), name: z.string() }),
+  }),
+});
+const projectsSchema = z.object({
+  values: z.array(z.object({ key: z.string(), name: z.string() })),
+});
+
+const CREDENTIALS_REJECTED = "Jira rejected the saved credentials. Ask the owner to reconnect";
 
 function unavailable(): ApiError {
   return new ApiError("upstream", "Jira could not be reached");
@@ -30,6 +66,18 @@ function unavailable(): ApiError {
 
 function rejected(status: number): ApiError {
   return new ApiError("upstream", `Jira responded with HTTP ${String(status)}`);
+}
+
+function throwIfDenied(status: number, notFound: string, forbidden: string): void {
+  if (status === 404) {
+    throw new ApiError("not_found", notFound);
+  }
+  if (status === 401) {
+    throw new ApiError("not_configured", CREDENTIALS_REJECTED);
+  }
+  if (status === 403) {
+    throw new ApiError("forbidden", forbidden);
+  }
 }
 
 function basicAuthorization(email: string, token: string): string {
@@ -87,18 +135,11 @@ export function createJiraClient(options: JiraClientOptions): JiraClient {
       const response = await send(
         `/rest/api/3/issue/${encodeURIComponent(issueKey)}?fields=summary`,
       );
-      if (response.status === 404) {
-        throw new ApiError("not_found", "The Jira issue was not found");
-      }
-      if (response.status === 401) {
-        throw new ApiError(
-          "not_configured",
-          "Jira rejected the saved credentials. Ask the owner to reconnect",
-        );
-      }
-      if (response.status === 403) {
-        throw new ApiError("forbidden", "The Jira account cannot see this issue");
-      }
+      throwIfDenied(
+        response.status,
+        "The Jira issue was not found",
+        "The Jira account cannot see this issue",
+      );
       const result = z.safeParse(issueSchema, await readOk(response));
       if (!result.success) {
         throw new ApiError("upstream", "Jira returned an unexpected response");
@@ -112,6 +153,63 @@ export function createJiraClient(options: JiraClientOptions): JiraClient {
         body: JSON.stringify({ body }),
       });
       await readOk(response);
+    },
+
+    async addRemoteLink(issueKey, link) {
+      const response = await send(`/rest/api/3/issue/${encodeURIComponent(issueKey)}/remotelink`, {
+        method: "POST",
+        body: JSON.stringify({
+          globalId: link.globalId,
+          object: { url: link.url, title: link.title },
+        }),
+      });
+      await readOk(response);
+    },
+
+    async searchIssues(jql, limit) {
+      const query = new URLSearchParams({
+        jql,
+        fields: "summary,status,project",
+        maxResults: String(limit),
+      });
+      const response = await send(`/rest/api/3/search/jql?${query.toString()}`);
+      throwIfDenied(
+        response.status,
+        "The Jira site was not found",
+        "The Jira account cannot search issues",
+      );
+      const result = z.safeParse(searchSchema, await readOk(response));
+      if (!result.success) {
+        throw new ApiError("upstream", "Jira returned an unexpected response");
+      }
+      return result.data.issues.flatMap((row) => {
+        const issue = z.safeParse(issueRowSchema, row);
+        return issue.success
+          ? [
+              {
+                key: issue.data.key,
+                summary: issue.data.fields.summary,
+                status: issue.data.fields.status.name,
+                projectKey: issue.data.fields.project.key,
+                projectName: issue.data.fields.project.name,
+              },
+            ]
+          : [];
+      });
+    },
+
+    async listProjects() {
+      const response = await send("/rest/api/3/project/search?maxResults=100&orderBy=name");
+      throwIfDenied(
+        response.status,
+        "The Jira site was not found",
+        "The Jira account cannot list projects",
+      );
+      const result = z.safeParse(projectsSchema, await readOk(response));
+      if (!result.success) {
+        throw new ApiError("upstream", "Jira returned an unexpected response");
+      }
+      return result.data.values;
     },
   };
 }

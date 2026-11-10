@@ -326,6 +326,39 @@ export type Database = {
           },
         ];
       };
+      thread_shares: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          expires_at: string;
+          thread_id: string;
+          token: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          created_by?: string;
+          expires_at: string;
+          thread_id: string;
+          token?: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          expires_at?: string;
+          thread_id?: string;
+          token?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "thread_shares_thread_id_fkey";
+            columns: ["thread_id"];
+            isOneToOne: true;
+            referencedRelation: "threads";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       threads: {
         Row: {
           anchor: NonNullable<Json>;
@@ -580,6 +613,14 @@ export type Database = {
           status: Database["public"]["Enums"]["thread_status"];
           thread_id: string;
           total_count: number;
+        }[];
+      };
+      thread_share_disable: { Args: { p_thread_id: string }; Returns: undefined };
+      thread_share_enable: {
+        Args: { p_thread_id: string };
+        Returns: {
+          expires_at: string;
+          token: string;
         }[];
       };
     };

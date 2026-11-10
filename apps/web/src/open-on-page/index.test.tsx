@@ -17,7 +17,14 @@ const THREAD_ID = "20000000-0000-4000-8000-000000000001";
 const PAGE_URL = "https://example.test/pricing";
 
 function renderOpenOnPage() {
-  render(<OpenOnPage pageUrl={PAGE_URL} threadId={THREAD_ID} extensionId={EXTENSION_ID} />);
+  render(
+    <OpenOnPage
+      pageUrl={PAGE_URL}
+      threadId={THREAD_ID}
+      extensionId={EXTENSION_ID}
+      hasSteps={false}
+    />,
+  );
 }
 
 beforeEach(() => {
@@ -43,7 +50,9 @@ describe("OpenOnPage", () => {
     await user.click(await screen.findByRole("button", { name: "Open on page" }));
 
     expect(open).toHaveBeenCalledWith(`${PAGE_URL}#sitenote=${THREAD_ID}`, "_blank", "noopener");
-    expect(screen.queryByRole("link", { name: "Open page" })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Open the page where this was recorded" }),
+    ).toBeNull();
   });
 
   it("offers the install steps and a plain page link when the extension is absent", async () => {
@@ -53,7 +62,7 @@ describe("OpenOnPage", () => {
     expect(
       await screen.findByRole("heading", { name: "Install the Sitenote extension" }),
     ).toBeTruthy();
-    const link = screen.getByRole("link", { name: "Open page" });
+    const link = screen.getByRole("link", { name: "Open the page where this was recorded" });
     expect(link.getAttribute("href")).toBe(PAGE_URL);
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toBe("noopener noreferrer");

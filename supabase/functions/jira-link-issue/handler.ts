@@ -1,6 +1,6 @@
 import { ApiError, jsonResponse } from "../_shared/api/index.ts";
-import { createJiraClient, type JiraClient } from "../_shared/jira-api/index.ts";
-import { buildLinkComment, decideIssueLink, issueUrl } from "../_shared/jira-issue/index.ts";
+import { createJiraClient, type JiraClient, type RemoteLink } from "../_shared/jira-api/index.ts";
+import { decideIssueLink, issueUrl } from "../_shared/jira-issue/index.ts";
 import {
   describeError,
   endpoint,
@@ -26,6 +26,8 @@ import {
   userClient,
 } from "../_shared/supabase/index.ts";
 import { threadLink } from "../_shared/thread-link/index.ts";
+
+const REMOTE_LINK_TITLE_MAX = 200;
 
 export function handleLinkIssue(
   request: Request,
@@ -86,22 +88,30 @@ export function handleLinkIssue(
       throw new Error(error.message);
     }
 
-    const commentAdded = await addLinkComment(
-      jira,
-      issueKey,
-      threadLink(requireEnv(env, "SITE_URL"), threadId),
-    );
-    return linkResponse(issueKey, url, true, commentAdded, cors);
+    const linkAdded = await addLinkRemote(jira, issueKey, {
+      globalId: `sitenote:${threadId}`,
+      url: threadLink(requireEnv(env, "SITE_URL"), threadId),
+      title: `Sitenote: ${pagePath(thread.page_url)}`.slice(0, REMOTE_LINK_TITLE_MAX),
+    });
+    return linkResponse(issueKey, url, true, linkAdded, cors);
   });
 }
 
-async function addLinkComment(
+function pagePath(pageUrl: string): string {
+  try {
+    return new URL(pageUrl).pathname;
+  } catch {
+    return pageUrl;
+  }
+}
+
+async function addLinkRemote(
   jira: JiraClient,
   issueKey: string,
-  deepLink: string,
+  link: RemoteLink,
 ): Promise<boolean> {
   try {
-    await jira.addComment(issueKey, buildLinkComment(deepLink));
+    await jira.addRemoteLink(issueKey, link);
     return true;
   } catch (error) {
     console.error(describeError(error));
@@ -113,8 +123,8 @@ function linkResponse(
   issueKey: string,
   link: string,
   linked: boolean,
-  commentAdded: boolean,
+  linkAdded: boolean,
   cors: Cors,
 ): Response {
-  return jsonResponse({ issueKey, issueUrl: link, linked, commentAdded }, 200, cors);
+  return jsonResponse({ issueKey, issueUrl: link, linked, linkAdded }, 200, cors);
 }

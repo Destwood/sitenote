@@ -55,6 +55,7 @@ const JIRA_EMAIL = z.string().check(z.minLength(3), z.maxLength(254), z.regex(/^
 const JIRA_KEY = z
   .string()
   .check(z.minLength(1), z.maxLength(JIRA_ISSUE_KEY_MAX), z.regex(JIRA_ISSUE_KEY));
+const JIRA_PROJECT_KEY = /^[A-Z][A-Z0-9_]{1,63}$/;
 
 const storedJiraSettings = z.object({
   siteUrl: z.string(),
@@ -82,6 +83,13 @@ export const linkIssueBody = z.object({
   issueKey: JIRA_KEY,
 });
 
+export const searchIssuesBody = z.object({
+  workspaceId: z.uuid(),
+  query: z.string().check(z.trim(), z.maxLength(100)),
+  projectKey: z.optional(z.string().check(z.regex(JIRA_PROJECT_KEY))),
+  includeProjects: z.optional(z.boolean()),
+});
+
 export type ClickUpSettings = z.output<typeof clickUpSettings>;
 export type CreateTaskBody = z.output<typeof createTaskBody>;
 export type SaveSettingsBody = z.output<typeof saveSettingsBody>;
@@ -90,6 +98,7 @@ export type InsertWebhookBody = z.output<typeof insertWebhookBody>;
 export type JiraSettings = z.output<typeof storedJiraSettings>;
 export type SaveJiraSettingsBody = z.output<typeof saveJiraSettingsBody>;
 export type LinkIssueBody = z.output<typeof linkIssueBody>;
+export type SearchIssuesBody = z.output<typeof searchIssuesBody>;
 
 export function parseRequest<T extends z.ZodMiniType>(schema: T, value: unknown): z.output<T> {
   const result = z.safeParse(schema, value);

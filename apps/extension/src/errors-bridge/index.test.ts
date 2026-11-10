@@ -1,11 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ERRORS_REQUEST_TYPE, ERRORS_RESPONSE_TYPE, MESSAGE_SOURCE } from "../console-errors";
-import { ERRORS_TIMEOUT_MS, parseRecords, requestConsoleErrors } from ".";
+import {
+  ERRORS_TIMEOUT_MS,
+  parseNetworkRecords,
+  parseRecords,
+  requestConsoleErrors,
+  requestPageDiagnostics,
+} from ".";
 
 const AT = "2026-10-22T09:30:00.000Z";
 const NONCE = "nonce-1";
 const GOOD = { kind: "error", message: "Boom", at: AT };
+const NETWORK = { kind: "fetch", method: "GET", url: "https://example.test/api", status: 500 };
 
 function fakeWindow() {
   const target = new EventTarget();
@@ -137,6 +144,60 @@ describe("requestConsoleErrors", () => {
     await pending;
 
     expect(remove).toHaveBeenCalledWith("message", expect.any(Function));
+  });
+});
+
+describe("requestPageDiagnostics", () => {
+  it("returns the console errors and the network records of the reply", async () => {
+    const { win, deliver } = fakeWindow();
+
+    const pending = requestPageDiagnostics({ win, newNonce: () => NONCE });
+    deliver({ data: response({ network: [NETWORK, { ...NETWORK, status: 0 }] }) });
+
+    expect(await pending).toEqual({
+      consoleErrors: [GOOD],
+      networkErrors: [NETWORK, { ...NETWORK, status: 0 }],
+    });
+  });
+
+  it("answers no network records for a reply from an older page script", async () => {
+    const { win, deliver } = fakeWindow();
+
+    const pending = requestPageDiagnostics({ win, newNonce: () => NONCE });
+    deliver({ data: response() });
+
+    expect(await pending).toEqual({ consoleErrors: [GOOD], networkErrors: [] });
+  });
+
+  it("drops invalid network records and keeps the newest twenty", async () => {
+    const { win, deliver } = fakeWindow();
+    const many = Array.from({ length: 25 }, (_, index) => ({ ...NETWORK, url: String(index) }));
+
+    const pending = requestPageDiagnostics({ win, newNonce: () => NONCE });
+    deliver({ data: response({ network: [{ ...NETWORK, status: 600 }, ...many] }) });
+
+    const { networkErrors } = await pending;
+    expect(networkErrors).toHaveLength(20);
+    expect(networkErrors[0]?.url).toBe("5");
+  });
+
+  it("answers empty lists when the main world does not reply in time", async () => {
+    const { win } = fakeWindow();
+
+    const pending = requestPageDiagnostics({ win, newNonce: () => NONCE, timeoutMs: 50 });
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(await pending).toEqual({ consoleErrors: [], networkErrors: [] });
+  });
+});
+
+describe("parseNetworkRecords", () => {
+  it("drops invalid records and ignores non-arrays", () => {
+    expect(parseNetworkRecords([NETWORK, { ...NETWORK, kind: "ws" }, "text", null])).toEqual([
+      NETWORK,
+    ]);
+    expect(parseNetworkRecords("nope")).toEqual([]);
+    expect(parseNetworkRecords(undefined)).toEqual([]);
   });
 });
 

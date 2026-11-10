@@ -1,7 +1,14 @@
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 
-import { signInOnWeb } from "../web-auth";
+import { seededSessionCookies } from "../supabase-session";
+import { WEB_ORIGIN, signInOnWeb } from "../web-auth";
+
+const SEEDED_EMAILS = new Set([
+  "owner@sitenote.test",
+  "member@sitenote.test",
+  "guest@sitenote.test",
+]);
 
 export function newEmail(): string {
   return `e2e-${randomUUID()}@sitenote.test`;
@@ -32,7 +39,12 @@ export async function openPopup(
 export async function signIn(popup: Page, email: string): Promise<void> {
   const context = popup.context();
   const page = await context.newPage();
-  await signInOnWeb(page, email, "/extension/connect");
+  if (SEEDED_EMAILS.has(email)) {
+    await context.addCookies(await seededSessionCookies(new URL(WEB_ORIGIN).hostname, email));
+    await page.goto(`${WEB_ORIGIN}/extension/connect`);
+  } else {
+    await signInOnWeb(page, email, "/extension/connect");
+  }
   await page.getByRole("button", { name: "Connect the extension" }).click();
   await expect(page.getByTestId("extension-connected")).toBeVisible();
   await page.close();

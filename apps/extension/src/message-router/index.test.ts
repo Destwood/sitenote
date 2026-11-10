@@ -5,6 +5,7 @@ import type { AuthService } from "../auth-service";
 import type { DataService } from "../data-service";
 import type { NotificationCenter } from "../notification-center";
 import type { RecordingService } from "../recording-service";
+import type { ReplayProgressService } from "../replay-progress";
 import type { ResolvedPreference } from "../resolved-preference";
 import type { ScreenshotService } from "../screenshot-service";
 import type { SelectionPlacementPreference } from "../selection-placement";
@@ -66,9 +67,11 @@ function createFakes() {
   const data: DataService = {
     forOrigin: vi.fn(() => Promise.resolve(success(null))),
     listThreads: vi.fn(() => Promise.resolve(success([]))),
+    listSiteThreads: vi.fn(() => Promise.resolve(success([]))),
     createThread: vi.fn(),
     screenshotUrl: vi.fn(() => Promise.resolve(success(null))),
     recordingUrl: vi.fn(() => Promise.resolve(success(null))),
+    replaySource: vi.fn(() => Promise.resolve(success(null))),
     setThreadStatus: vi.fn(),
     clickUpStatus: vi.fn(() => Promise.resolve(success(true))),
     clickUpCreateTask: vi.fn(),
@@ -108,6 +111,11 @@ function createFakes() {
     addStep: vi.fn(() => Promise.resolve(success(null))),
     onTabRemoved: vi.fn(),
   };
+  const replay: ReplayProgressService = {
+    load: vi.fn(() => Promise.resolve(null)),
+    save: vi.fn(() => Promise.resolve()),
+    clear: vi.fn(() => Promise.resolve()),
+  };
   const preferences = {
     load: vi.fn<ResolvedPreference["load"]>(() => Promise.resolve(true)),
     save: vi.fn<ResolvedPreference["save"]>(() => Promise.resolve()),
@@ -128,6 +136,7 @@ function createFakes() {
     notifications,
     screenshots,
     recordings,
+    replay,
     preferences,
     selectionPlacement,
   };
@@ -636,6 +645,17 @@ describe("createMessageRouter content script requests", () => {
       failure("forbidden"),
     );
     expect(data.listThreads).not.toHaveBeenCalled();
+  });
+
+  it("serves the threads of the site only to a page of that site", async () => {
+    const { route, data } = setup();
+    const SITE_LIST = { type: "threads.listSite", siteId: SITE_ID } as const;
+
+    expect(await route(SITE_LIST, CONTENT)).toEqual(success([]));
+    expect(
+      await route({ ...SITE_LIST, siteId: "20000000-0000-4000-8000-000000000009" }, CONTENT),
+    ).toEqual(failure("forbidden"));
+    expect(data.listSiteThreads).toHaveBeenCalledExactlyOnceWith(SITE_LIST);
   });
 
   it("refuses page requests from an extension page without a tab", async () => {

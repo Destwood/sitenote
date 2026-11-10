@@ -32,5 +32,16 @@ export interface ThreadView {
   hasScreenshot: boolean;
 }
 
+export interface SiteThreadItem {
+  id: string;
+  number: number;
+  status: ThreadStatus;
+  authorName: string;
+  excerpt: string;
+  replies: number;
+  route: string;
+  hasSteps: boolean;
+}
+
 export type ScreenshotState =
   { status: "loading" } | { status: "ready"; url: string } | { status: "unavailable" };

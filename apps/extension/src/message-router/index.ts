@@ -7,6 +7,7 @@ import { requestSchema, type DataByRequestType, type ExtensionRequest } from "..
 import { failure, success, type MessageResult } from "@sitenote/widget";
 import type { NotificationCenter } from "../notification-center";
 import type { RecordingService } from "../recording-service";
+import type { ReplayProgressService } from "../replay-progress";
 import type { ResolvedPreference } from "../resolved-preference";
 import type { ScreenshotService } from "../screenshot-service";
 import type { SelectionPlacementPreference } from "../selection-placement";
@@ -26,6 +27,7 @@ export interface MessageRouterDeps {
   notifications: Pick<NotificationCenter, "list" | "markRead" | "markAllRead">;
   screenshots: ScreenshotService;
   recordings: RecordingService;
+  replay: ReplayProgressService;
   preferences: ResolvedPreference;
   selectionPlacement: SelectionPlacementPreference;
   getEnabledSite: (origin: string) => Promise<EnabledEntry | null>;
@@ -41,6 +43,7 @@ type SenderKind = "extensionPage" | "contentScript" | "foreign";
 
 const PAGE_SCOPED: ReadonlySet<ExtensionRequest["type"]> = new Set([
   "threads.list",
+  "threads.listSite",
   "threads.create",
   "threads.setStatus",
   "comments.create",
@@ -49,6 +52,7 @@ const PAGE_SCOPED: ReadonlySet<ExtensionRequest["type"]> = new Set([
   "members.list",
   "threads.screenshotUrl",
   "threads.recordingUrl",
+  "threads.replaySource",
   "screenshot.capture",
   "preferences.get",
   "preferences.set",
@@ -57,6 +61,9 @@ const PAGE_SCOPED: ReadonlySet<ExtensionRequest["type"]> = new Set([
   "jira.status",
   "jira.linkIssue",
   "recording.step",
+  "replay.save",
+  "replay.load",
+  "replay.clear",
 ]);
 
 export function senderOriginOf(sender: RouterSender): string | null {
@@ -72,6 +79,7 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
     notifications,
     screenshots,
     recordings,
+    replay,
     preferences,
     selectionPlacement,
   } = deps;
@@ -105,6 +113,9 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
       if (!sameSite || !samePage) {
         return failure("forbidden");
       }
+    }
+    if (request.type === "threads.listSite" && enabled.siteId !== request.siteId) {
+      return failure("forbidden");
     }
     if (request.type === "members.list" && enabled.workspaceId !== request.workspaceId) {
       return failure("forbidden");
@@ -173,12 +184,16 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
         return data.forOrigin(request);
       case "threads.list":
         return data.listThreads(request);
+      case "threads.listSite":
+        return data.listSiteThreads(request);
       case "threads.create":
         return data.createThread(request, { tabId: sender.tab?.id });
       case "threads.screenshotUrl":
         return data.screenshotUrl(request);
       case "threads.recordingUrl":
         return data.recordingUrl(request);
+      case "threads.replaySource":
+        return data.replaySource(request);
       case "recording.start":
         return recordings.start(request);
       case "recording.stop":
@@ -195,6 +210,29 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
           return failure("forbidden_sender");
         }
         return recordings.addStep(tabId, request.step);
+      }
+      case "replay.save": {
+        const tabId = sender.tab?.id;
+        if (tabId === undefined) {
+          return failure("forbidden_sender");
+        }
+        await replay.save(tabId, request.progress);
+        return success(null);
+      }
+      case "replay.load": {
+        const tabId = sender.tab?.id;
+        if (tabId === undefined) {
+          return failure("forbidden_sender");
+        }
+        return success(await replay.load(tabId));
+      }
+      case "replay.clear": {
+        const tabId = sender.tab?.id;
+        if (tabId === undefined) {
+          return failure("forbidden_sender");
+        }
+        await replay.clear(tabId);
+        return success(null);
       }
       case "screenshot.capture": {
         const tabId = sender.tab?.id;

@@ -352,8 +352,13 @@ describe("ContextSection recording steps", () => {
     vi.useRealTimers();
   });
 
+  function openStepsTab() {
+    fireEvent.click(screen.getByRole("tab", { name: /^Steps/ }));
+  }
+
   it("lists every step with its time, kind and label", () => {
     render(<ContextSection context={context({ recording })} hasScreenshot={false} />);
+    openStepsTab();
 
     const list = screen.getByRole("list", { name: "What the reporter did (4)" });
     const items = within(list).getAllByRole("listitem");
@@ -367,6 +372,7 @@ describe("ContextSection recording steps", () => {
 
   it("falls back to the selector without a label and to the url for navigation", () => {
     render(<ContextSection context={context({ recording })} hasScreenshot={false} />);
+    openStepsTab();
 
     expect(screen.getByText("#email")).toBeTruthy();
     expect(screen.getByText("/thanks")).toBeTruthy();
@@ -374,6 +380,7 @@ describe("ContextSection recording steps", () => {
 
   it("keeps the full text of a step in its title", () => {
     render(<ContextSection context={context({ recording })} hasScreenshot={false} />);
+    openStepsTab();
 
     expect(screen.getByTitle("Buy now").textContent).toBe("Buy now");
     expect(screen.getByTitle("/thanks").textContent).toBe("/thanks");
@@ -391,27 +398,22 @@ describe("ContextSection recording steps", () => {
         hasScreenshot={false}
       />,
     );
+    openStepsTab();
 
     expect(container.querySelector("img")).toBeNull();
     expect(screen.getByText("<img src=x onerror=alert(1)>")).toBeTruthy();
   });
 
-  it("is hidden when the recording has no steps", () => {
-    const { rerender } = render(
+  it("says no steps were recorded when the recording has none", () => {
+    render(
       <ContextSection
         context={context({ recording: { path: "ws/thread.webm", durationMs: 1_000, size: 1 } })}
         hasScreenshot={false}
       />,
     );
-    expect(screen.queryByText(/What the reporter did/)).toBeNull();
+    openStepsTab();
 
-    rerender(
-      <ContextSection
-        context={context({ recording: { ...recording, steps: [] } })}
-        hasScreenshot={false}
-      />,
-    );
-    expect(screen.queryByText(/What the reporter did/)).toBeNull();
+    expect(screen.getByText("No steps were recorded for this video.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Copy as Playwright" })).toBeNull();
   });
 
@@ -424,6 +426,7 @@ describe("ContextSection recording steps", () => {
         hasScreenshot={false}
       />,
     );
+    openStepsTab();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy as Playwright" }));
 
@@ -437,6 +440,7 @@ describe("ContextSection recording steps", () => {
     vi.useFakeTimers();
     stubClipboard({ writeText: vi.fn().mockResolvedValue(undefined) });
     render(<ContextSection context={context({ recording })} hasScreenshot={false} />);
+    openStepsTab();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy as Playwright" }));
     await act(() => Promise.resolve());
@@ -456,6 +460,7 @@ describe("ContextSection recording steps", () => {
   it("says the copy failed when the clipboard rejects", async () => {
     stubClipboard({ writeText: vi.fn().mockRejectedValue(new Error("denied")) });
     render(<ContextSection context={context({ recording })} hasScreenshot={false} />);
+    openStepsTab();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy as Playwright" }));
 
@@ -465,6 +470,7 @@ describe("ContextSection recording steps", () => {
   it("says the copy failed when the clipboard API is missing", async () => {
     stubClipboard(undefined);
     render(<ContextSection context={context({ recording })} hasScreenshot={false} />);
+    openStepsTab();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy as Playwright" }));
 
@@ -476,7 +482,8 @@ describe("ContextSection recording steps", () => {
     const { rerender } = render(
       <ContextSection context={context({ recording })} hasScreenshot={false} />,
     );
-    expect(screen.queryByRole("button", { name: "Replay on page" })).toBeNull();
+    openStepsTab();
+    expect(screen.queryByRole("button", { name: /Reproduce/ })).toBeNull();
 
     const onReplaySteps = vi.fn();
     rerender(
@@ -486,8 +493,94 @@ describe("ContextSection recording steps", () => {
         onReplaySteps={onReplaySteps}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Replay on page" }));
+    await user.click(screen.getByRole("button", { name: /Reproduce/ }));
 
     expect(onReplaySteps).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ContextSection network errors", () => {
+  it("lists the failed requests with their method, url, status and time", () => {
+    render(
+      <ContextSection
+        context={context({
+          networkErrors: [
+            {
+              kind: "fetch",
+              method: "POST",
+              url: "https://api.example.com/orders",
+              status: 500,
+              at: AT,
+            },
+            { kind: "xhr", method: "GET", url: "https://api.example.com/cart", status: 0 },
+          ],
+        })}
+        hasScreenshot={false}
+      />,
+    );
+
+    expect(screen.getByText("Failed requests (2)").tagName).toBe("SUMMARY");
+    expect(screen.getByText("https://api.example.com/orders")).toBeTruthy();
+    expect(screen.getByText("POST")).toBeTruthy();
+    expect(screen.getByText("500")).toBeTruthy();
+    expect(screen.getByText("Failed")).toBeTruthy();
+    expect(screen.getByText("09:30:00 UTC")).toBeTruthy();
+  });
+
+  it("shows no failed requests block when the list is missing or empty", () => {
+    const { rerender } = render(<ContextSection context={context()} hasScreenshot={false} />);
+    expect(screen.queryByText(/Failed requests/)).toBeNull();
+
+    rerender(<ContextSection context={context({ networkErrors: [] })} hasScreenshot={false} />);
+    expect(screen.queryByText(/Failed requests/)).toBeNull();
+  });
+});
+
+describe("ContextSection copy context", () => {
+  it("hides the copy button when no copy handler is passed", () => {
+    render(<ContextSection context={context()} hasScreenshot={false} />);
+
+    expect(screen.queryByRole("button", { name: "Copy context" })).toBeNull();
+  });
+
+  it("says copied when the handler succeeds", async () => {
+    const onCopyContext = vi.fn().mockResolvedValue(true);
+    render(
+      <ContextSection context={context()} hasScreenshot={false} onCopyContext={onCopyContext} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy context" }));
+
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeTruthy();
+    expect(screen.getByRole("status")).toBeTruthy();
+    expect(onCopyContext).toHaveBeenCalledTimes(1);
+  });
+
+  it("says it could not copy when the handler returns false", async () => {
+    render(
+      <ContextSection
+        context={context()}
+        hasScreenshot={false}
+        onCopyContext={vi.fn().mockReturnValue(false)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy context" }));
+
+    expect(await screen.findByRole("button", { name: "Could not copy" })).toBeTruthy();
+  });
+
+  it("says it could not copy when the handler throws", async () => {
+    render(
+      <ContextSection
+        context={context()}
+        hasScreenshot={false}
+        onCopyContext={vi.fn().mockRejectedValue(new Error("denied"))}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy context" }));
+
+    expect(await screen.findByRole("button", { name: "Could not copy" })).toBeTruthy();
   });
 });

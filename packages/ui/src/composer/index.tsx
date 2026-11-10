@@ -25,6 +25,7 @@ export const MENTIONS_LIMIT = 20;
 export interface ComposerSubmission {
   body: string;
   mentions: string[];
+  startsSignedOut?: boolean;
 }
 
 export function filterMentionCandidates(
@@ -46,6 +47,7 @@ export interface ComposerProps {
   submitting?: boolean;
   error?: string | undefined;
   mentionCandidates?: readonly PersonView[] | undefined;
+  startsSignedOutOption?: boolean | undefined;
   onSubmit: (submission: ComposerSubmission) => Promise<void>;
   onCancel?: (() => void) | undefined;
 }
@@ -59,10 +61,12 @@ export function Composer({
   submitting = false,
   error,
   mentionCandidates,
+  startsSignedOutOption = false,
   onSubmit,
   onCancel,
 }: ComposerProps) {
   const [text, setText] = useState(initialValue);
+  const [startsSignedOut, setStartsSignedOut] = useState(false);
   const [caret, setCaret] = useState(initialValue.length);
   const [chosen, setChosen] = useState<PersonView[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -72,6 +76,7 @@ export function Composer({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const nextCaret = useRef<number | null>(null);
   const errorId = useId();
+  const signedOutId = useId();
   const counterId = useId();
   const listId = useId();
 
@@ -129,10 +134,15 @@ export function Composer({
     setPending(true);
     setFailure(null);
     try {
-      await onSubmit({ body: trimmed, mentions: mentionedIdsInBody(trimmed, chosen) });
+      await onSubmit({
+        body: trimmed,
+        mentions: mentionedIdsInBody(trimmed, chosen),
+        ...(startsSignedOutOption ? { startsSignedOut } : {}),
+      });
       setText("");
       setCaret(0);
       setChosen([]);
+      setStartsSignedOut(false);
     } catch {
       setFailure(COMPOSER_FALLBACK_ERROR);
       textareaRef.current?.focus();
@@ -282,6 +292,26 @@ export function Composer({
             </li>
           ))}
         </ul>
+      ) : null}
+      {startsSignedOutOption ? (
+        <div className="flex flex-col gap-1">
+          <label className="flex items-center gap-2 text-sm text-neutral-900">
+            <input
+              type="checkbox"
+              checked={startsSignedOut}
+              disabled={busy}
+              aria-describedby={signedOutId}
+              onChange={(event) => {
+                setStartsSignedOut(event.target.checked);
+              }}
+              className="size-4 accent-blue-700"
+            />
+            Recording starts signed out
+          </label>
+          <p id={signedOutId} className="pl-6 text-xs text-neutral-500">
+            Replay will ask users to sign out first.
+          </p>
+        </div>
       ) : null}
       {message === null ? null : (
         <p

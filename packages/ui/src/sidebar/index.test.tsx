@@ -106,9 +106,7 @@ describe("Sidebar", () => {
     expect(within(section).getByText("Wrong colour")).toBeTruthy();
     expect(within(section).queryByText("Typo fixed")).toBeNull();
     expect(
-      within(section)
-        .getByRole("button", { name: "Show resolved (1)" })
-        .getAttribute("aria-expanded"),
+      screen.getByRole("button", { name: "Show resolved (1)" }).getAttribute("aria-expanded"),
     ).toBe("false");
   });
 

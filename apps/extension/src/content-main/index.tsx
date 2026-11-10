@@ -1,6 +1,5 @@
-import { SITENOTE_ROOT_TAG } from "@sitenote/core";
+import { SITENOTE_ROOT_TAG, parsePageUrl } from "@sitenote/core";
 import {
-  RECORDING_ATTACHED_MESSAGE,
   createWidget,
   failure,
   success,
@@ -110,17 +109,14 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
     commentOnElement: () => whenReady(() => ({ started: widget.commentOnContextTarget() })),
     listThreads: () =>
       whenReady(() => {
-        const { threads, resolutions } = widget.store.getState();
-        return summarizeThreads(threads, resolutions);
+        const { siteThreads, resolutions } = widget.store.getState();
+        return summarizeThreads(
+          siteThreads,
+          resolutions,
+          parsePageUrl(window.location.href)?.page ?? null,
+        );
       }),
-    openThread: (threadId) =>
-      whenReady(() => {
-        const opened = widget.store.getState().threads.some((thread) => thread.id === threadId);
-        if (opened) {
-          widget.selectThread(threadId);
-        }
-        return { opened };
-      }),
+    openThread: (threadId) => whenReady(() => ({ opened: widget.openThread(threadId) })),
     openSidebar: () =>
       whenReady(() => {
         if (!widget.store.getState().sidebarOpen) {
@@ -135,10 +131,7 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
       hide: () => {
         recordingPill.hide();
       },
-      attach: () =>
-        widget.enterCommentMode(RECORDING_ATTACHED_MESSAGE)
-          ? success(null)
-          : failure("page_unavailable"),
+      attach: () => (widget.attachRecording() ? success(null) : failure("page_unavailable")),
     },
     steps: stepRecorder,
   });

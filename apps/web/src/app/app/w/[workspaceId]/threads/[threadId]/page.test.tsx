@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -79,25 +79,32 @@ const MEMBERS = [
   },
 ];
 
-function resolving(result: unknown) {
+const ACCESS = { data: { role: "owner", workspaces: { name: "Northwind" } }, error: null };
+
+function resolving(result: unknown, single: unknown = result) {
   const chain: Record<string, unknown> = {
     eq: () => chain,
+    gt: () => chain,
     order: () => Promise.resolve(result),
-    maybeSingle: () => Promise.resolve(result),
+    maybeSingle: () => Promise.resolve(single),
   };
   return chain;
 }
 
 function useTables(thread: { data: unknown; error: unknown }) {
   mocks.from.mockImplementation((table: string) => ({
-    select: () =>
-      resolving(
-        table === "threads"
-          ? thread
-          : table === "comments"
-            ? { data: COMMENTS, error: null }
-            : { data: MEMBERS, error: null },
-      ),
+    select: () => {
+      if (table === "threads") {
+        return resolving(thread);
+      }
+      if (table === "comments") {
+        return resolving({ data: COMMENTS, error: null });
+      }
+      if (table === "members") {
+        return resolving({ data: MEMBERS, error: null }, ACCESS);
+      }
+      return resolving({ data: null, error: null });
+    },
   }));
 }
 
@@ -156,6 +163,7 @@ describe("jira", () => {
     expect(mocks.rpc).toHaveBeenCalledWith("jira_configured", { p_workspace_id: WORKSPACE_ID });
     expect(mocks.jiraPanel.mock.calls[0]?.[0]).toEqual({
       threadId: THREAD_ID,
+      workspaceId: WORKSPACE_ID,
       issueKey: "PROJ-123",
       issueUrl: "https://acme.atlassian.net/browse/PROJ-123",
       canLink: true,
@@ -167,6 +175,7 @@ describe("jira", () => {
 
     expect(mocks.jiraPanel.mock.calls[0]?.[0]).toEqual({
       threadId: THREAD_ID,
+      workspaceId: WORKSPACE_ID,
       issueKey: null,
       issueUrl: null,
       canLink: false,
@@ -259,6 +268,7 @@ describe("thread", () => {
 
     await renderPage();
 
+    fireEvent.click(screen.getByRole("tab", { name: "Steps (1)" }));
     expect(screen.getByRole("list", { name: "What the reporter did (1)" })).toBeTruthy();
     expect(screen.getByText("Buy now")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Copy as Playwright" })).toBeTruthy();

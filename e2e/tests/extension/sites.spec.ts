@@ -189,11 +189,11 @@ test("the comment mode button reaches the content script and toggles the attribu
 
   await popup.getByRole("button", { name: "Comment mode" }).click();
   await expect(host).toHaveAttribute("data-comment-mode", "on");
-  await expect(popup.getByRole("status")).toHaveText("Comment mode is on.");
+  await expect(popup.getByRole("status").filter({ hasText: "Comment mode is on." })).toBeVisible();
 
   await popup.getByRole("button", { name: "Comment mode" }).click();
   await expect(host).toHaveAttribute("data-comment-mode", "off");
-  await expect(popup.getByRole("status")).toHaveText("Comment mode is off.");
+  await expect(popup.getByRole("status").filter({ hasText: "Comment mode is off." })).toBeVisible();
 });
 
 test("disabling removes the overlay, unregisters the script and survives a reload", async ({

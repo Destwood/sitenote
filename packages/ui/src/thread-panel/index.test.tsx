@@ -473,7 +473,8 @@ describe("ThreadPanel context", () => {
       onReplaySteps,
     });
 
-    await user.click(screen.getByRole("button", { name: "Replay on page" }));
+    await user.click(screen.getByRole("tab", { name: /^Steps/ }));
+    await user.click(screen.getByRole("button", { name: /Reproduce/ }));
 
     expect(onReplaySteps).toHaveBeenCalledTimes(1);
   });

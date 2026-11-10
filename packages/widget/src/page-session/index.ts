@@ -8,6 +8,7 @@ export interface PageSessionState {
   status: PageSessionStatus;
   site: SiteInfo | null;
   threads: ThreadRecord[];
+  siteThreads: ThreadRecord[];
   loaded: boolean;
   live: boolean;
   error: ErrorCode | null;
@@ -16,7 +17,7 @@ export interface PageSessionState {
 export interface PageSessionDeps {
   origin: string;
   readPageUrl: () => string | null;
-  backend: Pick<WidgetBackend, "getSiteInfo" | "listThreads" | "subscribe">;
+  backend: Pick<WidgetBackend, "getSiteInfo" | "listThreads" | "listSiteThreads" | "subscribe">;
   onState: (state: PageSessionState) => void;
 }
 
@@ -32,6 +33,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     status: "starting",
     site: null,
     threads: [],
+    siteThreads: [],
     loaded: false,
     live: false,
     error: null,
@@ -54,13 +56,27 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     if (site === null || pageUrl === null) {
       return;
     }
-    const result = await deps.backend.listThreads(site.siteId, pageUrl);
+    const listSite = deps.backend.listSiteThreads;
+    const result =
+      listSite === undefined
+        ? await deps.backend.listThreads(site.siteId, pageUrl)
+        : await listSite(site.siteId);
     if (stopped || deps.readPageUrl() !== pageUrl) {
       return;
     }
     publish(
       result.ok
-        ? { ...state, status: "ready", threads: result.data, loaded: true, error: null }
+        ? {
+            ...state,
+            status: "ready",
+            siteThreads: result.data,
+            threads:
+              listSite === undefined
+                ? result.data
+                : result.data.filter((thread) => thread.pageUrl === pageUrl),
+            loaded: true,
+            error: null,
+          }
         : { ...state, status: "error", error: result.error.code },
     );
   }
@@ -117,6 +133,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
               status: "disabled",
               site: null,
               threads: [],
+              siteThreads: [],
               loaded: false,
               live: false,
               error: null,

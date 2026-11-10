@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   CHECK_VIOLATION,
   ELEMENT_ANCHOR,
+  PERMISSION_DENIED,
   TEXT_ANCHOR,
   buildThread,
   createPublicClient,
@@ -63,6 +64,26 @@ describe("threads select", () => {
 
   it("denies the unauthenticated role", async () => {
     expectPermissionDenied(await createPublicClient().from("threads").select("id"));
+  });
+});
+
+describe("thread sharing", () => {
+  it("returns the share token to a member and prevents guests from sharing or reading it", async () => {
+    const thread = await insertThread(scenario.admin, scenario.site, scenario.member.id);
+    const args = { p_thread_id: thread.id };
+
+    expectCode(await scenario.guest.client.rpc("thread_share_enable", args), PERMISSION_DENIED);
+    const shares = unwrap(await scenario.member.client.rpc("thread_share_enable", args));
+    expect(shares).toHaveLength(1);
+    expect(shares[0]?.token).toMatch(/^[0-9a-f]{64}$/);
+    expect(Date.parse(shares[0]?.expires_at ?? "")).toBeGreaterThan(Date.now());
+    expectNoRows(
+      await scenario.guest.client.from("thread_shares").select("token").eq("thread_id", thread.id),
+    );
+    expect((await scenario.member.client.rpc("thread_share_disable", args)).error).toBeNull();
+    expectNoRows(
+      await scenario.admin.from("thread_shares").select("token").eq("thread_id", thread.id),
+    );
   });
 });
 

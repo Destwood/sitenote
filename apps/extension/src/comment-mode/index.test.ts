@@ -110,6 +110,8 @@ describe("createToggleListener", () => {
         authorName: "Max",
         replies: 0,
         detached: false,
+        route: "/",
+        current: true,
       },
     ];
     const listThreads = vi.fn(() => success(threads));
