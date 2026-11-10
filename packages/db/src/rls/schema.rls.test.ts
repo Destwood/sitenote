@@ -20,6 +20,7 @@ const TABLES = [
   "notifications",
   "profiles",
   "sites",
+  "thread_shares",
   "threads",
   "workspaces",
 ];
@@ -88,6 +89,9 @@ const AUTHENTICATED_COLUMN_PRIVILEGES: Record<string, Record<string, string[]>> 
     INSERT: ["origin", "workspace_id"],
     SELECT: ["created_at", "id", "origin", "updated_at", "workspace_id"],
     UPDATE: ["origin"],
+  },
+  thread_shares: {
+    SELECT: ["expires_at", "thread_id", "token"],
   },
   threads: {
     INSERT: [
@@ -415,6 +419,22 @@ describe("functions and schemas", () => {
       {
         proname: "search_threads",
         prosecdef: false,
+        proconfig: pinned,
+        anon: false,
+        authenticated: true,
+        public_exec: false,
+      },
+      {
+        proname: "thread_share_disable",
+        prosecdef: true,
+        proconfig: pinned,
+        anon: false,
+        authenticated: true,
+        public_exec: false,
+      },
+      {
+        proname: "thread_share_enable",
+        prosecdef: true,
         proconfig: pinned,
         anon: false,
         authenticated: true,

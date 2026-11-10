@@ -8,6 +8,7 @@ create table public.thread_shares (
 );
 
 alter table public.thread_shares enable row level security;
+alter table public.thread_shares force row level security;
 
 create policy thread_shares_select on public.thread_shares
   for select to authenticated
@@ -17,7 +18,7 @@ create policy thread_shares_select on public.thread_shares
   );
 
 revoke all on table public.thread_shares from anon, authenticated;
-grant select on public.thread_shares to authenticated;
+grant select (thread_id, token, expires_at) on public.thread_shares to authenticated;
 
 create function public.thread_share_enable(p_thread_id uuid)
 returns table (token text, expires_at timestamptz)
