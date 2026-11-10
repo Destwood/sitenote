@@ -5,6 +5,11 @@ export const CONSOLE_ERRORS_MAX = 20;
 export const CONSOLE_MESSAGE_MAX = 1000;
 export const CONSOLE_SOURCE_MAX = 500;
 export const CONSOLE_STACK_MAX = 4000;
+export const NETWORK_ERRORS_MAX = 20;
+export const NETWORK_METHOD_MAX = 10;
+export const NETWORK_URL_MAX = 300;
+export const NETWORK_STATUS_TEXT_MAX = 60;
+export const TIMESTAMP_MAX = 40;
 export const CONTEXT_TITLE_MAX = 300;
 export const CONTEXT_URL_MAX = 2048;
 export const CONTEXT_USER_AGENT_MAX = 512;
@@ -12,6 +17,7 @@ export const CONTEXT_NAME_MAX = 100;
 export const CONTEXT_MAX_BYTES = 48000;
 export const RECORDING_PATH_MAX = 200;
 export const RECORDING_STEPS_MAX = 40;
+export const RECORDING_START_URL_MAX = 2048;
 export const STEP_SELECTOR_MAX = 100;
 export const STEP_LABEL_MAX = 40;
 export const STEP_URL_MAX = 100;
@@ -25,6 +31,7 @@ export const recordingStepSchema = z.object({
   selector: z.string().check(z.maxLength(STEP_SELECTOR_MAX)),
   label: z.string().check(z.maxLength(STEP_LABEL_MAX)),
   url: z.optional(z.string().check(z.maxLength(STEP_URL_MAX))),
+  sensitive: z.optional(z.boolean()),
 });
 
 export type RecordingStep = z.infer<typeof recordingStepSchema>;
@@ -34,9 +41,19 @@ export const recordingRefSchema = z.object({
   durationMs: nonNegativeInteger,
   size: nonNegativeInteger,
   steps: z.optional(z.array(recordingStepSchema).check(z.maxLength(RECORDING_STEPS_MAX))),
+  startUrl: z.optional(z.string().check(z.maxLength(RECORDING_START_URL_MAX))),
+  startsSignedOut: z.optional(z.boolean()),
 });
 
 export type RecordingRef = z.infer<typeof recordingRefSchema>;
+
+export interface ReplaySource {
+  threadId: string;
+  pageUrl: string;
+  startUrl: string | null;
+  startsSignedOut: boolean;
+  steps: RecordingStep[];
+}
 
 export const consoleErrorRecordSchema = z.object({
   kind: z.enum(CONSOLE_ERROR_KINDS),
@@ -45,11 +62,23 @@ export const consoleErrorRecordSchema = z.object({
   line: z.optional(nonNegativeInteger),
   column: z.optional(nonNegativeInteger),
   stack: z.optional(z.string().check(z.maxLength(CONSOLE_STACK_MAX))),
-  at: z.iso.datetime(),
+  at: z.optional(z.iso.datetime().check(z.maxLength(TIMESTAMP_MAX))),
 });
 
 export type ConsoleErrorKind = (typeof CONSOLE_ERROR_KINDS)[number];
 export type ConsoleErrorRecord = z.infer<typeof consoleErrorRecordSchema>;
+
+export const networkErrorRecordSchema = z.object({
+  kind: z.enum(["fetch", "xhr"]),
+  method: z.string().check(z.maxLength(NETWORK_METHOD_MAX)),
+  url: z.string().check(z.maxLength(NETWORK_URL_MAX)),
+  status: z.int().check(z.gte(0), z.lte(599)),
+  statusText: z.optional(z.string().check(z.maxLength(NETWORK_STATUS_TEXT_MAX))),
+  durationMs: z.optional(nonNegativeInteger),
+  at: z.optional(z.iso.datetime().check(z.maxLength(TIMESTAMP_MAX))),
+});
+
+export type NetworkErrorRecord = z.infer<typeof networkErrorRecordSchema>;
 
 function byteLength(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value)).length;
@@ -62,6 +91,7 @@ const RECORDING_STEP_SAMPLE: RecordingStep = {
   selector: WIDEST_CHARACTER.repeat(STEP_SELECTOR_MAX),
   label: WIDEST_CHARACTER.repeat(STEP_LABEL_MAX),
   url: WIDEST_CHARACTER.repeat(STEP_URL_MAX),
+  sensitive: true,
 };
 const RECORDING_MAX_BYTES = byteLength({
   recording: {
@@ -69,6 +99,8 @@ const RECORDING_MAX_BYTES = byteLength({
     durationMs: Number.MAX_SAFE_INTEGER,
     size: Number.MAX_SAFE_INTEGER,
     steps: Array.from({ length: RECORDING_STEPS_MAX }, () => RECORDING_STEP_SAMPLE),
+    startUrl: WIDEST_CHARACTER.repeat(RECORDING_START_URL_MAX),
+    startsSignedOut: true,
   },
 });
 const FITTED_MAX_BYTES = CONTEXT_MAX_BYTES - RECORDING_MAX_BYTES;
@@ -86,6 +118,9 @@ export const threadContextSchema = z
     os: z.object({ name: shortText, version: z.optional(shortText) }),
     userAgent: z.string().check(z.maxLength(CONTEXT_USER_AGENT_MAX)),
     consoleErrors: z.array(consoleErrorRecordSchema).check(z.maxLength(CONSOLE_ERRORS_MAX)),
+    networkErrors: z.optional(
+      z.array(networkErrorRecordSchema).check(z.maxLength(NETWORK_ERRORS_MAX)),
+    ),
     capturedAt: z.iso.datetime(),
     recording: z.optional(recordingRefSchema),
   })
@@ -104,7 +139,7 @@ function sanitizeOptional(value: string | undefined): string | undefined {
 }
 
 function sanitizeRecord(record: ConsoleErrorRecord): ConsoleErrorRecord {
-  const { source, stack } = record;
+  const { source, stack, at } = record;
   const { line, column } = record;
   return {
     kind: record.kind,
@@ -113,7 +148,20 @@ function sanitizeRecord(record: ConsoleErrorRecord): ConsoleErrorRecord {
     ...(line === undefined ? {} : { line }),
     ...(column === undefined ? {} : { column }),
     ...(stack === undefined ? {} : { stack: sanitizeText(stack) }),
-    at: record.at,
+    ...(at === undefined ? {} : { at }),
+  };
+}
+
+function sanitizeNetworkRecord(record: NetworkErrorRecord): NetworkErrorRecord {
+  const { statusText, durationMs, at } = record;
+  return {
+    kind: record.kind,
+    method: sanitizeText(record.method),
+    url: sanitizeText(record.url),
+    status: record.status,
+    ...(statusText === undefined ? {} : { statusText: sanitizeText(statusText) }),
+    ...(durationMs === undefined ? {} : { durationMs }),
+    ...(at === undefined ? {} : { at }),
   };
 }
 
@@ -157,6 +205,7 @@ export function sanitizeStep(step: RecordingStep): RecordingStep {
       STEP_LABEL_MAX,
     ),
     ...(url === undefined ? {} : { url: truncate(stripControls(url), STEP_URL_MAX) }),
+    ...(step.sensitive === true ? { sensitive: true } : {}),
   };
 }
 
@@ -180,10 +229,19 @@ export function fitThreadContext(context: ThreadContext): ThreadContext {
           },
     userAgent: sanitizeText(context.userAgent),
     consoleErrors: context.consoleErrors.map(sanitizeRecord),
+    ...(context.networkErrors === undefined
+      ? {}
+      : { networkErrors: context.networkErrors.map(sanitizeNetworkRecord) }),
     capturedAt: context.capturedAt,
   };
-  while (fitted.consoleErrors.length > 0 && byteLength(fitted) > FITTED_MAX_BYTES) {
-    fitted = { ...fitted, consoleErrors: fitted.consoleErrors.slice(1) };
+  while (byteLength(fitted) > FITTED_MAX_BYTES) {
+    if (fitted.networkErrors !== undefined && fitted.networkErrors.length > 0) {
+      fitted = { ...fitted, networkErrors: fitted.networkErrors.slice(1) };
+    } else if (fitted.consoleErrors.length > 0) {
+      fitted = { ...fitted, consoleErrors: fitted.consoleErrors.slice(1) };
+    } else {
+      break;
+    }
   }
   return fitted;
 }

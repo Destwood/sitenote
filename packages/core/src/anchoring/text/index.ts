@@ -167,6 +167,14 @@ function findContainer(selector: string, doc: Document): Element | undefined {
   }
 }
 
+export function resolveTextAnchorHeading(anchor: TextAnchor, doc: Document): Element | undefined {
+  if (anchor.container.includes(":nth-")) {
+    return undefined;
+  }
+  const element = findContainer(anchor.container, doc);
+  return element !== undefined && /^h[1-6]$/.test(element.localName) ? element : undefined;
+}
+
 export function resolveTextAnchor(anchor: TextAnchor, doc: Document = document): TextResolution {
   const body = doc.body as HTMLElement | null;
   if (!body) {

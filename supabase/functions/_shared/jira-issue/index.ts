@@ -69,6 +69,24 @@ export function buildLinkComment(deepLink: string): AdfDocument {
   };
 }
 
+const SEARCH_WORD_MAX = 8;
+const ISSUE_KEY_QUERY = /^[A-Za-z][A-Za-z0-9_]+-[0-9]+$/;
+
+export function buildSearchJql(query: string, projectKey?: string): string {
+  const words = query
+    .replace(/[^\p{L}\p{N} _.-]/gu, " ")
+    .split(" ")
+    .filter((word) => word.length > 0)
+    .slice(0, SEARCH_WORD_MAX);
+  const terms = words.map((word) => `summary ~ "${word}*"`).join(" AND ");
+  let clause = words.length === 0 ? "updated >= -30d" : terms;
+  if (ISSUE_KEY_QUERY.test(query.trim())) {
+    clause = `(key = "${query.trim().toUpperCase()}" OR ${terms})`;
+  }
+  const project = projectKey === undefined ? "" : ` AND project = "${projectKey}"`;
+  return `${clause}${project} ORDER BY updated DESC`;
+}
+
 export function decideIssueLink(thread: JiraIssueThread): IssueLinkDecision {
   const { jiraIssueKey: issueKey, jiraIssueUrl: url } = thread;
   if (issueKey !== null && url !== null) {

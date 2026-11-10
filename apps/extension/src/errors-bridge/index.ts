@@ -1,7 +1,10 @@
 import {
   CONSOLE_ERRORS_MAX,
+  NETWORK_ERRORS_MAX,
   consoleErrorRecordSchema,
+  networkErrorRecordSchema,
   type ConsoleErrorRecord,
+  type NetworkErrorRecord,
 } from "@sitenote/core";
 
 import { ERRORS_REQUEST_TYPE, ERRORS_RESPONSE_TYPE, MESSAGE_SOURCE } from "../console-errors";
@@ -14,37 +17,60 @@ export interface ErrorsBridgeOptions {
   newNonce?: () => string;
 }
 
+export interface PageDiagnostics {
+  consoleErrors: ConsoleErrorRecord[];
+  networkErrors: NetworkErrorRecord[];
+}
+
 function field(value: unknown, name: string): unknown {
   return typeof value === "object" && value !== null ? Reflect.get(value, name) : undefined;
 }
 
-export function parseRecords(value: unknown): ConsoleErrorRecord[] {
+function parseList<T>(
+  value: unknown,
+  max: number,
+  parse: (candidate: unknown) => T | undefined,
+): T[] {
   if (!Array.isArray(value)) {
     return [];
   }
-  const records: ConsoleErrorRecord[] = [];
-  for (const candidate of value.slice(-CONSOLE_ERRORS_MAX) as unknown[]) {
-    const parsed = consoleErrorRecordSchema.safeParse(candidate);
-    if (parsed.success) {
-      records.push(parsed.data);
+  const records: T[] = [];
+  for (const candidate of value.slice(-max) as unknown[]) {
+    const parsed = parse(candidate);
+    if (parsed !== undefined) {
+      records.push(parsed);
     }
   }
   return records;
 }
 
-export function requestConsoleErrors(options: ErrorsBridgeOptions): Promise<ConsoleErrorRecord[]> {
+export function parseRecords(value: unknown): ConsoleErrorRecord[] {
+  return parseList(value, CONSOLE_ERRORS_MAX, (candidate) => {
+    const parsed = consoleErrorRecordSchema.safeParse(candidate);
+    return parsed.success ? parsed.data : undefined;
+  });
+}
+
+export function parseNetworkRecords(value: unknown): NetworkErrorRecord[] {
+  return parseList(value, NETWORK_ERRORS_MAX, (candidate) => {
+    const parsed = networkErrorRecordSchema.safeParse(candidate);
+    return parsed.success ? parsed.data : undefined;
+  });
+}
+
+export function requestPageDiagnostics(options: ErrorsBridgeOptions): Promise<PageDiagnostics> {
   const { win } = options;
   const newNonce = options.newNonce ?? (() => crypto.randomUUID());
   return new Promise((resolve) => {
     const nonce = newNonce();
     const timer = setTimeout(() => {
-      finish([]);
+      finish({ consoleErrors: [], networkErrors: [] });
     }, options.timeoutMs ?? ERRORS_TIMEOUT_MS);
 
-    function finish(records: ConsoleErrorRecord[]): void {
+    function finish(diagnostics: PageDiagnostics): void {
       win.removeEventListener("message", onMessage);
       clearTimeout(timer);
-      resolve(records);
+      resolve(diagnostics);
     }
 
     function onMessage(event: MessageEvent): void {
@@ -58,7 +84,10 @@ export function requestConsoleErrors(options: ErrorsBridgeOptions): Promise<Cons
       ) {
         return;
       }
-      finish(parseRecords(field(data, "records")));
+      finish({
+        consoleErrors: parseRecords(field(data, "records")),
+        networkErrors: parseNetworkRecords(field(data, "network")),
+      });
     }
 
     win.addEventListener("message", onMessage);
@@ -68,7 +97,11 @@ export function requestConsoleErrors(options: ErrorsBridgeOptions): Promise<Cons
         win.location.origin,
       );
     } catch {
-      finish([]);
+      finish({ consoleErrors: [], networkErrors: [] });
     }
   });
+}
+
+export function requestConsoleErrors(options: ErrorsBridgeOptions): Promise<ConsoleErrorRecord[]> {
+  return requestPageDiagnostics(options).then((diagnostics) => diagnostics.consoleErrors);
 }

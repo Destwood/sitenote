@@ -1,10 +1,16 @@
-import { createTextAnchor, type Anchor, type ThreadContext } from "@sitenote/core";
+import {
+  createTextAnchor,
+  type Anchor,
+  type RecordingStep,
+  type ThreadContext,
+} from "@sitenote/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ORPHANED, type Resolution } from "../anchor-target";
 import type { WidgetBackend, WidgetSubscription, WidgetSubscriptionHandlers } from "../backend";
 import type { PreferenceClient } from "../preference-client";
 import { failure, type MessageResult, success } from "../result";
+import type { ReplayProgressStore } from "../replay-runner";
 import type { ScreenshotTaker } from "../screenshot-taker";
 import type {
   CommentRecord,
@@ -15,7 +21,7 @@ import type {
 } from "../transport";
 import {
   COMMENT_CURSOR_CSS,
-  JIRA_COMMENT_MISSING_MESSAGE,
+  JIRA_LINK_MISSING_MESSAGE,
   PREFERENCE_FAILED_MESSAGE,
   PENDING_ID,
   RECORDING_ATTACHED_MESSAGE,
@@ -337,6 +343,30 @@ describe("reconcileResolutions", () => {
     expect(next.get(THREAD_ID)?.status).toBe("resolved");
   });
 
+  it("keeps a text comment on the heading after translation and restores the quote on return", () => {
+    const original = "Personal Trainer in the Gym and Online";
+    document.body.innerHTML = `<main><h1 style="display: block">${original}</h1></main>`;
+    const heading = element("h1");
+    const range = document.createRange();
+    range.selectNodeContents(heading);
+    const anchor = createTextAnchor(range, document);
+    const threads = [thread({ anchor })];
+    const before = reconcileResolutions(new Map(), threads, document);
+    expect(before.get(THREAD_ID)).toMatchObject({ target: { kind: "text" } });
+
+    heading.textContent = "Персональний тренер у залі та онлайн";
+    const translated = reconcileResolutions(before, threads, document);
+    expect(translated.get(THREAD_ID)).toMatchObject({
+      status: "resolved",
+      target: { kind: "element", element: heading },
+    });
+    expect(reconcileResolutions(translated, threads, document)).toBe(translated);
+
+    heading.textContent = original;
+    const restored = reconcileResolutions(translated, threads, document);
+    expect(restored.get(THREAD_ID)).toMatchObject({ target: { kind: "text" } });
+  });
+
   it("orphans a thread without a readable anchor", () => {
     const next = reconcileResolutions(new Map(), [thread({ anchor: null })], document);
 
@@ -631,6 +661,16 @@ describe("entering comment mode with a notice", () => {
     expect(state().toasts.map((toast) => [toast.message, toast.variant])).toEqual([
       [RECORDING_ATTACHED_MESSAGE, "info"],
     ]);
+  });
+
+  it("marks the recording as attached when a recording is handed over", async () => {
+    const { controller: api, state } = await setup();
+
+    expect(state().recordingAttached).toBe(false);
+    expect(api.attachRecording()).toBe(true);
+
+    expect(state().recordingAttached).toBe(true);
+    expect(state().commentMode).toBe(true);
   });
 
   it("returns false and changes nothing when the site is not enabled", async () => {
@@ -1114,6 +1154,20 @@ describe("comments and status", () => {
     });
   });
 
+  it("changes the status of an off-page thread and keeps it in the site list", async () => {
+    const offPage = { ...existing, id: SECOND_THREAD_ID, pageUrl: `${PAGE}/other` };
+    const { controller: api, state } = await setup([], {
+      setStatus: (_threadId: string, status: "open" | "resolved") =>
+        success({ ...offPage, status }),
+    });
+    api.store.setState((current) => ({ ...current, siteThreads: [offPage] }));
+
+    await api.toggleStatus(SECOND_THREAD_ID);
+
+    expect(state().siteThreads).toEqual([{ ...offPage, status: "resolved" }]);
+    expect(state().threads).toEqual([]);
+  });
+
   it("ignores a status change for an unknown thread", async () => {
     const { controller: api, calls } = await setup([existing]);
 
@@ -1145,7 +1199,7 @@ describe("linking a Jira issue", () => {
     issueKey: "PROJ-12",
     issueUrl: JIRA_URL,
     linked: true,
-    commentAdded: true,
+    linkAdded: true,
     ...overrides,
   });
 
@@ -1205,16 +1259,16 @@ describe("linking a Jira issue", () => {
     expect(state().toasts).toHaveLength(0);
   });
 
-  it("tells the user when the issue was linked without the Jira comment", async () => {
+  it("tells the user when the issue was linked but the link was not added", async () => {
     const { controller: api, state } = await setup([thread()], {
-      linkJiraIssue: () => success(linked({ commentAdded: false })),
+      linkJiraIssue: () => success(linked({ linkAdded: false })),
     });
 
     await api.linkJiraIssue(THREAD_ID, "PROJ-12");
 
     expect(state().threads[0]?.jiraIssueKey).toBe("PROJ-12");
     expect(state().toasts.map((toast) => [toast.message, toast.variant])).toEqual([
-      [JIRA_COMMENT_MISSING_MESSAGE, "info"],
+      [JIRA_LINK_MISSING_MESSAGE, "info"],
     ]);
   });
 
@@ -1886,5 +1940,82 @@ describe("recordings of existing threads", () => {
 
     expect(state().recordings.has(THREAD_ID)).toBe(false);
     expect(state().activeThreadId).toBe(THREAD_ID);
+  });
+});
+
+describe("sign-in gate of replays", () => {
+  const STEPS: RecordingStep[] = [
+    { t: 0, kind: "input", selector: 'input[name="password"]', label: "Password", sensitive: true },
+  ];
+  const replayThread = (startsSignedOut: boolean) =>
+    thread({
+      context: {
+        ...CONTEXT,
+        recording: {
+          path: "ws/thread.webm",
+          durationMs: 9_000,
+          size: 2048,
+          steps: STEPS,
+          startsSignedOut,
+        },
+      },
+    });
+
+  async function replayHarness(threads: ThreadRecord[]): Promise<Harness> {
+    const backend = fakeBackend({}, threads, [], { options: null, update: vi.fn() });
+    backend.replayProgress = {
+      load: vi.fn<ReplayProgressStore["load"]>().mockResolvedValue(null),
+      save: vi.fn<ReplayProgressStore["save"]>().mockResolvedValue(undefined),
+      clear: vi.fn<ReplayProgressStore["clear"]>().mockResolvedValue(undefined),
+    };
+    return setup(threads, {}, { backend });
+  }
+
+  it("shows the gate when the recording starts signed out", async () => {
+    const { controller: api, state } = await replayHarness([replayThread(true)]);
+
+    api.startReplay(THREAD_ID, "step");
+
+    expect(state().replayGate).toMatchObject({ threadId: THREAD_ID, mode: "step" });
+    expect(state().replay).toBeNull();
+  });
+
+  it("starts the replay without the gate when the recording does not start signed out", async () => {
+    const { controller: api, state } = await replayHarness([replayThread(false)]);
+
+    api.startReplay(THREAD_ID, "step");
+
+    await vi.waitFor(
+      () => {
+        expect(state().replay).not.toBeNull();
+      },
+      { timeout: 3000 },
+    );
+    expect(state().replayGate).toBeNull();
+  });
+
+  it("runs the replay from the gate and clears the gate", async () => {
+    const { controller: api, state } = await replayHarness([replayThread(true)]);
+    api.startReplay(THREAD_ID, "step");
+
+    api.gateRun();
+
+    await vi.waitFor(
+      () => {
+        expect(state().replay).not.toBeNull();
+      },
+      { timeout: 3000 },
+    );
+    expect(state().replayGate).toBeNull();
+  });
+
+  it("closes the gate without starting the replay", async () => {
+    const { controller: api, state } = await replayHarness([replayThread(true)]);
+    api.startReplay(THREAD_ID, "step");
+
+    api.gateClose();
+
+    expect(state().replayGate).toBeNull();
+    expect(state().replay).toBeNull();
   });
 });

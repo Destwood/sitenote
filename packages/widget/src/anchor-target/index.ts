@@ -1,4 +1,10 @@
-import { pinPosition, resolveElementAnchor, resolveTextAnchor, type Anchor } from "@sitenote/core";
+import {
+  pinPosition,
+  resolveElementAnchor,
+  resolveTextAnchor,
+  resolveTextAnchorHeading,
+  type Anchor,
+} from "@sitenote/core";
 import type { AnchorRect } from "@sitenote/ui";
 
 export type AnchorTarget =
@@ -32,9 +38,16 @@ export function resolveAnchor(anchor: Anchor, doc: Document = document): Resolut
       : ORPHANED;
   }
   const result = resolveTextAnchor(anchor, doc);
-  return result.status === "resolved"
-    ? { status: "resolved", target: { kind: "text", range: result.range } }
-    : ORPHANED;
+  if (result.status === "resolved") {
+    return { status: "resolved", target: { kind: "text", range: result.range } };
+  }
+  const heading = resolveTextAnchorHeading(anchor, doc);
+  return heading === undefined
+    ? ORPHANED
+    : {
+        status: "resolved",
+        target: { kind: "element", element: heading, offset: { x: 0.5, y: 0.5 } },
+      };
 }
 
 export function isTargetAlive(target: AnchorTarget): boolean {

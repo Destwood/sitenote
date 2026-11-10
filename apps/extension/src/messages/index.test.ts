@@ -583,6 +583,8 @@ describe("comment mode messages", () => {
       authorName: "Max",
       replies: 0,
       detached: true,
+      route: "/",
+      current: true,
     };
 
     expect(pageThreadsRequestSchema.safeParse({ type: "page.listThreads" }).success).toBe(true);

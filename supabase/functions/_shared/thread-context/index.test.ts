@@ -25,6 +25,15 @@ describe("summarizeThreadContext", () => {
     });
   });
 
+  it("accepts a context that also carries network errors", () => {
+    expect(
+      summarizeThreadContext({
+        ...context,
+        networkErrors: [{ kind: "fetch", method: "GET", url: "https://example.com/", status: 0 }],
+      }),
+    ).toMatchObject({ errorCount: 1 });
+  });
+
   it("omits the system version when the context has none", () => {
     expect(summarizeThreadContext({ ...context, os: { name: "Linux" } })?.os).toBe("Linux");
   });

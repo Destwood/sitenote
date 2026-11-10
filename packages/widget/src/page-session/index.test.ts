@@ -59,6 +59,7 @@ function deferred<Value>(): Deferred<Value> {
 function setup(responses: {
   site?: MessageResult<SiteInfo | null> | Promise<MessageResult<SiteInfo | null>>;
   lists?: (() => Promise<MessageResult<ThreadRecord[]>>)[];
+  siteList?: () => Promise<MessageResult<ThreadRecord[]>>;
 }) {
   const states: PageSessionState[] = [];
   const requests: unknown[] = [];
@@ -66,7 +67,11 @@ function setup(responses: {
   const connectionOptions: SubscribeCall[] = [];
   const connection: WidgetSubscriptionHandle = { update: vi.fn(), close: vi.fn() };
   let pageUrl: string | null = PAGE;
-  const backend: Pick<WidgetBackend, "getSiteInfo" | "listThreads" | "subscribe"> = {
+  const siteList = responses.siteList;
+  const backend: Pick<
+    WidgetBackend,
+    "getSiteInfo" | "listThreads" | "listSiteThreads" | "subscribe"
+  > = {
     getSiteInfo: (origin) => {
       requests.push({ method: "getSiteInfo", origin });
       return Promise.resolve(responses.site ?? success(SITE));
@@ -76,6 +81,14 @@ function setup(responses: {
       const next = lists.shift();
       return next === undefined ? Promise.resolve(success([])) : next();
     },
+    ...(siteList === undefined
+      ? {}
+      : {
+          listSiteThreads: (siteId: string) => {
+            requests.push({ method: "listSiteThreads", siteId });
+            return siteList();
+          },
+        }),
     subscribe: (subscription, handlers) => {
       connectionOptions.push({ subscription, ...handlers });
       return connection;
@@ -116,6 +129,7 @@ describe("start", () => {
       status: "ready",
       site: SITE,
       threads: [THREAD_A, THREAD_B],
+      siteThreads: [THREAD_A, THREAD_B],
       loaded: true,
       live: false,
       error: null,
@@ -271,11 +285,29 @@ describe("live updates", () => {
       status: "disabled",
       site: null,
       threads: [],
+      siteThreads: [],
       loaded: false,
       live: false,
       error: null,
     });
     expect(connection.close).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("site threads", () => {
+  it("keeps every thread of the site and takes the page's threads out of them", async () => {
+    const OTHER_THREAD = { ...thread("30000000-0000-4000-8000-000000000003"), pageUrl: OTHER_PAGE };
+    const { session, last, requests } = setup({
+      siteList: () => Promise.resolve(success([THREAD_A, OTHER_THREAD])),
+    });
+
+    await session.start();
+
+    expect(requests).toContainEqual({ method: "listSiteThreads", siteId: SITE.siteId });
+    expect(last()).toMatchObject({
+      siteThreads: [THREAD_A, OTHER_THREAD],
+      threads: [THREAD_A],
+    });
   });
 });
 

@@ -373,7 +373,7 @@ export function SitePanel({ webUrl, onManageSites, onWorkspaceControl }: SitePan
       </div>
       {enabled ? (
         <>
-          <PageThreadsPanel tabId={tab.id} />
+          <PageThreadsPanel tabId={tab.id} dashboardUrl={dashboardUrl} />
           <div className="flex flex-wrap gap-2">
             <button
               type="button"

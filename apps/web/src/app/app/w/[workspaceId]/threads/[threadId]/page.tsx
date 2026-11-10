@@ -4,7 +4,6 @@ import { notFound, redirect } from "next/navigation";
 
 import { isClickUpConfigured } from "../../../../../../clickup-api";
 import { ClickUpTaskPanel } from "../../../../../../clickup-task-panel";
-import { CopyLink } from "../../../../../../copy-link";
 import { getPublicEnv } from "../../../../../../env";
 import { DASH_CARD_CLASS, DASH_LINK_CLASS } from "../../../../../../dashboard-classes";
 import { isJiraConfigured } from "../../../../../../jira-api";
@@ -12,6 +11,8 @@ import { JiraIssuePanel } from "../../../../../../jira-issue-panel";
 import { PageContext } from "../../../../../../page-context";
 import { PageHeader } from "../../../../../../page-header";
 import { pagePathLabel } from "../../../../../../page-path";
+import { readThreadShare } from "../../../../../../share-access";
+import { SharePanel } from "../../../../../../share-panel";
 import {
   createSupabaseServerClient,
   getAuthenticatedUser,
@@ -21,6 +22,7 @@ import { readThreadDetail } from "../../../../../../thread-detail";
 import { ThreadFacts } from "../../../../../../thread-facts";
 import { ThreadStatusForm } from "../../../../../../thread-status-form";
 import { parseUuid } from "../../../../../../uuid";
+import { readWorkspaceAccess } from "../../../../../../workspace-access";
 import { threadPath, workspacePath } from "../../../../../../workspace-paths";
 
 export const metadata: Metadata = {
@@ -50,8 +52,14 @@ export default async function ThreadPage({ params }: ThreadPageProps) {
   if (detail === null) {
     notFound();
   }
+  const access = await readWorkspaceAccess(supabase, user.id, workspaceId);
+  if (access === null) {
+    notFound();
+  }
   const canCreateClickUpTask = await isClickUpConfigured(supabase, workspaceId);
   const canLinkJira = await isJiraConfigured(supabase, workspaceId);
+  const share = await readThreadShare(supabase, threadId);
+  const canManage = access.role === "owner" || access.role === "member";
   const { webUrl } = getPublicEnv();
 
   return (
@@ -74,10 +82,18 @@ export default async function ThreadPage({ params }: ThreadPageProps) {
               Context
             </h2>
             <PageContext
+              thread={{
+                excerpt: detail.excerpt,
+                authorName: detail.authorName,
+                status: detail.status,
+                pageUrl: detail.pageUrl,
+                anchor: detail.anchor,
+              }}
               context={detail.context}
               hasScreenshot={detail.hasScreenshot}
               screenshot={detail.screenshot}
               recording={detail.recording}
+              largeVideo
             />
           </section>
           <section
@@ -106,9 +122,7 @@ export default async function ThreadPage({ params }: ThreadPageProps) {
               status={detail.status}
             />
           </section>
-          <section className={`${DASH_CARD_CLASS} flex flex-col gap-4 p-5`}>
-            <CopyLink label="Thread link" value={`${webUrl}/t/${threadId}`} />
-          </section>
+          <SharePanel threadId={threadId} share={share} canManage={canManage} webUrl={webUrl} />
           <ClickUpTaskPanel
             threadId={threadId}
             taskUrl={detail.clickUpTaskUrl}
@@ -116,6 +130,7 @@ export default async function ThreadPage({ params }: ThreadPageProps) {
           />
           <JiraIssuePanel
             threadId={threadId}
+            workspaceId={detail.workspaceId}
             issueKey={detail.jiraIssueKey}
             issueUrl={detail.jiraIssueUrl}
             canLink={canLinkJira}

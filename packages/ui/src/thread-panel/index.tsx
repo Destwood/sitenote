@@ -1,3 +1,4 @@
+import type { ReplayMode } from "@sitenote/core";
 import {
   useEffect,
   useEffectEvent,
@@ -30,9 +31,11 @@ export interface ThreadPanelProps {
   mentionCandidates?: readonly PersonView[] | undefined;
   screenshot?: ScreenshotState | undefined;
   recording?: ScreenshotState | undefined;
+  recordingAttached?: boolean | undefined;
   clickUp?: ClickUpTaskState | undefined;
   jira?: JiraIssueState | undefined;
-  onReplaySteps?: (() => void) | undefined;
+  onReplaySteps?: ((mode: ReplayMode) => void) | undefined;
+  onCopyContext?: (() => Promise<boolean> | boolean) | undefined;
   onSubmit: (submission: ComposerSubmission) => Promise<void>;
   onEditComment: (commentId: string, body: string) => Promise<void>;
   onDeleteComment: (commentId: string) => Promise<void>;
@@ -56,9 +59,11 @@ export function ThreadPanel({
   mentionCandidates,
   screenshot,
   recording,
+  recordingAttached,
   clickUp,
   jira,
   onReplaySteps,
+  onCopyContext,
   onSubmit,
   onEditComment,
   onDeleteComment,
@@ -199,6 +204,7 @@ export function ThreadPanel({
             screenshot={screenshot}
             recording={recording}
             onReplaySteps={onReplaySteps}
+            onCopyContext={onCopyContext}
           />
         </div>
       )}
@@ -210,6 +216,7 @@ export function ThreadPanel({
           autoFocus
           error={error}
           mentionCandidates={mentionCandidates}
+          startsSignedOutOption={isNew && recordingAttached === true}
           onSubmit={onSubmit}
           onCancel={isNew ? onClose : undefined}
         />

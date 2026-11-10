@@ -255,7 +255,7 @@ describe("attach", () => {
 });
 
 describe("thread changes", () => {
-  it("tells the ports on the page of a changed thread and nobody else", async () => {
+  it("tells every port of the site about a changed thread, whatever page it is on", async () => {
     const { hub, channels } = setup();
     const pricing = await join(hub, PAGE);
     const about = await join(hub, OTHER_PAGE);
@@ -270,7 +270,7 @@ describe("thread changes", () => {
       { type: "threads.changed", threadId: THREAD_ID },
       { type: "threads.changed", threadId: THREAD_ID },
     ]);
-    expect(about.events).toEqual([]);
+    expect(about.events).toEqual(pricing.events);
   });
 
   it("follows a port that navigates to another page", async () => {
@@ -283,7 +283,10 @@ describe("thread changes", () => {
     channels[0]?.handlers.onThread({ kind: "INSERT", id: THREAD_ID, pageUrl: PAGE });
     channels[0]?.handlers.onThread({ kind: "INSERT", id: THREAD_ID, pageUrl: OTHER_PAGE });
 
-    expect(port.events).toEqual([{ type: "threads.changed", threadId: THREAD_ID }]);
+    expect(port.events).toEqual([
+      { type: "threads.changed", threadId: THREAD_ID },
+      { type: "threads.changed", threadId: THREAD_ID },
+    ]);
   });
 
   it("drops a port that navigates to another origin", async () => {
@@ -343,7 +346,7 @@ describe("comment changes", () => {
     expect(port.events).toHaveLength(2);
   });
 
-  it("stays silent when the thread is on another page or cannot be found", async () => {
+  it("tells the port of another page about a comment and stays silent when the thread cannot be found", async () => {
     const { hub, channels, deps } = setup();
     const port = await join(hub, OTHER_PAGE);
     channels[0]?.handlers.onSubscribed(false);
@@ -355,7 +358,7 @@ describe("comment changes", () => {
     channels[0]?.handlers.onComment({ threadId: "30000000-0000-4000-8000-000000000009" });
     await flush();
 
-    expect(port.events).toEqual([]);
+    expect(port.events).toEqual([{ type: "comments.changed", threadId: THREAD_ID }]);
   });
 
   it("survives a failing thread lookup", async () => {

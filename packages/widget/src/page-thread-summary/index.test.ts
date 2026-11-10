@@ -7,6 +7,7 @@ import { SUMMARY_EXCERPT_LIMIT, summarizeThreads } from ".";
 
 const ME = "00000000-0000-4000-8000-000000000002";
 const THREAD_ID = "30000000-0000-4000-8000-000000000001";
+const PAGE_URL = "https://example.test/";
 
 const ANCHOR: Anchor = {
   kind: "element",
@@ -33,7 +34,7 @@ function thread(overrides: Partial<ThreadRecord> = {}): ThreadRecord {
   return {
     id: THREAD_ID,
     siteId: "20000000-0000-4000-8000-000000000001",
-    pageUrl: "https://example.test/",
+    pageUrl: PAGE_URL,
     status: "open",
     anchor: ANCHOR,
     author: { id: ME, displayName: "Max Member", avatarUrl: null },
@@ -58,7 +59,7 @@ describe("summarizeThreads", () => {
     });
     const early = thread();
 
-    const summaries = summarizeThreads([late, early], new Map([[early.id, RESOLVED]]));
+    const summaries = summarizeThreads([late, early], new Map([[early.id, RESOLVED]]), PAGE_URL);
 
     expect(summaries.map((summary) => [summary.id, summary.number])).toEqual([
       [early.id, 1],
@@ -76,7 +77,7 @@ describe("summarizeThreads", () => {
       ],
     });
 
-    expect(summarizeThreads([withReplies], new Map([[THREAD_ID, RESOLVED]]))).toEqual([
+    expect(summarizeThreads([withReplies], new Map([[THREAD_ID, RESOLVED]]), PAGE_URL)).toEqual([
       {
         id: THREAD_ID,
         number: 1,
@@ -85,6 +86,8 @@ describe("summarizeThreads", () => {
         authorName: "Max Member",
         replies: 2,
         detached: false,
+        route: "/",
+        current: true,
       },
     ]);
   });
@@ -103,6 +106,7 @@ describe("summarizeThreads", () => {
         }),
       ],
       new Map(),
+      PAGE_URL,
     );
 
     expect(summary[0]?.excerpt).toBe("Make this shorter");
@@ -112,16 +116,25 @@ describe("summarizeThreads", () => {
   it("cuts a long excerpt to the limit with an ellipsis", () => {
     const body = "x".repeat(SUMMARY_EXCERPT_LIMIT + 10);
 
-    const [summary] = summarizeThreads([thread({ comments: [comment({ body })] })], new Map());
+    const [summary] = summarizeThreads(
+      [thread({ comments: [comment({ body })] })],
+      new Map(),
+      PAGE_URL,
+    );
 
     expect(summary?.excerpt).toBe(`${"x".repeat(SUMMARY_EXCERPT_LIMIT)}…`);
   });
 
   it("keeps a short excerpt whole and an empty one empty", () => {
-    const short = summarizeThreads([thread({ comments: [comment({ body: "Short" })] })], new Map());
+    const short = summarizeThreads(
+      [thread({ comments: [comment({ body: "Short" })] })],
+      new Map(),
+      PAGE_URL,
+    );
     const empty = summarizeThreads(
       [thread({ comments: [comment({ body: "Gone", deleted: true })] })],
       new Map(),
+      PAGE_URL,
     );
 
     expect(short[0]?.excerpt).toBe("Short");
@@ -137,11 +150,28 @@ describe("summarizeThreads", () => {
       [kept.id, RESOLVED],
     ]);
 
-    const summaries = summarizeThreads([gone, kept], resolutions);
+    const summaries = summarizeThreads([gone, kept], resolutions, PAGE_URL);
 
     expect(summaries.map((summary) => [summary.id, summary.detached])).toEqual([
       [gone.id, true],
       [kept.id, false],
+    ]);
+  });
+
+  it("numbers each route separately and lists the current page first", () => {
+    const elsewhere = thread({
+      id: "30000000-0000-4000-8000-000000000002",
+      pageUrl: "https://example.test/about",
+    });
+    const here = thread({ id: "30000000-0000-4000-8000-000000000003", createdAt: "2026-10-22" });
+
+    const summaries = summarizeThreads([elsewhere, here], new Map(), PAGE_URL);
+
+    expect(
+      summaries.map((summary) => [summary.id, summary.number, summary.route, summary.current]),
+    ).toEqual([
+      [here.id, 1, "/", true],
+      [elsewhere.id, 1, "/about", false],
     ]);
   });
 });

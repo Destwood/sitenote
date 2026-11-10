@@ -14,7 +14,26 @@ export interface JiraLinkResult {
   issueKey: string;
   issueUrl: string;
   linked: boolean;
-  commentAdded: boolean;
+  linkAdded: boolean;
+}
+
+export interface JiraIssueSummary {
+  key: string;
+  summary: string;
+  status: string;
+  projectKey: string;
+  projectName: string;
+  url: string;
+}
+
+export interface JiraProject {
+  key: string;
+  name: string;
+}
+
+export interface JiraSearchResult {
+  issues: JiraIssueSummary[];
+  projects: JiraProject[];
 }
 
 export interface JiraSettings {
@@ -39,7 +58,20 @@ const linkResultSchema = z.object({
   issueKey: z.string(),
   issueUrl: z.string(),
   linked: z.boolean(),
-  commentAdded: z.boolean(),
+  linkAdded: z.boolean(),
+});
+const searchResultSchema = z.object({
+  issues: z.array(
+    z.object({
+      key: z.string(),
+      summary: z.string(),
+      status: z.string(),
+      projectKey: z.string(),
+      projectName: z.string(),
+      url: z.string(),
+    }),
+  ),
+  projects: z.array(z.object({ key: z.string(), name: z.string() })),
 });
 const errorEnvelopeSchema = z.object({
   error: z.object({ code: z.string(), message: z.string() }),
@@ -115,6 +147,24 @@ export function linkJiraIssue(
   issueKey: string,
 ): Promise<JiraOutcome<JiraLinkResult>> {
   return invoke(supabase, "jira-link-issue", { threadId, issueKey }, linkResultSchema);
+}
+
+export async function searchJiraIssues(
+  supabase: SitenoteClient,
+  workspaceId: string,
+  query: string,
+  projectKey?: string,
+  includeProjects?: boolean,
+): Promise<{ ok: true; issues: JiraIssueSummary[]; projects: JiraProject[] } | JiraFailure> {
+  const result = await invoke(
+    supabase,
+    "jira-search-issues",
+    { workspaceId, query, projectKey, includeProjects },
+    searchResultSchema,
+  );
+  return result.ok
+    ? { ok: true, issues: result.data.issues, projects: result.data.projects }
+    : result;
 }
 
 export async function isJiraConfigured(

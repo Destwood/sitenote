@@ -1,17 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState, type KeyboardEvent } from "react";
 
 import { ERROR_CLASS, LINK_BUTTON_CLASS } from "../form-controls";
 import { Icon } from "../icon";
 import { listPageThreads, openPageSidebar, openPageThread } from "../message-client";
+import { RouteLabel, routeDisplayText } from "@sitenote/ui";
 import { ERROR_MESSAGES, type PageThreadSummary } from "@sitenote/widget";
 
 type View =
   { kind: "loading" } | { kind: "error" } | { kind: "ready"; threads: PageThreadSummary[] };
 
+type ThreadTab = PageThreadSummary["status"];
+
 interface PageThreadsPanelProps {
   tabId: number;
+  dashboardUrl: string;
   close?: () => void;
 }
+
+const FOOTER_BUTTON_CLASS =
+  "flex h-9 items-center justify-center gap-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900";
 
 function closePopup(): void {
   window.close();
@@ -32,9 +39,29 @@ export function commentsSummary(total: number, open: number): string {
   return open === 1 ? "1 open comment" : `${String(open)} open comments`;
 }
 
-export function PageThreadsPanel({ tabId, close = closePopup }: PageThreadsPanelProps) {
+export function PageThreadsPanel({
+  tabId,
+  dashboardUrl,
+  close = closePopup,
+}: PageThreadsPanelProps) {
+  const id = useId();
   const [view, setView] = useState<View>({ kind: "loading" });
   const [openError, setOpenError] = useState<string | null>(null);
+  const [tab, setTab] = useState<ThreadTab>("open");
+  const [routeFilter, setRouteFilter] = useState("all");
+  const [copyStatus, setCopyStatus] = useState<{ message: string } | null>(null);
+
+  useEffect(() => {
+    if (copyStatus === null) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setCopyStatus(null);
+    }, 2000);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [copyStatus]);
 
   useEffect(() => {
     let active = true;
@@ -73,6 +100,15 @@ export function PageThreadsPanel({ tabId, close = closePopup }: PageThreadsPanel
     close();
   }
 
+  async function copyRoute(route: string) {
+    try {
+      await navigator.clipboard.writeText(route);
+      setCopyStatus({ message: "Route copied" });
+    } catch {
+      setCopyStatus({ message: "Could not copy the route" });
+    }
+  }
+
   if (view.kind === "loading") {
     return (
       <p role="status" className="text-sm text-neutral-500">
@@ -94,6 +130,38 @@ export function PageThreadsPanel({ tabId, close = closePopup }: PageThreadsPanel
 
   const openCount = view.threads.filter((thread) => thread.status === "open").length;
   const hasThreads = view.threads.length > 0;
+  const routes = [...new Set(view.threads.map((thread) => thread.route))];
+  const multiRoute = routes.length > 1;
+  const currentRoute = view.threads.find((thread) => thread.current)?.route;
+  const tabThreads = view.threads.filter((thread) => thread.status === tab);
+  const tabRouteCount = new Set(tabThreads.map((thread) => thread.route)).size;
+  const filterRoutes = routes.filter(
+    (route) => route === routeFilter || tabThreads.some((thread) => thread.route === route),
+  );
+  const showRouteFilter = tabRouteCount > 1 || routeFilter !== "all";
+  const scopedThreads =
+    routeFilter === "all"
+      ? view.threads
+      : view.threads.filter((thread) => thread.route === routeFilter);
+  const scopedOpenCount = scopedThreads.filter((thread) => thread.status === "open").length;
+  const scopedResolvedCount = scopedThreads.length - scopedOpenCount;
+  const visibleThreads = scopedThreads.filter((thread) => thread.status === tab);
+  const panelId = `${id}-panel`;
+  const tabIdOf = (value: ThreadTab) => `${id}-tab-${value}`;
+  const tabs = [
+    { value: "open", label: `Open (${String(scopedOpenCount)})` },
+    { value: "resolved", label: `Resolved (${String(scopedResolvedCount)})` },
+  ] as const;
+
+  function onTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+      return;
+    }
+    event.preventDefault();
+    const next: ThreadTab = tab === "open" ? "resolved" : "open";
+    setTab(next);
+    document.getElementById(tabIdOf(next))?.focus();
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -108,7 +176,7 @@ export function PageThreadsPanel({ tabId, close = closePopup }: PageThreadsPanel
             </span>
             <span className="flex flex-col">
               <span className="text-sm font-semibold text-neutral-900">Open comments</span>
-              <span className="text-xs text-neutral-500">On this page</span>
+              <span className="text-xs text-neutral-500">On this site</span>
             </span>
           </div>
           {hasThreads ? (
@@ -122,65 +190,143 @@ export function PageThreadsPanel({ tabId, close = closePopup }: PageThreadsPanel
             </button>
           ) : null}
         </div>
-        <p data-testid="comments-summary" className="px-3 py-2 text-xs text-neutral-700">
-          {commentsSummary(view.threads.length, openCount)}
-        </p>
         {hasThreads ? (
-          <ul
-            aria-label="Comments on this page"
-            className="max-h-44 divide-y divide-neutral-100 overflow-y-auto border-t border-neutral-200"
-          >
-            {view.threads.map((thread) => (
-              <li key={thread.id}>
-                <button
-                  type="button"
-                  onClick={() => void openThread(thread.id)}
-                  className="flex w-full items-start gap-2.5 px-3 py-2 text-left hover:bg-neutral-50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-neutral-900"
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${thread.status === "open" ? "bg-blue-600 text-white" : "bg-neutral-200 text-neutral-600"}`}
+          <>
+            {showRouteFilter ? (
+              <select
+                aria-label="Filter by page"
+                value={routeFilter}
+                onChange={(event) => {
+                  setRouteFilter(event.target.value);
+                }}
+                className="w-full border-t border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-900 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-neutral-900"
+              >
+                <option value="all">{`All pages (${String(tabThreads.length)})`}</option>
+                {filterRoutes.map((route) => (
+                  <option key={route} value={route}>
+                    {`${route === currentRoute ? "This page" : routeDisplayText(route)} (${String(tabThreads.filter((thread) => thread.route === route).length)})`}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <div
+              role="tablist"
+              aria-label="Comments by status"
+              className="grid grid-cols-2 border-t border-neutral-200"
+            >
+              {tabs.map(({ value, label }) => {
+                const selected = tab === value;
+                return (
+                  <button
+                    key={value}
+                    id={tabIdOf(value)}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    aria-controls={panelId}
+                    tabIndex={selected ? 0 : -1}
+                    onClick={() => {
+                      setTab(value);
+                    }}
+                    onKeyDown={onTabKeyDown}
+                    className={`h-9 border-b-2 text-xs focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-neutral-900 ${selected ? "border-blue-600 font-semibold text-neutral-900" : "border-transparent text-neutral-500 hover:text-neutral-900"}`}
                   >
-                    {thread.number}
-                  </span>
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="flex items-center justify-between gap-2">
-                      <span className="truncate text-xs font-semibold text-neutral-900">
-                        {thread.authorName}
-                      </span>
-                      {thread.replies > 0 ? (
-                        <span className="flex shrink-0 items-center gap-1 text-[11px] text-neutral-500">
-                          <Icon name="comment" size={11} />
-                          {thread.replies}
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <div role="tabpanel" id={panelId} aria-labelledby={tabIdOf(tab)}>
+              {visibleThreads.length === 0 ? (
+                <p className="px-3 py-3 text-xs text-neutral-700">
+                  {tab === "open" ? "No open comments" : "No resolved comments"}
+                </p>
+              ) : (
+                <ul
+                  aria-label="Comments on this page"
+                  className="max-h-44 divide-y divide-neutral-100 overflow-y-auto border-t border-neutral-200"
+                >
+                  {visibleThreads.map((thread) => (
+                    <li key={thread.id} className="flex flex-col">
+                      <button
+                        type="button"
+                        onClick={() => void openThread(thread.id)}
+                        className="flex w-full items-start gap-2.5 px-3 py-2 text-left hover:bg-neutral-50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-neutral-900"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${thread.status === "open" ? "bg-blue-600 text-white" : "bg-neutral-200 text-neutral-600"}`}
+                        >
+                          {thread.number}
                         </span>
+                        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span className="flex items-center justify-between gap-2">
+                            <span className="truncate text-xs font-semibold text-neutral-900">
+                              {thread.authorName}
+                            </span>
+                            {thread.replies > 0 ? (
+                              <span className="flex shrink-0 items-center gap-1 text-[11px] text-neutral-500">
+                                <Icon name="comment" size={11} />
+                                {thread.replies}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="line-clamp-2 text-xs text-neutral-600">
+                            {thread.excerpt === "" ? "(no text)" : thread.excerpt}
+                          </span>
+                          {thread.status === "open" ? null : (
+                            <span className="text-[10px] text-neutral-500">Resolved</span>
+                          )}
+                          {thread.detached ? (
+                            <span className="text-[10px] text-neutral-500">Not found on page</span>
+                          ) : null}
+                        </span>
+                      </button>
+                      {multiRoute ? (
+                        <div className="px-3 pb-2">
+                          <RouteLabel
+                            route={thread.route}
+                            onCopy={(route) => void copyRoute(route)}
+                            className="text-[10px] text-neutral-500"
+                          />
+                        </div>
                       ) : null}
-                    </span>
-                    <span className="line-clamp-2 text-xs text-neutral-600">
-                      {thread.excerpt === "" ? "(no text)" : thread.excerpt}
-                    </span>
-                    {thread.status === "open" ? null : (
-                      <span className="text-[10px] text-neutral-500">Resolved</span>
-                    )}
-                    {thread.detached ? (
-                      <span className="text-[10px] text-neutral-500">Not found on page</span>
-                    ) : null}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {hasThreads ? (
-          <button
-            type="button"
-            onClick={() => void openSidebar()}
-            className="flex h-9 w-full items-center justify-center gap-1.5 rounded-b-lg border-t border-neutral-200 text-xs font-semibold text-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
-          >
-            Open all comments on page
-            <Icon name="external" size={13} />
-          </button>
-        ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="grid grid-cols-2 border-t border-neutral-200">
+              <button
+                type="button"
+                onClick={() => void openSidebar()}
+                className={`${FOOTER_BUTTON_CLASS} rounded-bl-lg`}
+              >
+                Show all
+                <Icon name="external" size={13} />
+              </button>
+              <a
+                href={dashboardUrl}
+                target="_blank"
+                rel="noreferrer"
+                className={`${FOOTER_BUTTON_CLASS} rounded-br-lg border-l border-neutral-200`}
+              >
+                <Icon name="table" size={13} />
+                Open dashboard
+              </a>
+            </div>
+          </>
+        ) : (
+          <p data-testid="comments-summary" className="px-3 py-2 text-xs text-neutral-700">
+            {commentsSummary(view.threads.length, openCount)}
+          </p>
+        )}
       </div>
+      {copyStatus === null ? null : (
+        <p role="status" className="text-xs text-neutral-600">
+          {copyStatus.message}
+        </p>
+      )}
       {openError === null ? null : (
         <p role="alert" className={ERROR_CLASS}>
           {openError}

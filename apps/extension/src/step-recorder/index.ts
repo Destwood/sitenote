@@ -127,7 +127,13 @@ export function createStepRecorder(deps: StepRecorderDeps): StepRecorder {
   let cleanup: (() => void) | null = null;
   let last: { step: RecordingStep; at: number } | null = null;
 
-  function emit(fields: { kind: StepKind; selector: string; label: string; url?: string }): void {
+  function emit(fields: {
+    kind: StepKind;
+    selector: string;
+    label: string;
+    url?: string;
+    sensitive?: boolean;
+  }): void {
     const now = deps.now();
     const step = sanitizeStep({ t: now - origin, ...fields });
     const repeated =
@@ -145,7 +151,12 @@ export function createStepRecorder(deps: StepRecorderDeps): StepRecorder {
   }
 
   function report(kind: StepKind, element: Element): void {
-    emit({ kind, selector: selectorOf(element), label: labelOf(deps.doc, element) });
+    emit({
+      kind,
+      selector: selectorOf(element),
+      label: labelOf(deps.doc, element),
+      sensitive: isSensitive(element),
+    });
   }
 
   function onClick(event: Event): void {

@@ -28,6 +28,7 @@ import { createRealtimeHub } from "../realtime-hub";
 import { createRecordingUploader } from "../recording-upload";
 import { createRecordingService, RECORDING_BADGE_COLOR } from "../recording-service";
 import { RECORDING_MAX_MS, RECORDING_STOP_BYTES } from "../recording-store";
+import { createReplayProgress } from "../replay-progress";
 import { planRefresh, REFRESH_ALARM_NAME, type RefreshOutcome } from "../refresh-schedule";
 import { createResolvedPreference } from "../resolved-preference";
 import { cropDataUrl } from "../screenshot-crop";
@@ -163,6 +164,7 @@ export function startBackground(): void {
     },
     wait: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
   });
+  const replay = createReplayProgress(browser.storage.session);
   const hub = createRealtimeHub({
     factory: createChannelFactory(client),
     getEnabledSite: store.get,
@@ -252,6 +254,7 @@ export function startBackground(): void {
     notifications,
     screenshots,
     recordings,
+    replay,
     preferences: createResolvedPreference(browser.storage.local),
     selectionPlacement: createSelectionPlacementPreference(browser.storage.local),
     getEnabledSite: store.get,
@@ -287,6 +290,7 @@ export function startBackground(): void {
   });
   browser.tabs.onRemoved.addListener((tabId) => {
     recordings.onTabRemoved(tabId);
+    ignoreFailure(replay.clear(tabId));
   });
   browser.commands.onCommand.addListener(createCommandListener(toggleCommentMode));
   browser.contextMenus.onClicked.addListener(createContextMenuClickListener({ commentOnElement }));

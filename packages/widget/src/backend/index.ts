@@ -1,4 +1,4 @@
-import type { Anchor, ThreadContext } from "@sitenote/core";
+import type { Anchor, ReplaySource, ThreadContext } from "@sitenote/core";
 import type { SelectionPlacement } from "@sitenote/ui";
 
 import type {
@@ -14,6 +14,7 @@ import type {
   ThreadStatus,
 } from "../transport";
 import type { MessageResult } from "../result";
+import type { ReplayProgressStore } from "../replay-runner";
 
 export type WidgetEvent =
   | { type: "threads.changed"; threadId: string }
@@ -45,6 +46,7 @@ export interface CreateThreadInput {
   captureId?: string;
   body: string;
   mentions: string[];
+  startsSignedOut?: boolean;
 }
 
 export interface CreateCommentInput {
@@ -61,6 +63,7 @@ export interface UpdateCommentInput {
 export interface WidgetBackend {
   getSiteInfo: (origin: string) => Promise<MessageResult<SiteInfo | null>>;
   listThreads: (siteId: string, pageUrl: string) => Promise<MessageResult<ThreadRecord[]>>;
+  listSiteThreads?: (siteId: string) => Promise<MessageResult<ThreadRecord[]>>;
   createThread: (input: CreateThreadInput) => Promise<MessageResult<ThreadRecord>>;
   setStatus: (threadId: string, status: ThreadStatus) => Promise<MessageResult<ThreadRecord>>;
   createComment: (input: CreateCommentInput) => Promise<MessageResult<CommentRecord>>;
@@ -77,6 +80,8 @@ export interface WidgetBackend {
   ) => Promise<MessageResult<CapturedScreenshot>>;
   getScreenshotUrl: (threadId: string) => Promise<MessageResult<string | null>>;
   getRecordingUrl?: (threadId: string) => Promise<MessageResult<string | null>>;
+  getReplaySource?: (threadId: string) => Promise<MessageResult<ReplaySource | null>>;
+  replayProgress?: ReplayProgressStore;
   collectContext: () => Promise<ThreadContext>;
   getPreference: (siteId: string) => Promise<MessageResult<Preferences>>;
   setPreference: (siteId: string, showResolved: boolean) => Promise<MessageResult<null>>;

@@ -1,4 +1,9 @@
-import { createFingerprint, fingerprintSimilarity, textSimilarity } from "../fingerprint";
+import {
+  classSimilarity,
+  createFingerprint,
+  fingerprintSimilarity,
+  textSimilarity,
+} from "../fingerprint";
 import { type ElementAnchor, type Fingerprint } from "../schema";
 import { buildCssSelector, buildNthPath, isStableId } from "../selector";
 import { isInsideIgnoredElement } from "../text-model";
@@ -176,5 +181,25 @@ export function resolveElementAnchor(
   doc: Document = document,
 ): ElementResolution {
   const bySelectors = resolveBySelectors(anchor, doc);
-  return bySelectors.status === "resolved" ? bySelectors : resolveByFingerprint(anchor, doc);
+  if (bySelectors.status === "resolved") {
+    return bySelectors;
+  }
+  const byFingerprint = resolveByFingerprint(anchor, doc);
+  if (byFingerprint.status === "resolved") {
+    return byFingerprint;
+  }
+
+  const { css, nthPath } = anchor.selectors;
+  if (css === nthPath || css.includes(":nth-")) {
+    return ORPHANED;
+  }
+  const [element, ...others] = queryAll(doc, css);
+  if (!element || others.length > 0 || buildNthPath(element) !== nthPath) {
+    return ORPHANED;
+  }
+  const current = createFingerprint(element);
+  return current.tag === anchor.fingerprint.tag &&
+    classSimilarity(anchor.fingerprint.classes, current.classes) === 1
+    ? { status: "resolved", element, method: "css", confidence: ACCEPT_THRESHOLD }
+    : ORPHANED;
 }

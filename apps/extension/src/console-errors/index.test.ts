@@ -6,6 +6,7 @@ import {
 } from "@sitenote/core";
 import { describe, expect, it, vi } from "vitest";
 
+import { createNetworkBuffer } from "../network-errors";
 import {
   BUFFER_SIZE,
   ERRORS_REQUEST_TYPE,
@@ -35,7 +36,8 @@ function setup() {
     },
   }) as unknown as CaptureTarget;
   const buffer = createErrorBuffer(() => NOW);
-  installErrorCapture(win, buffer);
+  const network = createNetworkBuffer(() => NOW);
+  installErrorCapture(win, buffer, network);
   function request(data: unknown, init: { origin?: string; source?: unknown } = {}) {
     const event = new MessageEvent("message", {
       data,
@@ -44,7 +46,7 @@ function setup() {
     Object.defineProperty(event, "source", { value: "source" in init ? init.source : win });
     win.dispatchEvent(event);
   }
-  return { win, buffer, original, posted, request };
+  return { win, buffer, network, original, posted, request };
 }
 
 describe("limits", () => {
@@ -257,7 +259,7 @@ describe("installErrorCapture", () => {
     const { win, buffer } = setup();
     const wrapper = win.console.error;
 
-    installErrorCapture(win, createErrorBuffer());
+    installErrorCapture(win, createErrorBuffer(), createNetworkBuffer());
 
     expect(win.console.error).toBe(wrapper);
     win.console.error("once");
@@ -274,15 +276,16 @@ describe("installErrorCapture", () => {
     }) as unknown as CaptureTarget;
 
     expect(() => {
-      installErrorCapture(win, createErrorBuffer());
+      installErrorCapture(win, createErrorBuffer(), createNetworkBuffer());
     }).not.toThrow();
   });
 });
 
 describe("the request channel", () => {
-  it("answers a matching request to its own origin with the records and the nonce", () => {
-    const { buffer, posted, request } = setup();
+  it("answers a matching request to its own origin with the records, the network records and the nonce", () => {
+    const { buffer, network, posted, request } = setup();
     buffer.push({ kind: "error", message: "one" });
+    network.push({ kind: "fetch", method: "GET", url: "https://example.test/a", status: 404 });
 
     request({ source: MESSAGE_SOURCE, type: ERRORS_REQUEST_TYPE, nonce: "n-1" });
 
@@ -293,6 +296,15 @@ describe("the request channel", () => {
           type: ERRORS_RESPONSE_TYPE,
           nonce: "n-1",
           records: [{ kind: "error", message: "one", at: NOW.toISOString() }],
+          network: [
+            {
+              kind: "fetch",
+              method: "GET",
+              url: "https://example.test/a",
+              status: 404,
+              at: NOW.toISOString(),
+            },
+          ],
         },
         origin: "https://example.test",
       },

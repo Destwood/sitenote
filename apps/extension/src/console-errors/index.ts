@@ -1,3 +1,5 @@
+import type { NetworkBuffer } from "../network-errors";
+
 export const MESSAGE_SOURCE = "sitenote";
 export const ERRORS_REQUEST_TYPE = "errors.request";
 export const ERRORS_RESPONSE_TYPE = "errors.response";
@@ -202,7 +204,11 @@ function hasMark(target: unknown): boolean {
   return typeof target === "function" && Reflect.get(target, WRAPPED_MARK) === true;
 }
 
-export function installErrorCapture(win: CaptureTarget, buffer: ErrorBuffer): void {
+export function installErrorCapture(
+  win: CaptureTarget,
+  buffer: ErrorBuffer,
+  network: Pick<NetworkBuffer, "snapshot">,
+): void {
   if (hasMark(win.console.error)) {
     return;
   }
@@ -253,6 +259,7 @@ export function installErrorCapture(win: CaptureTarget, buffer: ErrorBuffer): vo
           type: ERRORS_RESPONSE_TYPE,
           nonce,
           records: buffer.snapshot(),
+          network: network.snapshot(),
         },
         win.location.origin,
       );

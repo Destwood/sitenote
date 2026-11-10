@@ -1,4 +1,4 @@
-import { parseThreadContext, type ThreadContext } from "@sitenote/core";
+import { anchorSchema, parseThreadContext, type Anchor, type ThreadContext } from "@sitenote/core";
 import type { Enums, SitenoteClient } from "@sitenote/db";
 import type { ScreenshotState } from "@sitenote/ui";
 
@@ -16,6 +16,8 @@ export interface ThreadDetail {
   createdAt: string;
   resolvedAt: string | null;
   authorName: string;
+  excerpt: string;
+  anchor: Anchor | null;
   context: ThreadContext | null;
   hasScreenshot: boolean;
   screenshot: ScreenshotState | undefined;
@@ -34,7 +36,7 @@ export async function readThreadDetail(
   const query = supabase
     .from("threads")
     .select(
-      "id, workspace_id, page_url, status, created_at, created_by, resolved_at, screenshot_path, context, clickup_task_url, jira_issue_key, jira_issue_url",
+      "id, workspace_id, page_url, status, created_at, created_by, resolved_at, screenshot_path, context, anchor, clickup_task_url, jira_issue_key, jira_issue_url",
     )
     .eq("id", threadId);
   const thread = await (
@@ -61,6 +63,8 @@ export async function readThreadDetail(
   }
 
   const context = parseThreadContext(data.context);
+  const parsedAnchor = anchorSchema.safeParse(data.anchor);
+  const comments = toCommentViews(commentRows.data, members);
   const recordingPath = context?.recording?.path;
   const [screenshot, recording] = await Promise.all([
     data.screenshot_path === null ? undefined : readScreenshotState(supabase, data.screenshot_path),
@@ -76,6 +80,8 @@ export async function readThreadDetail(
     authorName:
       members.find((member) => member.userId === data.created_by)?.displayName ??
       FORMER_MEMBER_LABEL,
+    excerpt: comments.find((comment) => !comment.deleted)?.body ?? "",
+    anchor: parsedAnchor.success ? parsedAnchor.data : null,
     context,
     hasScreenshot: data.screenshot_path !== null,
     screenshot,
@@ -83,6 +89,6 @@ export async function readThreadDetail(
     clickUpTaskUrl: data.clickup_task_url,
     jiraIssueKey: data.jira_issue_key,
     jiraIssueUrl: data.jira_issue_url,
-    comments: toCommentViews(commentRows.data, members),
+    comments,
   };
 }

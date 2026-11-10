@@ -61,26 +61,22 @@ export function createRealtimeHub(deps: RealtimeHubDeps): RealtimeHub {
     }
   }
 
-  function notifyPage(entry: SiteEntry, pageUrl: string, event: PageEvent): void {
+  function notifySite(entry: SiteEntry, event: PageEvent): void {
     for (const subscriber of entry.subscribers) {
-      if (subscriber.pageUrl === pageUrl) {
-        deliver(subscriber, event);
-      }
+      deliver(subscriber, event);
     }
   }
 
   function handleThread(entry: SiteEntry, change: ThreadChange): void {
     if (change.kind === "DELETE") {
-      const pageUrl = entry.pages.get(change.id);
-      entry.pages.delete(change.id);
-      if (pageUrl !== undefined) {
-        notifyPage(entry, pageUrl, { type: "threads.changed", threadId: change.id });
+      if (entry.pages.delete(change.id)) {
+        notifySite(entry, { type: "threads.changed", threadId: change.id });
       }
       return;
     }
     if (change.pageUrl !== null) {
       entry.pages.set(change.id, change.pageUrl);
-      notifyPage(entry, change.pageUrl, { type: "threads.changed", threadId: change.id });
+      notifySite(entry, { type: "threads.changed", threadId: change.id });
     }
   }
 
@@ -91,7 +87,7 @@ export function createRealtimeHub(deps: RealtimeHubDeps): RealtimeHub {
       return;
     }
     entry.pages.set(change.threadId, pageUrl);
-    notifyPage(entry, pageUrl, { type: "comments.changed", threadId: change.threadId });
+    notifySite(entry, { type: "comments.changed", threadId: change.threadId });
   }
 
   function openChannel(entry: SiteEntry): Promise<void> {

@@ -12,6 +12,8 @@ export interface PageThreadSummary {
   authorName: string;
   replies: number;
   detached: boolean;
+  route: string;
+  current: boolean;
 }
 
 function excerptOf(thread: ThreadRecord): string {
@@ -20,17 +22,37 @@ function excerptOf(thread: ThreadRecord): string {
   return text.length > SUMMARY_EXCERPT_LIMIT ? `${text.slice(0, SUMMARY_EXCERPT_LIMIT)}…` : text;
 }
 
+function routeOf(pageUrl: string): string {
+  return URL.parse(pageUrl)?.pathname ?? "/";
+}
+
 export function summarizeThreads(
   threads: readonly ThreadRecord[],
   resolutions: ReadonlyMap<string, Resolution>,
+  currentPageUrl: string | null,
 ): PageThreadSummary[] {
-  return numberingOrder(threads).map((thread, index) => ({
-    id: thread.id,
-    number: index + 1,
-    status: thread.status,
-    excerpt: excerptOf(thread),
-    authorName: thread.author.displayName,
-    replies: Math.max(0, thread.comments.filter((comment) => !comment.deleted).length - 1),
-    detached: isOrphaned(resolutions, thread.id),
-  }));
+  const groups = new Map<string, ThreadRecord[]>();
+  for (const thread of threads) {
+    groups.set(thread.pageUrl, [...(groups.get(thread.pageUrl) ?? []), thread]);
+  }
+  const summaries = [...groups].flatMap(([pageUrl, group]) => {
+    const current = pageUrl === currentPageUrl;
+    return numberingOrder(group).map((thread, index) => ({
+      id: thread.id,
+      number: index + 1,
+      status: thread.status,
+      excerpt: excerptOf(thread),
+      authorName: thread.author.displayName,
+      replies: Math.max(0, thread.comments.filter((comment) => !comment.deleted).length - 1),
+      detached: current && isOrphaned(resolutions, thread.id),
+      route: routeOf(pageUrl),
+      current,
+    }));
+  });
+  return summaries.sort(
+    (a, b) =>
+      Number(b.current) - Number(a.current) ||
+      a.route.localeCompare(b.route) ||
+      a.number - b.number,
+  );
 }

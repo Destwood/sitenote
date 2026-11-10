@@ -91,9 +91,11 @@ function makeState(overrides: Partial<ContentState> = {}): ContentState {
     site: SITE,
     live: true,
     threads: [],
+    siteThreads: [],
     members: [],
     screenshots: new Map(),
     recordings: new Map(),
+    recordingAttached: false,
     resolutions: new Map(),
     positions: new Map(),
     commentMode: false,
@@ -111,6 +113,10 @@ function makeState(overrides: Partial<ContentState> = {}): ContentState {
     jiraConfigured: false,
     jiraPending: new Set<string>(),
     selectionPlacement: "below",
+    replayAvailable: false,
+    replay: null,
+    replayGate: null,
+    offPageThreadId: null,
     ...overrides,
   };
 }
@@ -122,11 +128,13 @@ function makeController(store: Store<ContentState>) {
     toggleCommentMode: vi.fn(() => true),
     exitCommentMode: vi.fn(),
     enterCommentMode: vi.fn(() => true),
+    attachRecording: vi.fn(() => true),
     commentOnContextTarget: vi.fn(() => false),
     toggleSidebar: vi.fn(),
     closeSidebar: vi.fn(),
     setShowResolved: vi.fn(),
     selectThread: vi.fn(),
+    openThread: vi.fn(() => false),
     togglePin: vi.fn(),
     closePanel: vi.fn(),
     startTextComment: vi.fn(),
@@ -138,6 +146,20 @@ function makeController(store: Store<ContentState>) {
     createClickUpTask: vi.fn(() => Promise.resolve()),
     linkJiraIssue: vi.fn(() => Promise.resolve()),
     dismissToast: vi.fn(),
+    startReplay: vi.fn(),
+    gateRun: vi.fn(),
+    gateClose: vi.fn(),
+    closeOffPage: vi.fn(),
+    openOffPagePage: vi.fn(),
+    reproduceOffPage: vi.fn(),
+    copyRoute: vi.fn(),
+    replayNext: vi.fn(),
+    replayBack: vi.fn(),
+    replayPause: vi.fn(),
+    replayResume: vi.fn(),
+    replaySkip: vi.fn(),
+    replayRetry: vi.fn(),
+    replayStop: vi.fn(),
   };
   const controller: ContentController = { store, ...actions };
   return { controller, actions };
@@ -219,7 +241,7 @@ describe("launcher and sidebar", () => {
       ]),
     });
     const section = screen.getByRole("region", { name: "On this page" });
-    expect(within(section).getAllByRole("button")).toHaveLength(2);
+    expect(within(section).getAllByRole("button")).toHaveLength(1);
 
     await user.click(screen.getByRole("button", { name: "Show resolved (1)" }));
     expect(actions.setShowResolved).toHaveBeenCalledExactlyOnceWith(true);
@@ -228,7 +250,7 @@ describe("launcher and sidebar", () => {
       store.setState((state) => ({ ...state, showResolved: true }));
     });
     expect(screen.getByRole("button", { name: "Hide resolved (1)" })).toBeTruthy();
-    expect(within(section).getAllByRole("button")).toHaveLength(3);
+    expect(within(section).getAllByRole("button")).toHaveLength(2);
   });
 
   it("closes the sidebar from its close button", async () => {
@@ -739,6 +761,31 @@ describe("thread panel", () => {
 
     expect(within(dialog).getByText('<img src=x onerror="alert(1)">')).toBeTruthy();
     expect(dialog.querySelector("img")).toBeNull();
+  });
+});
+
+describe("off-page comment card", () => {
+  it("toggles the status of the thread from the card", async () => {
+    const user = userEvent.setup();
+    const { actions } = setup({
+      siteThreads: [thread(SECOND_ID, { pageUrl: "https://example.test/other" })],
+      offPageThreadId: SECOND_ID,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Resolve" }));
+
+    expect(actions.toggleStatus).toHaveBeenCalledWith(SECOND_ID);
+  });
+
+  it("offers to reopen a resolved off-page thread", () => {
+    setup({
+      siteThreads: [
+        thread(SECOND_ID, { pageUrl: "https://example.test/other", status: "resolved" }),
+      ],
+      offPageThreadId: SECOND_ID,
+    });
+
+    expect(screen.getByRole("button", { name: "Reopen" })).toBeTruthy();
   });
 });
 

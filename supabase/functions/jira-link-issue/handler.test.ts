@@ -28,7 +28,7 @@ interface Scenario {
   integration?: boolean;
   linkedKey?: string;
   issueStatus?: number;
-  commentStatus?: number;
+  remoteStatus?: number;
 }
 
 function request(payload: unknown): Request {
@@ -46,8 +46,8 @@ function backendFor(scenario: Scenario) {
       if (path === "/rest/api/3/issue/PROJ-123") {
         return json({ key: "PROJ-123" }, scenario.issueStatus ?? 200);
       }
-      if (path === "/rest/api/3/issue/PROJ-123/comment") {
-        return json({ id: "10" }, scenario.commentStatus ?? 201);
+      if (path === "/rest/api/3/issue/PROJ-123/remotelink") {
+        return json({ id: "10" }, scenario.remoteStatus ?? 201);
       }
       return undefined;
     }
@@ -99,7 +99,7 @@ function jiraCalls(requests: RecordedRequest[]): RecordedRequest[] {
   return requests.filter((req) => req.url.host === "jira.test");
 }
 
-Deno.test("links the issue, saves it on the thread and comments with the deep link", async () => {
+Deno.test("links the issue, saves it on the thread and adds a remote link", async () => {
   const backend = backendFor({});
   const response = await handleLinkIssue(request(validBody), env, backend.fetch);
   assertEquals(response.status, 200);
@@ -108,7 +108,7 @@ Deno.test("links the issue, saves it on the thread and comments with the deep li
     issueKey: "PROJ-123",
     issueUrl: "https://org.atlassian.net/browse/PROJ-123",
     linked: true,
-    commentAdded: true,
+    linkAdded: true,
   });
   assertFalse(text.includes(JIRA_TOKEN));
 
@@ -123,10 +123,10 @@ Deno.test("links the issue, saves it on the thread and comments with the deep li
     `Basic ${btoa(`user@example.com:${JIRA_TOKEN}`)}`,
   );
 
-  const comment = jiraCalls(backend.requests).find(
-    (req) => req.url.pathname === "/rest/api/3/issue/PROJ-123/comment",
+  const remote = jiraCalls(backend.requests).find(
+    (req) => req.url.pathname === "/rest/api/3/issue/PROJ-123/remotelink",
   );
-  assertStringIncludes(comment?.body ?? "", `https://app.sitenote.test/t/${THREAD_ID}`);
+  assertStringIncludes(remote?.body ?? "", `https://app.sitenote.test/t/${THREAD_ID}`);
 });
 
 Deno.test("lets a member link an issue", async () => {
@@ -213,15 +213,15 @@ Deno.test("maps Jira lookup failures to the documented codes and links nothing",
   }
 });
 
-Deno.test("keeps the link when the comment fails and reports commentAdded false", async () => {
-  const backend = backendFor({ commentStatus: 500 });
+Deno.test("keeps the link when the remote link fails and reports linkAdded false", async () => {
+  const backend = backendFor({ remoteStatus: 500 });
   const response = await handleLinkIssue(request(validBody), env, backend.fetch);
   assertEquals(response.status, 200);
   assertEquals(await response.json(), {
     issueKey: "PROJ-123",
     issueUrl: "https://org.atlassian.net/browse/PROJ-123",
     linked: true,
-    commentAdded: false,
+    linkAdded: false,
   });
   assertEquals(backend.requests.filter((req) => req.method === "PATCH").length, 1);
 });
@@ -234,7 +234,7 @@ Deno.test("returns the existing link without calling Jira when the thread is lin
     issueKey: "PROJ-9",
     issueUrl: "https://org.atlassian.net/browse/PROJ-9",
     linked: false,
-    commentAdded: false,
+    linkAdded: false,
   });
   assertEquals(jiraCalls(backend.requests).length, 0);
   assertEquals(

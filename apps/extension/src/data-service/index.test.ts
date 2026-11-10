@@ -528,7 +528,7 @@ describe("Jira", () => {
     issueKey: "PROJ-12",
     issueUrl: ISSUE_URL,
     linked: true,
-    commentAdded: true,
+    linkAdded: true,
   };
 
   it("reports whether Jira is configured for the workspace", async () => {
@@ -765,6 +765,32 @@ describe("createThread", () => {
     expect(callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0]).toMatchObject({
       p_context: { recording: { steps: [STEP] } },
     });
+  });
+
+  it("marks the recording as starting signed out only when the author asked for it", async () => {
+    const recordAttach = (_tabId: number, workspaceId: string, threadId: string) =>
+      Promise.resolve({ path: `${workspaceId}/${threadId}.webm`, durationMs: 5000, size: 1024 });
+    const signedOut = setup(
+      { "rpc:create_thread": [ok({ id: THREAD_ID })], threads: [ok(threadRow())] },
+      { recordAttach },
+    );
+
+    await signedOut.service.createThread({ ...REQUEST, startsSignedOut: true }, { tabId: 4 });
+
+    expect(callsOf(signedOut.queries, "rpc:create_thread")[0]?.[0]?.args[0]).toMatchObject({
+      p_context: { recording: { startsSignedOut: true } },
+    });
+
+    const signedIn = setup(
+      { "rpc:create_thread": [ok({ id: THREAD_ID })], threads: [ok(threadRow())] },
+      { recordAttach },
+    );
+
+    await signedIn.service.createThread({ ...REQUEST, startsSignedOut: false }, { tabId: 4 });
+
+    expect(
+      JSON.stringify(callsOf(signedIn.queries, "rpc:create_thread")[0]?.[0]?.args[0]),
+    ).not.toContain("startsSignedOut");
   });
 
   it("reuses the screenshot thread id for the recording", async () => {

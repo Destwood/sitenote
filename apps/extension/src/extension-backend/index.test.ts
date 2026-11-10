@@ -20,6 +20,7 @@ vi.mock("wxt/browser", () => ({
 
 vi.mock("../errors-bridge", () => ({
   requestConsoleErrors: vi.fn(() => Promise.resolve([])),
+  requestPageDiagnostics: vi.fn(() => Promise.resolve({ consoleErrors: [], networkErrors: [] })),
 }));
 
 const SITE_ID = "20000000-0000-4000-8000-000000000001";

@@ -241,6 +241,26 @@ describe("resolveElementAnchor by selectors", () => {
     expect(resolution.status).toBe("orphaned");
   });
 
+  it("finds a translated heading when its CSS selector and DOM path still agree", () => {
+    renderHtml('<main><h1 class="headline">Personal Trainer in the Gym and Online</h1></main>');
+    const anchor = anchorFor("h1");
+
+    renderHtml('<main><h1 class="headline">Персональний тренер у залі та онлайн</h1></main>');
+
+    expect(resolvedElement(anchor)).toBe(query("h1"));
+  });
+
+  it("keeps the translated target detached when the selectors disagree", () => {
+    renderHtml('<main><h1 class="headline">Personal Trainer in the Gym and Online</h1></main>');
+    const anchor = anchorFor("h1");
+
+    renderHtml(
+      '<main><h1 class="another">Інший заголовок</h1><h1 class="headline">Персональний тренер у залі та онлайн</h1></main>',
+    );
+
+    expect(resolveElementAnchor(anchor)).toEqual({ status: "orphaned" });
+  });
+
   it("does not gate structural matches when either side has no text", () => {
     renderHtml(`<section id="s"><img alt="a" /></section><section><img alt="b" /></section>`);
     const anchor = anchorFor("#s");

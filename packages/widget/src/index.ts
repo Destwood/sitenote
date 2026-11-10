@@ -10,6 +10,7 @@ export * from "./page-session";
 export * from "./page-thread-summary";
 export * from "./pin-tracker";
 export * from "./preference-client";
+export * from "./replay-runner";
 export * from "./result";
 export * from "./screenshot-taker";
 export * from "./selection-watcher";

@@ -539,4 +539,33 @@ describe("Composer mention autocomplete", () => {
 
     expect(onSubmit).toHaveBeenLastCalledWith({ body: "@Max Member", mentions: [] });
   });
+
+  it("shows no signed-out checkbox unless the option is on", () => {
+    renderComposer();
+
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+
+  it("sends the signed-out choice and clears it after a send", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer({ startsSignedOutOption: true });
+    const checkbox = screen.getByRole<HTMLInputElement>("checkbox", {
+      name: "Recording starts signed out",
+    });
+
+    expect(checkbox.checked).toBe(false);
+    expect(screen.getByText("Replay will ask users to sign out first.")).toBeTruthy();
+    await user.type(textbox(), "Broken");
+    await user.click(checkbox);
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(onSubmit).toHaveBeenLastCalledWith({
+      body: "Broken",
+      mentions: [],
+      startsSignedOut: true,
+    });
+    await waitFor(() => {
+      expect(checkbox.checked).toBe(false);
+    });
+  });
 });

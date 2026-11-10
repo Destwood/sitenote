@@ -452,6 +452,11 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/deno.json"
 
+[functions.jira-search-issues]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+
 [functions.notify-email]
 enabled = true
 verify_jwt = false

@@ -10,6 +10,10 @@ import {
   CONTEXT_TITLE_MAX,
   CONTEXT_URL_MAX,
   CONTEXT_USER_AGENT_MAX,
+  NETWORK_ERRORS_MAX,
+  NETWORK_METHOD_MAX,
+  NETWORK_STATUS_TEXT_MAX,
+  NETWORK_URL_MAX,
   RECORDING_PATH_MAX,
   RECORDING_STEPS_MAX,
   STEP_LABEL_MAX,
@@ -17,6 +21,7 @@ import {
   STEP_URL_MAX,
   consoleErrorRecordSchema,
   fitThreadContext,
+  networkErrorRecordSchema,
   parseThreadContext,
   recordingStepSchema,
   sanitizeStep,
@@ -25,6 +30,7 @@ import {
   withRecording,
   withoutConsoleErrors,
   type ConsoleErrorRecord,
+  type NetworkErrorRecord,
   type RecordingRef,
   type RecordingStep,
   type ThreadContext,
@@ -58,6 +64,19 @@ function byteSize(value: unknown): number {
 
 function record(overrides: Partial<ConsoleErrorRecord> = {}): ConsoleErrorRecord {
   return { kind: "error", message: "Boom", at: AT, ...overrides };
+}
+
+function network(overrides: Partial<NetworkErrorRecord> = {}): NetworkErrorRecord {
+  return {
+    kind: "fetch",
+    method: "POST",
+    url: "https://example.com/api/orders",
+    status: 500,
+    statusText: "Internal Server Error",
+    durationMs: 120,
+    at: AT,
+    ...overrides,
+  };
 }
 
 function context(overrides: Partial<ThreadContext> = {}): ThreadContext {
@@ -118,7 +137,91 @@ describe("consoleErrorRecordSchema", () => {
   });
 });
 
+describe("consoleErrorRecordSchema timestamps", () => {
+  it("accepts a record without a timestamp and rejects an over-long one", () => {
+    expect(consoleErrorRecordSchema.safeParse({ kind: "error", message: "Boom" }).success).toBe(
+      true,
+    );
+    expect(
+      consoleErrorRecordSchema.safeParse(record({ at: `2026-10-22T09:30:00.${"0".repeat(30)}Z` }))
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe("networkErrorRecordSchema", () => {
+  it("accepts a failed response and a network failure with the optional fields left out", () => {
+    expect(networkErrorRecordSchema.safeParse(network()).success).toBe(true);
+    expect(
+      networkErrorRecordSchema.safeParse({
+        kind: "xhr",
+        method: "GET",
+        url: "https://example.com/feed",
+        status: 0,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts the limits exactly and rejects one more character", () => {
+    expect(
+      networkErrorRecordSchema.safeParse(
+        network({
+          method: "m".repeat(NETWORK_METHOD_MAX),
+          url: "u".repeat(NETWORK_URL_MAX),
+          statusText: "s".repeat(NETWORK_STATUS_TEXT_MAX),
+        }),
+      ).success,
+    ).toBe(true);
+    expect(
+      networkErrorRecordSchema.safeParse(network({ method: "m".repeat(NETWORK_METHOD_MAX + 1) }))
+        .success,
+    ).toBe(false);
+    expect(
+      networkErrorRecordSchema.safeParse(network({ url: "u".repeat(NETWORK_URL_MAX + 1) })).success,
+    ).toBe(false);
+    expect(
+      networkErrorRecordSchema.safeParse(
+        network({ statusText: "s".repeat(NETWORK_STATUS_TEXT_MAX + 1) }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it("rejects an unknown kind, a status outside 0 to 599 and bad numbers or dates", () => {
+    const rejected: unknown[] = [
+      { ...network(), kind: "websocket" },
+      network({ status: 600 }),
+      network({ status: -1 }),
+      network({ status: 404.5 }),
+      network({ durationMs: -1 }),
+      network({ at: "yesterday" }),
+      { ...network(), url: undefined },
+      null,
+    ];
+    for (const value of rejected) {
+      expect(networkErrorRecordSchema.safeParse(value).success).toBe(false);
+    }
+  });
+});
+
 describe("threadContextSchema", () => {
+  it("accepts a context with network errors and without them, and rejects too many", () => {
+    expect(threadContextSchema.safeParse(context({ networkErrors: [network()] })).success).toBe(
+      true,
+    );
+    expect(
+      threadContextSchema.safeParse(
+        context({ networkErrors: Array.from({ length: NETWORK_ERRORS_MAX }, () => network()) }),
+      ).success,
+    ).toBe(true);
+    expect(
+      threadContextSchema.safeParse(
+        context({
+          networkErrors: Array.from({ length: NETWORK_ERRORS_MAX + 1 }, () => network()),
+        }),
+      ).success,
+    ).toBe(false);
+  });
+
   it("accepts a complete context with and without the os version", () => {
     expect(threadContextSchema.safeParse(context()).success).toBe(true);
     expect(threadContextSchema.safeParse(context({ os: { name: "Linux" } })).success).toBe(true);
@@ -243,6 +346,32 @@ describe("fitThreadContext", () => {
     expect(threadContextSchema.safeParse(fitted).success).toBe(true);
   });
 
+  it("sanitizes the network records and keeps them when the context fits", () => {
+    const input = context({
+      networkErrors: [
+        network({ method: "P\u0000", url: "https://example.com/\uD800", statusText: "O\u0000K" }),
+      ],
+    });
+    const fitted = fitThreadContext(input);
+    expect(fitted.networkErrors).toEqual([
+      network({ method: "P", url: "https://example.com/�", statusText: "OK" }),
+    ]);
+    expect(threadContextSchema.safeParse(fitted).success).toBe(true);
+  });
+
+  it("drops the oldest network errors before the console errors when the budget is exceeded", () => {
+    const heavy = Array.from({ length: NETWORK_ERRORS_MAX }, (_, index) =>
+      network({ url: `https://example.com/${String(index)}${WIDE.repeat(NETWORK_URL_MAX - 30)}` }),
+    );
+    const fitted = fitThreadContext(context({ consoleErrors: [record()], networkErrors: heavy }));
+    expect(fitted.networkErrors?.length).toBeGreaterThan(0);
+    expect(fitted.networkErrors?.length).toBeLessThan(NETWORK_ERRORS_MAX);
+    expect(fitted.networkErrors?.at(-1)?.url.startsWith("https://example.com/19")).toBe(true);
+    expect(fitted.consoleErrors).toEqual([record()]);
+    expect(byteSize(fitted)).toBeLessThanOrEqual(CONTEXT_MAX_BYTES);
+    expect(threadContextSchema.safeParse(fitted).success).toBe(true);
+  });
+
   it("drops a recording, which only the trusted background may add", () => {
     const fitted = fitThreadContext(context({ recording: RECORDING }));
     expect(fitted).not.toHaveProperty("recording");
@@ -298,6 +427,17 @@ describe("withRecording", () => {
     const attached = withRecording(original, RECORDING);
     expect(attached).toEqual({ ...original, recording: RECORDING });
     expect(original).not.toHaveProperty("recording");
+  });
+
+  it("keeps startsSignedOut through parsing", () => {
+    const attached = withRecording(context(), { ...RECORDING, startsSignedOut: true });
+    expect(parseThreadContext(JSON.parse(JSON.stringify(attached)))?.recording).toEqual({
+      ...RECORDING,
+      startsSignedOut: true,
+    });
+    expect(parseThreadContext(withRecording(context(), RECORDING))?.recording).not.toHaveProperty(
+      "startsSignedOut",
+    );
   });
 });
 

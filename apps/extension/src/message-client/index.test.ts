@@ -224,6 +224,8 @@ describe("listPageThreads", () => {
     authorName: "Max",
     replies: 0,
     detached: false,
+    route: "/",
+    current: true,
   } as const;
 
   it("asks the top frame of the tab for its threads and returns them", async () => {

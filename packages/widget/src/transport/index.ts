@@ -137,7 +137,7 @@ export const jiraLinkResultSchema = z.object({
   issueKey: z.string(),
   issueUrl: httpUrlSchema,
   linked: z.boolean(),
-  commentAdded: z.boolean(),
+  linkAdded: z.boolean(),
 });
 
 export type JiraLinkResult = z.infer<typeof jiraLinkResultSchema>;
