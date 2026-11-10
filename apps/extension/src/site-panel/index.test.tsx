@@ -281,9 +281,13 @@ describe("SitePanel when the site is not enabled", () => {
     route({
       "sites.forOrigin": () => {
         polls += 1;
-        return success(polls > 1 ? SITE : null);
+        return success(
+          polls > 1
+            ? { ...SITE, workspaceId: AGENCY.id, workspaceName: AGENCY.name, role: "member" }
+            : null,
+        );
       },
-      "workspaces.list": () => success([NORTHWIND, AGENCY]),
+      "workspaces.list": () => success([NORTHWIND, { ...AGENCY, role: "member" }]),
     });
     renderPanel();
     await screen.findByRole("button", { name: "Enable on this site" });
@@ -292,7 +296,7 @@ describe("SitePanel when the site is not enabled", () => {
     await user.click(screen.getByRole("button", { name: "Enable on this site" }));
 
     await vi.waitFor(() => {
-      expect(screen.getByTestId("site-state").textContent).toBe("Enabled in Northwind");
+      expect(screen.getByTestId("site-state").textContent).toBe("Enabled in Agency");
     });
     expect(mocks.pendingSet).toHaveBeenCalledWith({
       tabId: 7,
@@ -453,7 +457,7 @@ describe("SitePanel when the site is enabled", () => {
     let isEnabled = true;
     route({
       "sites.forOrigin": () => success(isEnabled ? SITE : null),
-      "workspaces.list": () => success([NORTHWIND, AGENCY]),
+      "workspaces.list": () => success([NORTHWIND, { ...AGENCY, role: "member" }]),
       "sites.disable": () => {
         isEnabled = false;
         return success(null);

@@ -66,6 +66,26 @@ describe("threads select", () => {
   });
 });
 
+describe("thread sharing", () => {
+  it("returns the share token to a member and prevents guests from sharing or reading it", async () => {
+    const thread = await insertThread(scenario.admin, scenario.site, scenario.member.id);
+    const args = { p_thread_id: thread.id };
+
+    expectPermissionDenied(await scenario.guest.client.rpc("thread_share_enable", args));
+    const shares = unwrap(await scenario.member.client.rpc("thread_share_enable", args));
+    expect(shares).toEqual([
+      { token: expect.stringMatching(/^[0-9a-f]{64}$/), expires_at: expect.any(String) },
+    ]);
+    expectNoRows(
+      await scenario.guest.client.from("thread_shares").select("token").eq("thread_id", thread.id),
+    );
+    expect((await scenario.member.client.rpc("thread_share_disable", args)).error).toBeNull();
+    expectNoRows(
+      await scenario.admin.from("thread_shares").select("token").eq("thread_id", thread.id),
+    );
+  });
+});
+
 describe("threads insert", () => {
   it("lets the owner, a member and a guest create their own open thread", async () => {
     for (const actor of [scenario.owner, scenario.member, scenario.guest]) {

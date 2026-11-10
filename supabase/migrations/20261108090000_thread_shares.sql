@@ -46,6 +46,7 @@ begin
   values (p_thread_id, now() + interval '30 days')
   on conflict (thread_id) do update set expires_at = excluded.expires_at
   returning s.token, s.expires_at into token, expires_at;
+  return next;
 end;
 $$;
 
