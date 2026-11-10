@@ -149,6 +149,44 @@ async function selectionRect(page: Page): Promise<{ top: number; bottom: number 
   });
 }
 
+test("a comment on a heading remains visible after reloading the same URL in another language", async ({
+  context,
+  extensionId,
+}) => {
+  const path = "/p/translated-comment";
+  const pageUrl = `${FIXTURE_ORIGIN}${path}`;
+  await ownerCleanup(pageUrl);
+  const { page } = await openReviewPage(context, extensionId, OWNER, path);
+  const heading = page.getByRole("heading", { level: 1 });
+  const original = await heading.innerText();
+  const translated = "Персональний тренер у залі та онлайн";
+
+  await heading.click({ clickCount: 3 });
+  await page.getByRole("button", { name: "Comment", exact: true }).click();
+  await submitNewThread(page, "Keep this comment across translations");
+  await expect(pinOf(page, 1)).toBeVisible();
+
+  await page.route(
+    pageUrl,
+    async (route) => {
+      const response = await route.fetch();
+      const body = (await response.text())
+        .replace('lang="en"', 'lang="uk"')
+        .replace(original, translated);
+      await route.fulfill({ response, body });
+    },
+    { times: 1 },
+  );
+  await page.reload();
+
+  await expect(page).toHaveURL(pageUrl);
+  await expect(heading).toHaveText(translated);
+  await pinOf(page, 1).click();
+  await expect(page.getByRole("dialog", { name: "Thread 1" })).toContainText(
+    "Keep this comment across translations",
+  );
+});
+
 test("the Comment button sits below the selected text by default", async ({
   context,
   extensionId,
