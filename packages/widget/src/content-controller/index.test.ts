@@ -886,6 +886,7 @@ describe("creating a thread", () => {
     expect(state().pending).toBeNull();
     expect(state().activeThreadId).toBe(THREAD_ID);
     expect(state().threads).toEqual([created]);
+    expect(state().siteThreads).toEqual([created]);
     expect(state().resolutions.get(THREAD_ID)?.status).toBe("resolved");
     expect(state().toasts).toHaveLength(0);
   });
@@ -1071,6 +1072,7 @@ describe("comments and status", () => {
       args: [{ threadId: THREAD_ID, body: "Reply", mentions: [] }],
     });
     expect(state().threads[0]?.comments.map((item) => item.body)).toEqual(["Hello", "Reply"]);
+    expect(state().siteThreads[0]?.comments.map((item) => item.body)).toEqual(["Hello", "Reply"]);
   });
 
   it("keeps the text and reports the error when a reply fails", async () => {

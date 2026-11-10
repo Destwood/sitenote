@@ -38,7 +38,7 @@ import { upsertComment, upsertThread } from "../view-model";
 import { watchDom } from "../dom-watcher";
 import { watchPageUrl } from "../url-watcher";
 import { watchSelection } from "../selection-watcher";
-import type { MemberRecord, SiteInfo, ThreadRecord } from "../transport";
+import type { CommentRecord, MemberRecord, SiteInfo, ThreadRecord } from "../transport";
 
 import type { WidgetBackend } from "../backend";
 import { createPageSession, type PageSessionState, type PageSessionStatus } from "../page-session";
@@ -1079,6 +1079,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
         return {
           ...state,
           threads: upsertThread(state.threads, record),
+          siteThreads: upsertThread(state.siteThreads, record),
           resolutions,
           pending: stillPending ? null : state.pending,
           activeThreadId: stillPending ? record.id : state.activeThreadId,
@@ -1089,6 +1090,14 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     } finally {
       creating = false;
     }
+  }
+
+  function applyComment(comment: CommentRecord): void {
+    store.setState((state) => ({
+      ...state,
+      threads: upsertComment(state.threads, comment),
+      siteThreads: upsertComment(state.siteThreads, comment),
+    }));
   }
 
   async function reply(threadId: string, submission: ComposerSubmission): Promise<void> {
@@ -1103,8 +1112,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       store.setState((state) => ({ ...state, panelError: message }));
       throw new Error(message);
     }
-    const comment = result.data;
-    store.setState((state) => ({ ...state, threads: upsertComment(state.threads, comment) }));
+    applyComment(result.data);
   }
 
   async function editComment(commentId: string, body: string): Promise<void> {
@@ -1112,8 +1120,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     if (!result.ok) {
       throw new Error(result.error.message);
     }
-    const comment = result.data;
-    store.setState((state) => ({ ...state, threads: upsertComment(state.threads, comment) }));
+    applyComment(result.data);
   }
 
   async function deleteComment(commentId: string): Promise<void> {
@@ -1121,8 +1128,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     if (!result.ok) {
       throw new Error(result.error.message);
     }
-    const comment = result.data;
-    store.setState((state) => ({ ...state, threads: upsertComment(state.threads, comment) }));
+    applyComment(result.data);
   }
 
   async function toggleStatus(threadId: string): Promise<void> {
