@@ -290,7 +290,9 @@ describe("SitePanel when the site is not enabled", () => {
       "workspaces.list": () => success([NORTHWIND, { ...AGENCY, role: "member" }]),
     });
     renderPanel();
-    await screen.findByRole("button", { name: "Enable on this site" });
+    await vi.waitFor(() => {
+      expect(lastControl().options).toHaveLength(2);
+    });
     chooseWorkspace(AGENCY.id);
 
     await user.click(screen.getByRole("button", { name: "Enable on this site" }));
