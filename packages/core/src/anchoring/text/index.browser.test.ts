@@ -4,7 +4,13 @@ import { SITENOTE_ROOT_TAG } from "../../overlay";
 import { query, queryAll, renderHtml, selectText } from "../fixtures";
 import { textAnchorSchema, type TextAnchor } from "../schema";
 import { buildTextModel, rangeToOffsets } from "../text-model";
-import { CONTEXT_LENGTH, TIE_CONFIDENCE_FACTOR, createTextAnchor, resolveTextAnchor } from ".";
+import {
+  CONTEXT_LENGTH,
+  TIE_CONFIDENCE_FACTOR,
+  createTextAnchor,
+  resolveTextAnchor,
+  resolveTextAnchorHeading,
+} from ".";
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -109,6 +115,28 @@ describe("createTextAnchor", () => {
     const anchor = createTextAnchor(range);
     expect(anchor?.container).toBe("#s");
     expect(anchor?.quote.exact).toBe("paragraph.Second");
+  });
+
+  it("anchors a heading selection whose end is at the start of the next block", () => {
+    renderHtml('<section id="hero"><h1>Personal Trainer</h1>\n<p>Find a coach</p></section>');
+    const range = document.createRange();
+    range.setStart(query("h1").firstChild ?? document.body, 0);
+    range.setEnd(query("p"), 0);
+    const anchor = createTextAnchor(range);
+    expect(anchor).toMatchObject({ container: "h1", quote: { exact: "Personal Trainer" } });
+    if (anchor === null) {
+      throw new Error("Expected a heading anchor");
+    }
+
+    query("h1").textContent = "Персональний тренер";
+    expect(resolveTextAnchorHeading(anchor, document)).toBe(query("h1"));
+    expect(resolveTextAnchorHeading({ ...anchor, container: "#hero" }, document)).toBe(query("h1"));
+    expect(
+      resolveTextAnchorHeading(
+        { ...anchor, container: "#hero", position: { start: 3, end: 12 } },
+        document,
+      ),
+    ).toBeUndefined();
   });
 
   it("treats flex items and list items as blocks but not inline-block", () => {

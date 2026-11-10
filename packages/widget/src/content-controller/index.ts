@@ -187,8 +187,7 @@ export function reconcileResolutions(
       isTargetAlive(existing.target) &&
       (thread.anchor?.kind !== "text" ||
         (existing.target.kind === "text" &&
-          existing.target.range.toString().replace(/\s+/g, " ").trim() ===
-            thread.anchor.quote.exact))
+          existing.target.range.toString().trim() === thread.anchor.quote.exact))
     ) {
       next.set(thread.id, existing);
       continue;
