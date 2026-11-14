@@ -33,7 +33,7 @@ export default async function ExtensionConnectPage() {
             <Logo size={32} />
             Sitenote
           </Link>
-          <Link href="/app" className={PUBLIC_LINK_BUTTON_CLASS}>
+          <Link href="/app/dashboard" className={PUBLIC_LINK_BUTTON_CLASS}>
             Go to dashboard
           </Link>
         </div>

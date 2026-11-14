@@ -33,6 +33,7 @@ function summary(
     detached: false,
     route: "/",
     current: true,
+    hasRecording: false,
     ...overrides,
   };
 }
@@ -222,6 +223,21 @@ describe("PageThreadsPanel", () => {
     expect(within(resolved).getAllByRole("listitem")).toHaveLength(1);
     expect(within(resolved).getByText("Fixed already")).toBeTruthy();
     expect(within(resolved).getByText("Resolved")).toBeTruthy();
+  });
+
+  it("labels each comment as Video when it has a recording and as Text otherwise", async () => {
+    mocks.listPageThreads.mockResolvedValue(
+      success([
+        OPEN_SECOND,
+        summary({ id: "30000000-0000-4000-8000-000000000005", number: 5, hasRecording: true }),
+      ]),
+    );
+
+    render(<PageThreadsPanel tabId={TAB_ID} dashboardUrl={DASHBOARD_URL} />);
+
+    const list = await screen.findByRole("list", { name: "Comments on this page" });
+    expect(within(list).getByText("Video")).toBeTruthy();
+    expect(within(list).getByText("Text")).toBeTruthy();
   });
 
   it("opens the thread on the page and closes the popup when a comment is picked", async () => {

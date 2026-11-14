@@ -17,6 +17,7 @@ const ROW: ThreadRow = {
   commentCount: 3,
   lastActivity: "2026-10-22T10:30:00Z",
   firstBody: "<img src=x onerror=alert(1)> The price is unclear",
+  hasRecording: false,
 };
 
 describe("ThreadTable", () => {
@@ -39,12 +40,33 @@ describe("ThreadTable", () => {
       "Domain",
       "Route",
       "First comment",
+      "Type",
       "Author",
       "Status",
       "Comments",
       "Created",
       "Last activity",
     ]);
+  });
+
+  it("shows a thread with a recording as a video and the others as text", () => {
+    render(
+      <ThreadTable
+        workspaceId={WORKSPACE_ID}
+        rows={[ROW, { ...ROW, id: "20000000-0000-4000-8000-000000000002", hasRecording: true }]}
+        names={NAMES}
+        filtered={false}
+      />,
+    );
+
+    const rows = screen.getAllByRole("row");
+    const text = rows[1];
+    const video = rows[2];
+    if (text === undefined || video === undefined) {
+      throw new Error("The thread rows are missing");
+    }
+    expect(within(text).getByText("Text")).toBeTruthy();
+    expect(within(video).getByText("Video")).toBeTruthy();
   });
 
   it("shows each thread with its domain, route, author, status, counts and times", () => {
@@ -85,5 +107,29 @@ describe("ThreadTable", () => {
     );
 
     expect(screen.getByText(FORMER_MEMBER_LABEL)).toBeTruthy();
+  });
+
+  it("masks UUID segments of the route and reveals the real path on hover", () => {
+    const pageId = "9f1c2b3a-4d5e-4f60-8a7b-1c2d3e4f5a6b";
+    render(
+      <ThreadTable
+        workspaceId={WORKSPACE_ID}
+        rows={[{ ...ROW, pageUrl: `https://example.test/pages/${pageId}?plan=pro` }]}
+        names={NAMES}
+        filtered={false}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: "/pages/{id}?plan=pro" });
+    expect(link.getAttribute("title")).toBe(`/pages/${pageId}?plan=pro`);
+  });
+
+  it("gives every column header a resize handle", () => {
+    render(<ThreadTable workspaceId={WORKSPACE_ID} rows={[ROW]} names={NAMES} filtered={false} />);
+
+    const separators = screen.getAllByRole("separator");
+    expect(separators).toHaveLength(9);
+    expect(separators[0]?.getAttribute("aria-label")).toBe("Resize Domain column");
+    expect(separators[8]?.getAttribute("aria-label")).toBe("Resize Last activity column");
   });
 });

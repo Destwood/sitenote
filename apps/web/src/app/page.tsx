@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { isSignedIn } from "../is-signed-in";
 import { githubUrlFrom } from "../landing-config";
 import { LandingFaq } from "../landing-faq";
 import { LandingFeatures } from "../landing-features";
@@ -8,7 +9,6 @@ import { LandingHeader } from "../landing-header";
 import { LandingHero } from "../landing-hero";
 import { LandingInstall } from "../landing-install";
 import { LandingSteps } from "../landing-steps";
-import { createSupabaseServerClient, getAuthenticatedUser } from "../supabase-server";
 
 const TITLE = "Sitenote | Figma-style comments on any live website";
 const DESCRIPTION =
@@ -20,15 +20,6 @@ export const metadata: Metadata = {
   openGraph: { title: TITLE, description: DESCRIPTION, type: "website" },
   twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
-
-async function isSignedIn(): Promise<boolean> {
-  try {
-    const user = await getAuthenticatedUser(await createSupabaseServerClient());
-    return user !== null && !user.isAnonymous;
-  } catch {
-    return false;
-  }
-}
 
 export default async function HomePage() {
   const signedIn = await isSignedIn();

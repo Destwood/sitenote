@@ -47,6 +47,12 @@ afterEach(() => {
 });
 
 describe("ThreadPanel", () => {
+  it("stacks above the given z-index when the anchor sits higher", () => {
+    renderPanel({ zIndex: Z_INDEX.panel + 500 });
+
+    expect(screen.getByRole("dialog").style.zIndex).toBe(String(Z_INDEX.panel + 500));
+  });
+
   it("is a named dialog placed next to the anchor", () => {
     renderPanel();
 
@@ -567,19 +573,19 @@ describe("ThreadPanel share", () => {
   it("shows the share control in the header of an existing thread", () => {
     renderPanel({ share });
 
-    expect(screen.getByRole("button", { name: "Share" })).toBeTruthy();
-    expect(screen.getByRole("combobox", { name: "Who can open the link" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Copy link" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Who can open the link" })).toBeTruthy();
   });
 
   it("leaves the share control out when the viewer cannot manage shares", () => {
     renderPanel();
 
-    expect(screen.queryByRole("combobox", { name: "Who can open the link" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Who can open the link" })).toBeNull();
   });
 
   it("leaves the share control out of a new thread", () => {
     renderPanel({ thread: null, share });
 
-    expect(screen.queryByRole("combobox", { name: "Who can open the link" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Who can open the link" })).toBeNull();
   });
 });

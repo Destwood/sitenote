@@ -88,6 +88,7 @@ describe("summarizeThreads", () => {
         detached: false,
         route: "/",
         current: true,
+        hasRecording: false,
       },
     ]);
   });
@@ -155,6 +156,31 @@ describe("summarizeThreads", () => {
     expect(summaries.map((summary) => [summary.id, summary.detached])).toEqual([
       [gone.id, true],
       [kept.id, false],
+    ]);
+  });
+
+  it("tells a thread with a recording from a text one", () => {
+    const video = thread({
+      context: {
+        viewport: { width: 1440, height: 900 },
+        devicePixelRatio: 2,
+        pageTitle: "Home",
+        url: PAGE_URL,
+        browser: { name: "Chrome", version: "130" },
+        os: { name: "Windows", version: "11" },
+        userAgent: "ua",
+        consoleErrors: [],
+        capturedAt: "2026-10-21T10:00:00.000Z",
+        recording: { path: "ws/thread.webm", durationMs: 1000, size: 1024 },
+      },
+    });
+    const text = thread({ id: "30000000-0000-4000-8000-000000000002" });
+
+    const summaries = summarizeThreads([video, text], new Map(), PAGE_URL);
+
+    expect(summaries.map((summary) => [summary.id, summary.hasRecording])).toEqual([
+      [video.id, true],
+      [text.id, false],
     ]);
   });
 

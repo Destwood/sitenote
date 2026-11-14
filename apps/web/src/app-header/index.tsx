@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Avatar } from "../avatar";
 import { BrandLink } from "../brand-mark";
 import { DASH_BUTTON_SECONDARY_CLASS, DASH_LINK_CLASS } from "../dashboard-classes";
+import { EXTENSION_DOWNLOAD_URL } from "../extension-download";
 
 interface AppHeaderProps {
   displayName: string;
@@ -31,9 +32,14 @@ function AccountActions({ canConnectExtension }: AccountActionsProps) {
   return (
     <>
       {canConnectExtension ? (
-        <Link href="/extension/connect" className={DASH_LINK_CLASS}>
-          Connect the extension
-        </Link>
+        <>
+          <Link href="/extension/connect" className={DASH_LINK_CLASS}>
+            Connect the extension
+          </Link>
+          <a href={EXTENSION_DOWNLOAD_URL} download className={DASH_LINK_CLASS}>
+            Download extension
+          </a>
+        </>
       ) : null}
       <SignOutForm />
     </>
@@ -58,9 +64,14 @@ export function AppAccount({ displayName, canConnectExtension }: AppHeaderProps)
   return (
     <div className="flex flex-col gap-3">
       {canConnectExtension ? (
-        <Link href="/extension/connect" className={DASH_LINK_CLASS}>
-          Connect the extension
-        </Link>
+        <>
+          <Link href="/extension/connect" className={DASH_LINK_CLASS}>
+            Connect the extension
+          </Link>
+          <a href={EXTENSION_DOWNLOAD_URL} download className={DASH_LINK_CLASS}>
+            Download extension
+          </a>
+        </>
       ) : null}
       <div className="flex items-center justify-between gap-3 border-t border-neutral-200 pt-4">
         <div className="flex min-w-0 items-center gap-3">

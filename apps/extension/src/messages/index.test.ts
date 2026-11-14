@@ -607,6 +607,7 @@ describe("comment mode messages", () => {
       detached: true,
       route: "/",
       current: true,
+      hasRecording: true,
     };
 
     expect(pageThreadsRequestSchema.safeParse({ type: "page.listThreads" }).success).toBe(true);

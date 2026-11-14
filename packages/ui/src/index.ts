@@ -33,6 +33,8 @@ export { SIDEBAR_WIDTH, Sidebar } from "./sidebar";
 export type { SidebarProps } from "./sidebar";
 export { PANEL_WIDTH, ThreadPanel } from "./thread-panel";
 export type { ThreadPanelProps } from "./thread-panel";
+export { ThreadTypeBadge } from "./thread-type-badge";
+export type { ThreadTypeBadgeProps } from "./thread-type-badge";
 export { ClickUpTask } from "./clickup-task";
 export type { ClickUpTaskState } from "./clickup-task";
 export { JiraIssue } from "./jira-issue";

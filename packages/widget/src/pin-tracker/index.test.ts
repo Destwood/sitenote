@@ -119,9 +119,12 @@ describe("sameMeasurements", () => {
   const base = {
     x: 1,
     y: 2,
+    pageX: 11,
+    pageY: 22,
     rect: { x: 0, y: 0, width: 1, height: 1 },
     rects: [{ x: 0, y: 0, width: 1, height: 1 }],
     visible: true,
+    near: true,
   };
 
   it("compares positions, rectangles and visibility", () => {
@@ -130,7 +133,13 @@ describe("sameMeasurements", () => {
       false,
     );
     expect(
+      sameMeasurements(new Map([["a", base]]), new Map([["a", { ...base, pageY: 23 }]])),
+    ).toBe(false);
+    expect(
       sameMeasurements(new Map([["a", base]]), new Map([["a", { ...base, visible: false }]])),
+    ).toBe(false);
+    expect(
+      sameMeasurements(new Map([["a", base]]), new Map([["a", { ...base, near: false }]])),
     ).toBe(false);
     expect(sameMeasurements(new Map([["a", base]]), new Map([["a", { ...base, rects: [] }]]))).toBe(
       false,
@@ -392,5 +401,35 @@ describe("createPinTracker", () => {
     tracker.invalidate();
 
     expect(frames).toHaveLength(0);
+  });
+
+  it("keeps the document position of a pin constant while the page scrolls", () => {
+    const { tracker, flush, measured } = setup(false);
+    const box = makeBox(100, 200);
+    tracker.setTargets([{ id: "a", target: box.target, always: false }]);
+    flush();
+
+    vi.spyOn(window, "scrollY", "get").mockReturnValue(50);
+    box.move(100, 150);
+    window.dispatchEvent(new Event("scroll"));
+    flush();
+
+    expect(measured.at(-1)?.get("a")).toMatchObject({ y: 150, pageY: 200 });
+    expect(measured[0]?.get("a")).toMatchObject({ y: 200, pageY: 200 });
+  });
+
+  it("marks a pin near the viewport as near but not visible", () => {
+    const { tracker, flush, measured } = setup(false);
+    const below = makeBox(100, 1200);
+    const far = makeBox(100, 2000);
+
+    tracker.setTargets([
+      { id: "below", target: below.target, always: false },
+      { id: "far", target: far.target, always: false },
+    ]);
+    flush();
+
+    expect(measured[0]?.get("below")).toMatchObject({ visible: false, near: true });
+    expect(measured[0]?.get("far")).toMatchObject({ visible: false, near: false });
   });
 });

@@ -12,6 +12,7 @@ import {
   SelectionButton,
   Sidebar,
   ThreadPanel,
+  Z_INDEX,
   ToastRegion,
   type AnchorRect,
   type PinLayerPin,
@@ -33,6 +34,8 @@ import {
   numberingOrder,
 } from "../view-model";
 import { useStore } from "../store";
+import { observableElement, type AnchorTarget } from "../anchor-target";
+import { effectiveZIndex, zIndexAbove } from "../anchor-z-index";
 import type { PinMeasurement } from "../pin-tracker";
 import type { ThreadRecord } from "../transport";
 
@@ -51,6 +54,11 @@ function pinRect(measurement: PinMeasurement): AnchorRect {
     width: PIN_SIZE,
     height: PIN_SIZE,
   };
+}
+
+function anchorStackingOf(target: AnchorTarget): number {
+  const element = observableElement(target);
+  return element === null ? 0 : effectiveZIndex(element, window);
 }
 
 function fallbackRect(sidebarOpen: boolean): AnchorRect {
@@ -73,10 +81,10 @@ function buildPins(state: ContentState, views: readonly ThreadView[]): PinLayerP
       threadId: view.id,
       number: view.number,
       status: view.status,
-      x: measurement.x,
-      y: measurement.y,
+      x: measurement.pageX,
+      y: measurement.pageY,
       visible:
-        measurement.visible &&
+        measurement.near &&
         (view.status === "open" || state.showResolved || view.id === state.activeThreadId),
     });
   }
@@ -86,9 +94,9 @@ function buildPins(state: ContentState, views: readonly ThreadView[]): PinLayerP
       threadId: PENDING_ID,
       number: views.length + 1,
       status: "open",
-      x: pendingMeasurement.x,
-      y: pendingMeasurement.y,
-      visible: pendingMeasurement.visible,
+      x: pendingMeasurement.pageX,
+      y: pendingMeasurement.pageY,
+      visible: pendingMeasurement.near,
       pending: true,
     });
   }
@@ -148,6 +156,7 @@ function buildOtherPages(
       replies: Math.max(0, thread.comments.filter((comment) => !comment.deleted).length - 1),
       route: routeOf(pageUrl),
       hasSteps: thread.context?.recording?.steps?.some(isRecordedAction) === true,
+      hasRecording: thread.context?.recording !== undefined,
     })),
   );
 }
@@ -172,6 +181,18 @@ export function ContentApp({ controller }: ContentAppProps) {
     () => buildMentionCandidates(members, userId),
     [members, userId],
   );
+  const anchorStacking = useMemo(() => {
+    const stacking = new Map<string, number>();
+    for (const [id, resolution] of state.resolutions) {
+      if (resolution.status === "resolved") {
+        stacking.set(id, anchorStackingOf(resolution.target));
+      }
+    }
+    if (state.pending !== null) {
+      stacking.set(PENDING_ID, anchorStackingOf(state.pending.target));
+    }
+    return stacking;
+  }, [state.resolutions, state.pending]);
 
   useEffect(() => {
     if (sidebarOpen) {
@@ -214,6 +235,19 @@ export function ContentApp({ controller }: ContentAppProps) {
   const selectionMeasurement =
     state.selection === null ? undefined : state.positions.get(SELECTION_ID);
 
+  const panelKey = state.pending === null ? state.activeThreadId : PENDING_ID;
+  const panelZIndex = zIndexAbove(
+    Z_INDEX.panel,
+    (panelKey === null ? undefined : anchorStacking.get(panelKey)) ?? 0,
+  );
+  const pinLayerZIndex = pins.reduce<number>(
+    (max, pin) =>
+      pin.visible
+        ? Math.max(max, zIndexAbove(Z_INDEX.pins, anchorStacking.get(pin.threadId) ?? 0))
+        : max,
+    Z_INDEX.pins,
+  );
+
   let panel: ReactNode = null;
   if (state.pending !== null) {
     panel = (
@@ -223,6 +257,7 @@ export function ContentApp({ controller }: ContentAppProps) {
         anchorRect={
           pendingMeasurement === undefined ? fallbackRect(sidebarOpen) : pinRect(pendingMeasurement)
         }
+        zIndex={panelZIndex}
         canChangeStatus={false}
         error={state.panelError}
         mentionCandidates={mentionCandidates}
@@ -244,6 +279,7 @@ export function ContentApp({ controller }: ContentAppProps) {
             ? fallbackRect(sidebarOpen)
             : pinRect(activeMeasurement)
         }
+        zIndex={panelZIndex}
         canChangeStatus={canChangeStatus(site, activeRecord)}
         error={state.panelError}
         mentionCandidates={mentionCandidates}
@@ -313,6 +349,7 @@ export function ContentApp({ controller }: ContentAppProps) {
         pins={pins}
         activeThreadId={state.pending === null ? state.activeThreadId : PENDING_ID}
         onSelectPin={controller.togglePin}
+        zIndex={pinLayerZIndex}
       />
       {state.commentMode ? <CommentModeBanner onExit={controller.exitCommentMode} /> : null}
       {selectionMeasurement?.visible === true ? (

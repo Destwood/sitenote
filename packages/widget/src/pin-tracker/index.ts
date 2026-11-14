@@ -16,9 +16,12 @@ export interface TrackedTarget {
 export interface PinMeasurement {
   x: number;
   y: number;
+  pageX: number;
+  pageY: number;
   rect: AnchorRect;
   rects: AnchorRect[];
   visible: boolean;
+  near: boolean;
 }
 
 export type Measurements = ReadonlyMap<string, PinMeasurement>;
@@ -45,7 +48,10 @@ function sameMeasurement(a: PinMeasurement, b: PinMeasurement): boolean {
   return (
     a.x === b.x &&
     a.y === b.y &&
+    a.pageX === b.pageX &&
+    a.pageY === b.pageY &&
     a.visible === b.visible &&
+    a.near === b.near &&
     sameRect(a.rect, b.rect) &&
     a.rects.length === b.rects.length &&
     a.rects.every((rect, index) => {
@@ -135,9 +141,13 @@ export function createPinTracker(deps: PinTrackerDeps): PinTracker {
       next.set(id, {
         x,
         y,
+        pageX: anchor.pageX,
+        pageY: anchor.pageY,
         rect,
         rects,
         visible: !hidden && x >= 0 && y >= 0 && x <= width && y <= height,
+        near:
+          !hidden && x >= -width && y >= -height && x <= 2 * width && y <= 2 * height,
       });
     }
     if (!sameMeasurements(last, next)) {
