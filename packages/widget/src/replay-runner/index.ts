@@ -1,4 +1,4 @@
-import type { RecordingStep, ReplayMode } from "@sitenote/core";
+import { isRecordedAction, type RecordingStep, type ReplayMode } from "@sitenote/core";
 import type { ReplayBarStatus } from "@sitenote/ui";
 
 export interface ReplayProgress {
@@ -143,6 +143,12 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
   let steps: RecordingStep[] = [];
   let index = 0;
   let paused = false;
+  let progressWrite = Promise.resolve();
+
+  function writeProgress(task: () => Promise<void>): Promise<void> {
+    progressWrite = progressWrite.then(() => attempt(task));
+    return progressWrite;
+  }
 
   function invalidate(): void {
     epoch += 1;
@@ -331,18 +337,18 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
     });
   }
 
-  function whenLoaded(): Promise<void> {
+  function whenLoaded(signal: AbortSignal): Promise<void> {
     if (doc.readyState === "complete") {
       return Promise.resolve();
     }
     return new Promise((resolve) => {
-      win.addEventListener(
-        "load",
-        () => {
-          resolve();
-        },
-        { once: true },
-      );
+      const detach = onAbort(signal, finish);
+      win.addEventListener("load", finish, { once: true });
+      function finish(): void {
+        win.removeEventListener("load", finish);
+        detach();
+        resolve();
+      }
     });
   }
 
@@ -408,8 +414,8 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
     }
     const view: ReplayView = {
       mode,
-      index: status === "done" ? Math.max(0, steps.length - 1) : index,
-      total: steps.length,
+      index: Math.max(0, steps.slice(0, index + 1).filter(isRecordedAction).length - 1),
+      total: steps.filter(isRecordedAction).length,
       status,
       label,
       target,
@@ -446,7 +452,16 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
     element.dispatchEvent(new KeyboardEvent("keyup", init));
   }
 
-  async function drive(signal: AbortSignal): Promise<void> {
+  async function drive(signal: AbortSignal, waitForLoad: boolean): Promise<void> {
+    if (isAborted(signal)) {
+      return;
+    }
+    if (waitForLoad) {
+      await whenLoaded(signal);
+      if (isAborted(signal)) {
+        return;
+      }
+    }
     await settle(signal);
     if (isAborted(signal)) {
       return;
@@ -458,7 +473,7 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
       }
       const label = stepLabel(step);
       const isNavigate = step.kind === "navigate";
-      publish(signal, "waiting", label, null);
+      publish(signal, "waiting", isNavigate ? `Waiting for ${label || "the page"}` : label, null);
       const found = await waitFor(
         signal,
         () => locate(step),
@@ -495,7 +510,7 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
           "waiting",
           found.label,
           null,
-          `The page is already further. Skipped to step ${String(found.jumpTo + 1)}.`,
+          "The page is already further. Continuing from the current page.",
         );
         continue;
       }
@@ -547,7 +562,8 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
           }
         }
       }
-      await attempt(() => store.save({ threadId, mode, steps, nextIndex: index + 1, at: now() }));
+      const progress = { threadId, mode, steps, nextIndex: index + 1, at: now() };
+      await writeProgress(() => store.save(progress));
       if (isAborted(signal)) {
         return;
       }
@@ -566,7 +582,7 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
       return;
     }
     publish(signal, "done", DONE_LABEL, null);
-    await attempt(() => store.clear());
+    await writeProgress(() => store.clear());
   }
 
   function launch(
@@ -574,6 +590,7 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
     nextSteps: readonly RecordingStep[],
     nextMode: ReplayMode,
     nextIndex: number,
+    waitForLoad = false,
   ): void {
     invalidate();
     threadId = nextThreadId;
@@ -583,7 +600,8 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
     paused = false;
     const next = new AbortController();
     controller = next;
-    void drive(next.signal);
+    publish(next.signal, "waiting", "Preparing replay…", null);
+    void drive(next.signal, waitForLoad);
   }
 
   async function resumeSaved(): Promise<boolean> {
@@ -591,6 +609,7 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
       return false;
     }
     const before = epoch;
+    await progressWrite;
     const saved = await attemptValue(() => store.load());
     if (saved === null || epoch !== before || saved.at + timing.progressTtlMs < now()) {
       return false;
@@ -599,14 +618,10 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
       saved.nextIndex >= saved.steps.length ||
       saved.steps[saved.nextIndex]?.kind !== "navigate"
     ) {
-      await attempt(() => store.clear());
+      await writeProgress(() => store.clear());
       return false;
     }
-    await whenLoaded();
-    if (epoch !== before) {
-      return false;
-    }
-    launch(saved.threadId, saved.steps, saved.mode, saved.nextIndex);
+    launch(saved.threadId, saved.steps, saved.mode, saved.nextIndex, true);
     return true;
   }
 
@@ -640,8 +655,8 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
     },
     stop: () => {
       invalidate();
+      void writeProgress(() => store.clear());
       onChange(null);
-      void attempt(() => store.clear());
     },
     detach: () => {
       invalidate();

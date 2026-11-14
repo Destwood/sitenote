@@ -11,6 +11,7 @@ import {
   THREAD_STATUSES,
   clickUpTaskResultSchema,
   jiraLinkResultSchema,
+  threadShareInfoSchema,
   httpUrlSchema,
   captureRectSchema,
   capturedScreenshotSchema,
@@ -32,6 +33,7 @@ import {
   type ReplayProgress,
   type SiteInfo,
   type ThreadRecord,
+  type ThreadShareInfo,
   type WorkspaceInfo,
 } from "@sitenote/widget";
 import * as z from "zod/mini";
@@ -114,6 +116,7 @@ export const dataRequestSchema = z.discriminatedUnion("type", [
     body: bodySchema,
     mentions: mentionsSchema,
     startsSignedOut: z.optional(z.boolean()),
+    attachRecording: z.optional(z.boolean()),
   }),
   z.object({ type: z.literal("threads.screenshotUrl"), threadId: idSchema }),
   z.object({ type: z.literal("threads.recordingUrl"), threadId: idSchema }),
@@ -159,10 +162,17 @@ export const dataRequestSchema = z.discriminatedUnion("type", [
     workspaceId: idSchema,
   }),
   z.object({ type: z.literal("sites.disable"), origin: originSchema }),
+  z.object({
+    type: z.literal("sites.switchWorkspace"),
+    origin: originSchema,
+    workspaceId: idSchema,
+  }),
   z.object({ type: z.literal("clickup.status"), workspaceId: idSchema }),
   z.object({ type: z.literal("clickup.createTask"), threadId: idSchema }),
   z.object({ type: z.literal("jira.status"), workspaceId: idSchema }),
   z.object({ type: z.literal("jira.linkIssue"), threadId: idSchema, issueKey: jiraIssueKeySchema }),
+  z.object({ type: z.literal("threads.getShare"), threadId: idSchema }),
+  z.object({ type: z.literal("threads.setShare"), threadId: idSchema, enabled: z.boolean() }),
   z.object({
     type: z.literal("sites.setErrorCapture"),
     tabId: tabIdSchema,
@@ -304,11 +314,14 @@ export interface DataByType {
   "notifications.markAllRead": null;
   "sites.enable": null;
   "sites.disable": null;
+  "sites.switchWorkspace": null;
   "sites.setErrorCapture": null;
   "clickup.status": boolean;
   "clickup.createTask": ClickUpTaskResult;
   "jira.status": boolean;
   "jira.linkIssue": JiraLinkResult;
+  "threads.getShare": ThreadShareInfo | null;
+  "threads.setShare": ThreadShareInfo | null;
   "recording.start": RecordingStatus;
   "recording.stop": null;
   "recording.status": RecordingStatus;
@@ -357,11 +370,14 @@ export const RESPONSE_SCHEMAS: {
   "notifications.markAllRead": resultSchema(z.null()),
   "sites.enable": resultSchema(z.null()),
   "sites.disable": resultSchema(z.null()),
+  "sites.switchWorkspace": resultSchema(z.null()),
   "sites.setErrorCapture": resultSchema(z.null()),
   "clickup.status": resultSchema(z.boolean()),
   "clickup.createTask": resultSchema(clickUpTaskResultSchema),
   "jira.status": resultSchema(z.boolean()),
   "jira.linkIssue": resultSchema(jiraLinkResultSchema),
+  "threads.getShare": resultSchema(z.nullable(threadShareInfoSchema)),
+  "threads.setShare": resultSchema(z.nullable(threadShareInfoSchema)),
   "recording.start": resultSchema(recordingStatusSchema),
   "recording.stop": resultSchema(z.null()),
   "recording.status": resultSchema(recordingStatusSchema),

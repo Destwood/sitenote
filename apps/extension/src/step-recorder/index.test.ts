@@ -36,8 +36,8 @@ function change(target: Element): void {
   target.dispatchEvent(trusted(new Event("change", { bubbles: true, composed: true })));
 }
 
-function submit(target: Element): void {
-  target.dispatchEvent(trusted(new Event("submit", { bubbles: true, composed: true })));
+function submit(target: Element, submitter: HTMLElement | null = null): void {
+  target.dispatchEvent(trusted(new SubmitEvent("submit", { bubbles: true, submitter })));
 }
 
 function mount(html: string): void {
@@ -158,6 +158,36 @@ describe("createStepRecorder", () => {
     expect(document.querySelector(sent()[0]?.selector ?? "")).toBe(el("form"));
   });
 
+  it("records a button click and its form submission as one action", () => {
+    mount('<form><button id="save">Save</button></form>');
+    makeRecorder().start(START);
+    const button = el("#save");
+
+    click(button);
+    submit(el("form"), button);
+    vi.advanceTimersByTime(1);
+    submit(el("form"), button);
+
+    expect(sent().map((step) => step.kind)).toEqual(["click", "submit"]);
+  });
+
+  it("records one action for each checkbox toggle and select change", () => {
+    mount(
+      '<label for="agree">Agree</label><input id="agree" type="checkbox"><select><option>One</option></select>',
+    );
+    makeRecorder().start(START);
+
+    click(el("label"));
+    click(el("#agree"));
+    change(el("#agree"));
+    click(el("#agree"));
+    change(el("#agree"));
+    click(el("select"));
+    change(el("select"));
+
+    expect(sent().map((step) => step.kind)).toEqual(["click", "click", "input"]);
+  });
+
   it("records a navigation when the location changes", () => {
     const recorder = makeRecorder();
     recorder.start(START);
@@ -175,6 +205,22 @@ describe("createStepRecorder", () => {
     recorder.start(START, { announceNavigation: true });
 
     expect(sent()).toEqual([{ t: 0, kind: "navigate", selector: "", label: "", url: "/start" }]);
+  });
+
+  it("records a changed URL before the next action even before the polling timer", () => {
+    mount('<button id="save">Save</button><button id="next">Next</button>');
+    makeRecorder().start(START);
+
+    click(el("#save"));
+    history.pushState(null, "", "/next");
+    click(el("#next"));
+    vi.advanceTimersByTime(500);
+
+    expect(sent()).toMatchObject([
+      { kind: "click", label: "Save" },
+      { kind: "navigate", url: "/next" },
+      { kind: "click", label: "Next" },
+    ]);
   });
 
   it("does not announce the page at start by default", () => {
@@ -245,7 +291,7 @@ describe("createStepRecorder", () => {
     expect(sent()).toEqual([expect.objectContaining({ t: 1200 })]);
   });
 
-  it("drops an identical step repeated within 300 ms and keeps it after that", () => {
+  it("keeps repeated clicks on the same element", () => {
     mount("<button>Save</button>");
     const recorder = makeRecorder();
     recorder.start(START);
@@ -255,6 +301,6 @@ describe("createStepRecorder", () => {
     vi.advanceTimersByTime(300);
     click(el("button"));
 
-    expect(send).toHaveBeenCalledTimes(2);
+    expect(send).toHaveBeenCalledTimes(3);
   });
 });

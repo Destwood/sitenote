@@ -3,6 +3,7 @@ import type { SitenoteClient } from "@sitenote/db";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 
+import { mapDataError } from "../data-errors";
 import { type DataRequest } from "../messages";
 import { failure, success } from "@sitenote/widget";
 import type { ThreadRecordings } from "../recording-upload";
@@ -596,6 +597,88 @@ describe("Jira", () => {
   });
 });
 
+describe("thread shares", () => {
+  const NOW = Date.parse("2026-11-14T00:00:00.000Z");
+  const TOKEN = "b".repeat(64);
+  const LIVE = { token: TOKEN, expires_at: "2026-12-14T00:00:00.000Z" };
+  const EXPIRED = { token: TOKEN, expires_at: "2026-11-01T00:00:00.000Z" };
+  const SHARE = { token: TOKEN, expiresAt: "2026-12-14T00:00:00.000Z" };
+
+  it("reads the live share of the thread", async () => {
+    const { service, queries } = setup({ thread_shares: [ok(LIVE)] }, { now: () => NOW });
+
+    expect(await service.getShare({ type: "threads.getShare", threadId: THREAD_ID })).toEqual(
+      success(SHARE),
+    );
+    expect(queries.find((query) => query.target === "thread_shares")?.calls).toEqual([
+      { method: "select", args: ["token, expires_at"] },
+      { method: "eq", args: ["thread_id", THREAD_ID] },
+      { method: "maybeSingle", args: [] },
+    ]);
+  });
+
+  it("reports no share when the thread has none or its share has expired", async () => {
+    const { service } = setup({ thread_shares: [ok(null), ok(EXPIRED)] }, { now: () => NOW });
+
+    expect(await service.getShare({ type: "threads.getShare", threadId: THREAD_ID })).toEqual(
+      success(null),
+    );
+    expect(await service.getShare({ type: "threads.getShare", threadId: THREAD_ID })).toEqual(
+      success(null),
+    );
+  });
+
+  it("maps a failed read", async () => {
+    const error = { code: "42501", message: "permission denied" };
+    const { service } = setup({ thread_shares: [broken(error)] }, { now: () => NOW });
+
+    expect(await service.getShare({ type: "threads.getShare", threadId: THREAD_ID })).toEqual(
+      failure(mapDataError(error)),
+    );
+  });
+
+  it("enables the share through the RPC and returns its link", async () => {
+    const { service, queries } = setup({
+      "rpc:thread_share_enable": [ok([LIVE])],
+    });
+
+    expect(
+      await service.setShare({ type: "threads.setShare", threadId: THREAD_ID, enabled: true }),
+    ).toEqual(success(SHARE));
+    expect(queries.find((query) => query.target === "rpc:thread_share_enable")?.calls).toEqual([
+      { method: "rpc", args: [{ p_thread_id: THREAD_ID }] },
+    ]);
+  });
+
+  it("answers unknown when the enable RPC returns no row", async () => {
+    const { service } = setup({ "rpc:thread_share_enable": [ok([])] });
+
+    expect(
+      await service.setShare({ type: "threads.setShare", threadId: THREAD_ID, enabled: true }),
+    ).toEqual(failure("unknown"));
+  });
+
+  it("disables the share through the RPC", async () => {
+    const { service, queries } = setup({ "rpc:thread_share_disable": [ok(null)] });
+
+    expect(
+      await service.setShare({ type: "threads.setShare", threadId: THREAD_ID, enabled: false }),
+    ).toEqual(success(null));
+    expect(queries.find((query) => query.target === "rpc:thread_share_disable")?.calls).toEqual([
+      { method: "rpc", args: [{ p_thread_id: THREAD_ID }] },
+    ]);
+  });
+
+  it("maps a failed change", async () => {
+    const error = { code: "42501", message: "not allowed" };
+    const { service } = setup({ "rpc:thread_share_disable": [broken(error)] });
+
+    expect(
+      await service.setShare({ type: "threads.setShare", threadId: THREAD_ID, enabled: false }),
+    ).toEqual(failure(mapDataError(error)));
+  });
+});
+
 describe("createThread", () => {
   const REQUEST: Extract<DataRequest, { type: "threads.create" }> = {
     type: "threads.create",
@@ -607,6 +690,7 @@ describe("createThread", () => {
     mentions: [OTHER_ID],
   };
   const WITH_CAPTURE = { ...REQUEST, captureId: CAPTURE_ID };
+  const WITH_RECORDING = { ...REQUEST, attachRecording: true };
   const PATH = `${WORKSPACE_ID}/${THREAD_ID}.webp`;
 
   it("calls the create_thread function and returns the stored thread", async () => {
@@ -718,6 +802,18 @@ describe("createThread", () => {
     });
   });
 
+  it("creates a plain thread when the sender tab has an unrequested pending recording", async () => {
+    const { service, queries, recordings } = setup(
+      { "rpc:create_thread": [ok({ id: THREAD_ID })], threads: [ok(threadRow())] },
+      { recordAttach: () => Promise.resolve(RECORDING) },
+    );
+
+    expect((await service.createThread(REQUEST, { tabId: 4 })).ok).toBe(true);
+
+    expect(recordings.attach).not.toHaveBeenCalled();
+    expect(storedContext(callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0])).toEqual(CONTEXT);
+  });
+
   it("attaches the pending recording of the sender tab and stores its reference", async () => {
     const { service, queries, recordings } = setup(
       { "rpc:create_thread": [ok({ id: THREAD_ID })], threads: [ok(threadRow())] },
@@ -731,7 +827,7 @@ describe("createThread", () => {
       },
     );
 
-    await service.createThread(REQUEST, { tabId: 4 });
+    await service.createThread(WITH_RECORDING, { tabId: 4 });
 
     const threadId = String(recordings.attach.mock.calls[0]?.[2]);
     expect(recordings.attach).toHaveBeenCalledExactlyOnceWith(4, WORKSPACE_ID, threadId);
@@ -760,7 +856,7 @@ describe("createThread", () => {
       },
     );
 
-    await service.createThread(REQUEST, { tabId: 4 });
+    await service.createThread(WITH_RECORDING, { tabId: 4 });
 
     expect(callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0]).toMatchObject({
       p_context: { recording: { steps: [STEP] } },
@@ -775,7 +871,10 @@ describe("createThread", () => {
       { recordAttach },
     );
 
-    await signedOut.service.createThread({ ...REQUEST, startsSignedOut: true }, { tabId: 4 });
+    await signedOut.service.createThread(
+      { ...WITH_RECORDING, startsSignedOut: true },
+      { tabId: 4 },
+    );
 
     expect(callsOf(signedOut.queries, "rpc:create_thread")[0]?.[0]?.args[0]).toMatchObject({
       p_context: { recording: { startsSignedOut: true } },
@@ -786,7 +885,10 @@ describe("createThread", () => {
       { recordAttach },
     );
 
-    await signedIn.service.createThread({ ...REQUEST, startsSignedOut: false }, { tabId: 4 });
+    await signedIn.service.createThread(
+      { ...WITH_RECORDING, startsSignedOut: false },
+      { tabId: 4 },
+    );
 
     expect(
       JSON.stringify(callsOf(signedIn.queries, "rpc:create_thread")[0]?.[0]?.args[0]),
@@ -803,7 +905,7 @@ describe("createThread", () => {
       },
     );
 
-    await service.createThread({ ...WITH_CAPTURE }, { tabId: 4 });
+    await service.createThread({ ...WITH_RECORDING, captureId: CAPTURE_ID }, { tabId: 4 });
 
     expect(recordings.attach).toHaveBeenCalledExactlyOnceWith(4, WORKSPACE_ID, OTHER_THREAD_ID);
     expect(callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0]).toMatchObject({
@@ -850,7 +952,7 @@ describe("createThread", () => {
     });
 
     await service.createThread(
-      { ...REQUEST, context: { ...CONTEXT, recording: RECORDING } },
+      { ...WITH_RECORDING, context: { ...CONTEXT, recording: RECORDING } },
       { tabId: 4 },
     );
 
@@ -865,7 +967,7 @@ describe("createThread", () => {
       threads: [ok(threadRow())],
     });
 
-    const result = await service.createThread(REQUEST, { tabId: 4 });
+    const result = await service.createThread(WITH_RECORDING, { tabId: 4 });
 
     expect(result.ok && result.data.id).toBe(THREAD_ID);
     const args = callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0];
@@ -880,7 +982,7 @@ describe("createThread", () => {
       { recordAttach: () => Promise.resolve(RECORDING) },
     );
 
-    await service.createThread(REQUEST, { tabId: 4 });
+    await service.createThread(WITH_RECORDING, { tabId: 4 });
 
     expect(recordings.discard).not.toHaveBeenCalled();
   });
@@ -891,7 +993,7 @@ describe("createThread", () => {
       threads: [ok(threadRow())],
     });
 
-    await service.createThread(REQUEST);
+    await service.createThread(WITH_RECORDING);
 
     expect(recordings.attach).not.toHaveBeenCalled();
     expect(recordings.discard).not.toHaveBeenCalled();

@@ -25,7 +25,6 @@ export interface StepRecorder {
 type StepKind = RecordingStep["kind"];
 
 const NAVIGATION_POLL_MS = 500;
-const THROTTLE_MS = 300;
 const INTERACTIVE_SELECTOR =
   "a,button,input,select,textarea,summary,label,[role=button],[role=link],[role=menuitem],[role=tab],[role=checkbox],[role=switch],[onclick]";
 const CLICKABLE_INPUT_TYPES: readonly string[] = [
@@ -60,11 +59,23 @@ function acceptedTarget(event: Event): Element | null {
   return targetOf(event);
 }
 
-function isTextField(element: Element): boolean {
-  if (element instanceof HTMLTextAreaElement) {
+function isEditableField(element: Element): boolean {
+  if (element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) {
     return true;
   }
   return element instanceof HTMLInputElement && !CLICKABLE_INPUT_TYPES.includes(element.type);
+}
+
+function hasActivationEvent(element: Element): boolean {
+  if (element instanceof HTMLButtonElement) {
+    return element.type === "submit" && element.form !== null;
+  }
+  return (
+    element instanceof HTMLInputElement &&
+    (element.type === "checkbox" ||
+      element.type === "radio" ||
+      (element.form !== null && (element.type === "submit" || element.type === "image")))
+  );
 }
 
 function isSensitive(element: Element): boolean {
@@ -125,7 +136,9 @@ function labelOf(doc: Document, element: Element): string {
 export function createStepRecorder(deps: StepRecorderDeps): StepRecorder {
   let origin = 0;
   let cleanup: (() => void) | null = null;
-  let last: { step: RecordingStep; at: number } | null = null;
+  let lastHref = "";
+  let clickedControl: Element | null = null;
+  let activationTimer: number | undefined;
 
   function emit(fields: {
     kind: StepKind;
@@ -134,23 +147,11 @@ export function createStepRecorder(deps: StepRecorderDeps): StepRecorder {
     url?: string;
     sensitive?: boolean;
   }): void {
-    const now = deps.now();
-    const step = sanitizeStep({ t: now - origin, ...fields });
-    const repeated =
-      last !== null &&
-      now - last.at < THROTTLE_MS &&
-      last.step.kind === step.kind &&
-      last.step.selector === step.selector &&
-      last.step.label === step.label &&
-      last.step.url === step.url;
-    if (repeated) {
-      return;
-    }
-    last = { step, at: now };
-    deps.send(step);
+    deps.send(sanitizeStep({ t: deps.now() - origin, ...fields }));
   }
 
   function report(kind: StepKind, element: Element): void {
+    checkNavigation();
     emit({
       kind,
       selector: selectorOf(element),
@@ -165,34 +166,60 @@ export function createStepRecorder(deps: StepRecorderDeps): StepRecorder {
       return;
     }
     const element = target.closest(INTERACTIVE_SELECTOR) ?? target;
-    if (!isTextField(element)) {
-      report("click", element);
+    if (
+      isEditableField(element) ||
+      (element instanceof HTMLLabelElement && element.control !== null)
+    ) {
+      return;
     }
+    if (hasActivationEvent(element)) {
+      deps.win.clearTimeout(activationTimer);
+      clickedControl = element;
+      activationTimer = deps.win.setTimeout(() => {
+        clickedControl = null;
+      }, 0);
+    }
+    report("click", element);
   }
 
   function onChange(event: Event): void {
     const target = acceptedTarget(event);
-    if (target !== null && FIELD_TAGS.includes(target.localName)) {
+    if (target !== null && target !== clickedControl && FIELD_TAGS.includes(target.localName)) {
       report("input", target);
     }
   }
 
   function onSubmit(event: Event): void {
     const target = acceptedTarget(event);
-    if (target !== null) {
+    if (
+      target !== null &&
+      !(
+        event instanceof SubmitEvent &&
+        event.submitter === clickedControl &&
+        clickedControl !== null
+      )
+    ) {
       report("submit", target);
     }
   }
 
   function emitNavigation(): void {
-    const { pathname, search, hash } = deps.win.location;
+    const { href, pathname, search, hash } = deps.win.location;
+    lastHref = href;
     emit({ kind: "navigate", selector: "", label: "", url: `${pathname}${search}${hash}` });
+  }
+
+  function checkNavigation(): void {
+    if (deps.win.location.href !== lastHref) {
+      emitNavigation();
+    }
   }
 
   function stop(): void {
     cleanup?.();
     cleanup = null;
-    last = null;
+    deps.win.clearTimeout(activationTimer);
+    clickedControl = null;
   }
 
   function start(
@@ -209,13 +236,8 @@ export function createStepRecorder(deps: StepRecorderDeps): StepRecorder {
     for (const [type, listener] of listeners) {
       deps.doc.addEventListener(type, listener, true);
     }
-    let href = deps.win.location.href;
-    const timer = deps.win.setInterval(() => {
-      if (deps.win.location.href !== href) {
-        href = deps.win.location.href;
-        emitNavigation();
-      }
-    }, NAVIGATION_POLL_MS);
+    lastHref = deps.win.location.href;
+    const timer = deps.win.setInterval(checkNavigation, NAVIGATION_POLL_MS);
     cleanup = () => {
       for (const [type, listener] of listeners) {
         deps.doc.removeEventListener(type, listener, true);

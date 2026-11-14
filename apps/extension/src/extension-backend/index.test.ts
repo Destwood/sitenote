@@ -175,6 +175,17 @@ describe("createExtensionBackend", () => {
         backend.linkJiraIssue(THREAD_ID, "PROJ-12"),
       { type: "jira.linkIssue", threadId: THREAD_ID, issueKey: "PROJ-12" },
     ],
+    [
+      "getThreadShare",
+      (backend: ReturnType<typeof createExtensionBackend>) => backend.getThreadShare(THREAD_ID),
+      { type: "threads.getShare", threadId: THREAD_ID },
+    ],
+    [
+      "setThreadShare",
+      (backend: ReturnType<typeof createExtensionBackend>) =>
+        backend.setThreadShare(THREAD_ID, true),
+      { type: "threads.setShare", threadId: THREAD_ID, enabled: true },
+    ],
   ])("sends the runtime message behind %s", async (_name, call, message) => {
     await call(createExtensionBackend());
 

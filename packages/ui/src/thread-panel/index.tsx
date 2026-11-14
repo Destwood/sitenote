@@ -17,6 +17,7 @@ import { ICON_BUTTON, PANEL_SURFACE, SECONDARY_BUTTON } from "../control-classes
 import { JiraIssue, type JiraIssueState } from "../jira-issue";
 import { useNow } from "../now";
 import { VIEWPORT_MARGIN, placePanel, type AnchorRect } from "../placement";
+import { ShareControl, type ThreadShareControl } from "../share-control";
 import type { PersonView, ScreenshotState, ThreadView } from "../types";
 import { useViewport } from "../viewport";
 import { Z_INDEX } from "../z-index";
@@ -34,6 +35,7 @@ export interface ThreadPanelProps {
   recordingAttached?: boolean | undefined;
   clickUp?: ClickUpTaskState | undefined;
   jira?: JiraIssueState | undefined;
+  share?: ThreadShareControl | undefined;
   onReplaySteps?: ((mode: ReplayMode) => void) | undefined;
   onCopyContext?: (() => Promise<boolean> | boolean) | undefined;
   onSubmit: (submission: ComposerSubmission) => Promise<void>;
@@ -62,6 +64,7 @@ export function ThreadPanel({
   recordingAttached,
   clickUp,
   jira,
+  share,
   onReplaySteps,
   onCopyContext,
   onSubmit,
@@ -72,6 +75,7 @@ export function ThreadPanel({
 }: ThreadPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
+  const [pinned, setPinned] = useState(false);
   const viewport = useViewport();
   const now = useNow();
   const titleId = useId();
@@ -112,7 +116,7 @@ export function ThreadPanel({
   const isNew = thread === null;
 
   useEffect(() => {
-    if (isNew) {
+    if (isNew || pinned) {
       return;
     }
     function handlePointerDown(event: PointerEvent) {
@@ -133,11 +137,12 @@ export function ThreadPanel({
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown, true);
     };
-  }, [isNew]);
+  }, [isNew, pinned]);
 
   const { left, top } = placePanel(anchorRect, { width: PANEL_WIDTH, height }, viewport);
   const resolved = thread?.status === "resolved";
   const title = isNew ? "New thread" : `Thread ${String(thread.number)}`;
+  const pinLabel = pinned ? "Unpin thread" : "Keep thread open";
 
   return (
     <div
@@ -154,7 +159,7 @@ export function ThreadPanel({
       }}
       className={`fixed flex flex-col ${PANEL_SURFACE}`}
     >
-      <div className="flex items-center gap-2 border-b border-neutral-200 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-neutral-200 px-3 py-2">
         <h2 id={titleId} className="text-sm font-semibold">
           {title}
         </h2>
@@ -166,6 +171,34 @@ export function ThreadPanel({
           </span>
         )}
         <span className="flex-1" />
+        {thread === null ? null : (
+          <button
+            type="button"
+            aria-pressed={pinned}
+            aria-label={pinLabel}
+            title={pinLabel}
+            onClick={() => {
+              setPinned((value) => !value);
+            }}
+            className={pinned ? `${ICON_BUTTON} bg-blue-100 text-blue-900` : ICON_BUTTON}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill={pinned ? "currentColor" : "none"}
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 17v5" />
+              <path d="M9 4h6l-1 6 3 3v2H7v-2l3-3-1-6z" />
+            </svg>
+          </button>
+        )}
+        {thread !== null && share !== undefined ? <ShareControl {...share} /> : null}
         {thread !== null && canChangeStatus ? (
           <button type="button" onClick={onToggleStatus} className={SECONDARY_BUTTON}>
             {resolved ? "Reopen" : "Resolve"}

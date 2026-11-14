@@ -105,6 +105,8 @@ function fakeBackend(threads: ThreadRecord[]) {
     createClickUpTask: unused,
     getJiraStatus: vi.fn(() => Promise.resolve(success(false))),
     linkJiraIssue: unused,
+    getThreadShare: unused,
+    setThreadShare: unused,
   };
   return { backend, createThread };
 }
@@ -144,7 +146,7 @@ describe("mountWidget", () => {
   it("renders a pin for every thread the backend returns for the page", async () => {
     const { backend, createThread } = fakeBackend([thread()]);
 
-    handle = mountWidget({ host, backend, document, window });
+    handle = mountWidget({ host, backend, document, window, webUrl: PAGE });
 
     await vi.waitFor(() => {
       expect(screen.getByRole("button", { name: "Comments, 1 open" })).toBeTruthy();
@@ -156,7 +158,7 @@ describe("mountWidget", () => {
   it("creates the thread through the backend when the new comment is submitted", async () => {
     const user = userEvent.setup();
     const { backend, createThread } = fakeBackend([]);
-    handle = mountWidget({ host, backend, document, window });
+    handle = mountWidget({ host, backend, document, window, webUrl: PAGE });
     await vi.waitFor(() => {
       expect(backend.getSiteInfo).toHaveBeenCalled();
     });
@@ -185,7 +187,7 @@ describe("mountWidget", () => {
     root.innerHTML = '<button id="pill">Stop</button>';
     document.body.append(root);
     const { backend, createThread } = fakeBackend([]);
-    handle = mountWidget({ host, backend, document, window });
+    handle = mountWidget({ host, backend, document, window, webUrl: PAGE });
     await vi.waitFor(() => {
       expect(backend.getSiteInfo).toHaveBeenCalled();
     });

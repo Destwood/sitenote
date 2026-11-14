@@ -141,3 +141,10 @@ export const jiraLinkResultSchema = z.object({
 });
 
 export type JiraLinkResult = z.infer<typeof jiraLinkResultSchema>;
+
+export const threadShareInfoSchema = z.object({
+  token: z.string(),
+  expiresAt: z.string(),
+});
+
+export type ThreadShareInfo = z.infer<typeof threadShareInfoSchema>;

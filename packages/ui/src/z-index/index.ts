@@ -7,4 +7,6 @@ export const Z_INDEX = {
   panel: 2147483040,
   banner: 2147483050,
   toast: 2147483060,
+  replayShield: 2147483070,
+  replayControls: 2147483080,
 } as const;

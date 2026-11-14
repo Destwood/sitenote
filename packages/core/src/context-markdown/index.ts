@@ -3,9 +3,9 @@ import type {
   ConsoleErrorRecord,
   NetworkErrorRecord,
   RecordingRef,
-  RecordingStep,
   ThreadContext,
 } from "../context";
+import { isRecordedAction, type RecordedAction } from "../recording-steps";
 
 export const CONTEXT_MARKDOWN_MAX = 12000;
 const STACK_MAX = 600;
@@ -117,7 +117,7 @@ function elementBlock(anchor: Anchor | null | undefined): string {
   );
 }
 
-function stepText(step: RecordingStep): string {
+function stepText(step: RecordedAction): string {
   const label = oneLine(step.label);
   const quoted = label === "" ? "" : ` "${label}"`;
   const sensitive = step.sensitive === true;
@@ -130,10 +130,6 @@ function stepText(step: RecordingStep): string {
       return `Type into${quoted === "" ? " a field" : quoted} (value not recorded)`;
     case "submit":
       return `submit${quoted === "" ? " form" : quoted}`;
-    case "navigate":
-      return sensitive || !isPresent(step.url)
-        ? `Go to${quoted === "" ? " page" : quoted}`
-        : `Go to ${oneLine(step.url)}`;
   }
 }
 
@@ -141,9 +137,9 @@ function stepsBlock(recording: RecordingRef | undefined): string {
   if (recording === undefined) {
     return "";
   }
-  const list = (recording.steps ?? []).map(
-    (step, index) => `${String(index + 1)}. ${stepText(step)}`,
-  );
+  const list = (recording.steps ?? [])
+    .filter(isRecordedAction)
+    .map((step, index) => `${String(index + 1)}. ${stepText(step)}`);
   const extras = keepLines([
     recording.startsSignedOut === true ? "Starts signed out: yes" : null,
     isPresent(recording.startUrl) ? `Recording started at: ${recording.startUrl}` : null,

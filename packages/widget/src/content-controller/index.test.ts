@@ -18,6 +18,7 @@ import type {
   MemberRecord,
   SiteInfo,
   ThreadRecord,
+  ThreadShareInfo,
 } from "../transport";
 import {
   COMMENT_CURSOR_CSS,
@@ -44,6 +45,7 @@ const SITE: SiteInfo = {
   captureErrors: true,
 };
 const PAGE = "http://localhost:3000";
+const WEB_URL = "https://app.sitenote.test";
 const THREAD_ID = "30000000-0000-4000-8000-000000000001";
 const SECOND_THREAD_ID = "30000000-0000-4000-8000-000000000002";
 const COMMENT_ID = "40000000-0000-4000-8000-000000000001";
@@ -228,6 +230,8 @@ function fakeBackend(
     createClickUpTask: (threadId) => respond("createClickUpTask", [threadId]),
     getJiraStatus: (workspaceId) => respond("getJiraStatus", [workspaceId]),
     linkJiraIssue: (threadId, issueKey) => respond("linkJiraIssue", [threadId, issueKey]),
+    getThreadShare: (threadId) => respond("getThreadShare", [threadId]),
+    setThreadShare: (threadId, enabled) => respond("setThreadShare", [threadId, enabled]),
     getSelectionPlacement: () => respond("getSelectionPlacement", []),
   };
 }
@@ -243,6 +247,7 @@ async function setup(
     win: window,
     doc: document,
     origin: "http://localhost:3000",
+    webUrl: WEB_URL,
     isOwn: (node) => node !== null && (node === host || host.contains(node)),
     backend: fakeBackend(handlers, threads, calls, connection),
     preference: memoryPreference(),
@@ -663,15 +668,62 @@ describe("entering comment mode with a notice", () => {
     ]);
   });
 
-  it("marks the recording as attached when a recording is handed over", async () => {
-    const { controller: api, state } = await setup();
+  it("keeps the recording through the anchor pick and requests it when publishing", async () => {
+    const {
+      controller: api,
+      state,
+      calls,
+    } = await setup([], {
+      createThread: () => success(thread({ hasScreenshot: true })),
+    });
 
     expect(state().recordingAttached).toBe(false);
     expect(api.attachRecording()).toBe(true);
 
     expect(state().recordingAttached).toBe(true);
     expect(state().commentMode).toBe(true);
+
+    under = element("#cta");
+    under.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+    await vi.waitFor(() => {
+      expect(state().pending).not.toBeNull();
+    });
+    await api.submitNewThread({ body: "Recorded issue", mentions: [] });
+
+    expect(calls().find((call) => call.method === "createThread")?.args[0]).toMatchObject({
+      attachRecording: true,
+    });
   });
+
+  it.each(["exit", "toggle", "escape", "close draft"])(
+    "clears the attachment when the author cancels via %s",
+    async (action) => {
+      const { controller: api, state } = await setup();
+      api.attachRecording();
+
+      if (action === "exit") {
+        api.exitCommentMode();
+      } else if (action === "toggle") {
+        api.toggleCommentMode();
+      } else if (action === "escape") {
+        element("#copy").dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+        );
+      } else {
+        under = element("#cta");
+        under.dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }),
+        );
+        await vi.waitFor(() => {
+          expect(state().pending).not.toBeNull();
+        });
+        expect(state().recordingAttached).toBe(true);
+        api.closePanel();
+      }
+
+      expect(state().recordingAttached).toBe(false);
+    },
+  );
 
   it("returns false and changes nothing when the site is not enabled", async () => {
     const { controller: api, state } = await setup([], { getSiteInfo: () => success(null) });
@@ -883,6 +935,7 @@ describe("creating a thread", () => {
       mentions: [],
     });
     expect(request).toMatchObject({ anchor: { kind: "element" } });
+    expect(request).not.toHaveProperty("attachRecording");
     expect(state().pending).toBeNull();
     expect(state().activeThreadId).toBe(THREAD_ID);
     expect(state().threads).toEqual([created]);
@@ -1316,6 +1369,176 @@ describe("linking a Jira issue", () => {
 
     expect(calls().filter((call) => call.method === "linkJiraIssue")).toHaveLength(1);
     expect(state().jiraPending.has(THREAD_ID)).toBe(false);
+  });
+});
+
+describe("sharing a thread", () => {
+  const TOKEN = "a".repeat(64);
+  const SHARE: ThreadShareInfo = { token: TOKEN, expiresAt: "2026-12-14T10:00:00.000Z" };
+
+  afterEach(() => {
+    Reflect.deleteProperty(window.navigator, "clipboard");
+  });
+
+  function stubClipboard(writeText: (text: string) => Promise<void>) {
+    const writer = vi.fn(writeText);
+    Object.defineProperty(window.navigator, "clipboard", {
+      value: { writeText: writer },
+      configurable: true,
+    });
+    return writer;
+  }
+
+  it("loads the share of a selected thread", async () => {
+    const {
+      controller: api,
+      state,
+      calls,
+    } = await setup([thread()], {
+      getThreadShare: () => success(SHARE),
+    });
+
+    api.selectThread(THREAD_ID);
+
+    await vi.waitFor(() => {
+      expect(state().shares.get(THREAD_ID)).toEqual(SHARE);
+    });
+    expect(calls()).toContainEqual({ method: "getThreadShare", args: [THREAD_ID] });
+  });
+
+  it("records a thread without a live share as workspace access", async () => {
+    const { controller: api, state } = await setup([thread()], {
+      getThreadShare: () => success(null),
+    });
+
+    api.selectThread(THREAD_ID);
+
+    await vi.waitFor(() => {
+      expect(state().shares.has(THREAD_ID)).toBe(true);
+    });
+    expect(state().shares.get(THREAD_ID)).toBeNull();
+  });
+
+  it("leaves the share unknown when it cannot be read", async () => {
+    const {
+      controller: api,
+      state,
+      calls,
+    } = await setup([thread()], {
+      getThreadShare: () => failure("network"),
+    });
+
+    api.selectThread(THREAD_ID);
+
+    await vi.waitFor(() => {
+      expect(calls().some((call) => call.method === "getThreadShare")).toBe(true);
+    });
+    await vi.waitFor(() => {
+      expect(state().activeThreadId).toBe(THREAD_ID);
+    });
+    expect(state().shares.has(THREAD_ID)).toBe(false);
+    expect(state().toasts).toEqual([]);
+  });
+
+  it("enables the public link and stores the share", async () => {
+    const {
+      controller: api,
+      state,
+      calls,
+    } = await setup([thread()], {
+      setThreadShare: () => success(SHARE),
+    });
+
+    await api.setShareAccess(THREAD_ID, "link");
+
+    expect(calls()).toContainEqual({ method: "setThreadShare", args: [THREAD_ID, true] });
+    expect(state().shares.get(THREAD_ID)).toEqual(SHARE);
+    expect(state().sharePending.has(THREAD_ID)).toBe(false);
+  });
+
+  it("disables the public link and clears the stored share", async () => {
+    const {
+      controller: api,
+      state,
+      calls,
+    } = await setup([thread()], {
+      getThreadShare: () => success(SHARE),
+      setThreadShare: () => success(null),
+    });
+    api.selectThread(THREAD_ID);
+    await vi.waitFor(() => {
+      expect(state().shares.get(THREAD_ID)).toEqual(SHARE);
+    });
+
+    await api.setShareAccess(THREAD_ID, "workspace");
+
+    expect(calls()).toContainEqual({ method: "setThreadShare", args: [THREAD_ID, false] });
+    expect(state().shares.get(THREAD_ID)).toBeNull();
+  });
+
+  it("shows an error and keeps the share state when the change fails", async () => {
+    const { controller: api, state } = await setup([thread()], {
+      setThreadShare: () => failure("network"),
+    });
+
+    await api.setShareAccess(THREAD_ID, "link");
+
+    expect(state().shares.has(THREAD_ID)).toBe(false);
+    expect(state().sharePending.has(THREAD_ID)).toBe(false);
+    expect(state().toasts.map((toast) => toast.variant)).toEqual(["error"]);
+  });
+
+  it("refuses a second change while one is pending", async () => {
+    let release: (value: MessageResult<ThreadShareInfo | null>) => void = () => undefined;
+    const {
+      controller: api,
+      state,
+      calls,
+    } = await setup([thread()], {
+      setThreadShare: () =>
+        new Promise<MessageResult<ThreadShareInfo | null>>((resolve) => {
+          release = resolve;
+        }),
+    });
+
+    const first = api.setShareAccess(THREAD_ID, "link");
+    expect(state().sharePending.has(THREAD_ID)).toBe(true);
+    await api.setShareAccess(THREAD_ID, "link");
+    release(success(SHARE));
+    await first;
+
+    expect(calls().filter((call) => call.method === "setThreadShare")).toHaveLength(1);
+  });
+
+  it("copies the private thread link while the thread is not shared", async () => {
+    const writer = stubClipboard(() => Promise.resolve());
+    const { controller: api } = await setup([thread()]);
+
+    expect(await api.copyThreadLink(THREAD_ID)).toBe(true);
+
+    expect(writer).toHaveBeenCalledExactlyOnceWith(`${WEB_URL}/t/${THREAD_ID}`);
+  });
+
+  it("copies the public link once the thread is shared", async () => {
+    const writer = stubClipboard(() => Promise.resolve());
+    const { controller: api, state } = await setup([thread()], {
+      getThreadShare: () => success(SHARE),
+    });
+    api.selectThread(THREAD_ID);
+    await vi.waitFor(() => {
+      expect(state().shares.get(THREAD_ID)).toEqual(SHARE);
+    });
+
+    expect(await api.copyThreadLink(THREAD_ID)).toBe(true);
+
+    expect(writer).toHaveBeenCalledExactlyOnceWith(`${WEB_URL}/s/${TOKEN}`);
+  });
+
+  it("reports a link that could not be copied", async () => {
+    stubClipboard(() => Promise.reject(new Error("denied")));
+    const { controller: api } = await setup([thread()]);
+
+    expect(await api.copyThreadLink(THREAD_ID)).toBe(false);
   });
 });
 
@@ -1973,6 +2196,12 @@ describe("sign-in gate of replays", () => {
     return setup(threads, {}, { backend });
   }
 
+  function userClick(): MouseEvent {
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true, composed: true });
+    Object.defineProperty(event, "isTrusted", { value: true });
+    return event;
+  }
+
   it("shows the gate when the recording starts signed out", async () => {
     const { controller: api, state } = await replayHarness([replayThread(true)]);
 
@@ -1994,6 +2223,54 @@ describe("sign-in gate of replays", () => {
       { timeout: 3000 },
     );
     expect(state().replayGate).toBeNull();
+  });
+
+  it("blocks user clicks from the moment replay starts and releases the page on Escape", async () => {
+    const { controller: api, state } = await replayHarness([replayThread(false)]);
+    const siteButton = element("#cta");
+    const siteClick = vi.fn();
+    siteButton.addEventListener("click", siteClick);
+    host.innerHTML = "<div data-sitenote-replay-controls><button>Stop replay</button></div>";
+    const stopButton = element("sitenote-root button");
+    const controlsClick = vi.fn();
+    stopButton.addEventListener("click", controlsClick);
+
+    api.startReplay(THREAD_ID, "step");
+    expect(state().replay?.view.label).toBe("Preparing replay…");
+    expect(siteButton.dispatchEvent(userClick())).toBe(false);
+    expect(siteClick).not.toHaveBeenCalled();
+    stopButton.dispatchEvent(userClick());
+    expect(controlsClick).toHaveBeenCalledOnce();
+
+    siteButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(siteClick).toHaveBeenCalledOnce();
+
+    stopButton.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(state().replay).toBeNull();
+    expect(siteButton.dispatchEvent(userClick())).toBe(true);
+    expect(siteClick).toHaveBeenCalledTimes(2);
+  });
+
+  it("allows only the current page field to receive user clicks during manual input", async () => {
+    const { controller: api, state } = await replayHarness([replayThread(false)]);
+    const field = document.createElement("input");
+    field.name = "password";
+    document.body.append(field);
+    vi.spyOn(field, "getClientRects").mockReturnValue([new DOMRect()] as unknown as DOMRectList);
+
+    api.startReplay(THREAD_ID, "step");
+    await vi.waitFor(
+      () => {
+        for (const frame of frames.splice(0)) {
+          frame();
+        }
+        expect(state().replay?.view.status).toBe("input");
+      },
+      { timeout: 3000 },
+    );
+
+    expect(field.dispatchEvent(userClick())).toBe(true);
+    expect(element("#cta").dispatchEvent(userClick())).toBe(false);
   });
 
   it("runs the replay from the gate and clears the gate", async () => {

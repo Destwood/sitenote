@@ -52,6 +52,42 @@ describe("Pin", () => {
     expect(pin.className).toContain("ring-2");
   });
 
+  it("colours an active open pin orange instead of blue", () => {
+    renderPin({ active: true, status: "open" });
+
+    const pin = screen.getByRole("button");
+
+    expect(pin.className).toContain("bg-orange-700");
+    expect(pin.className).not.toContain("bg-blue-700");
+  });
+
+  it("colours an active resolved pin orange instead of grey", () => {
+    renderPin({ active: true, status: "resolved" });
+
+    const pin = screen.getByRole("button");
+
+    expect(pin.className).toContain("bg-orange-700");
+    expect(pin.className).not.toContain("bg-neutral-600");
+  });
+
+  it("keeps an inactive open pin blue", () => {
+    renderPin({ active: false, status: "open" });
+
+    const pin = screen.getByRole("button");
+
+    expect(pin.className).toContain("bg-blue-700");
+    expect(pin.className).not.toContain("bg-orange-700");
+  });
+
+  it("keeps an inactive resolved pin grey", () => {
+    renderPin({ active: false, status: "resolved" });
+
+    const pin = screen.getByRole("button");
+
+    expect(pin.className).toContain("bg-neutral-600");
+    expect(pin.className).not.toContain("bg-orange-700");
+  });
+
   it("describes a pending pin as pending regardless of status", () => {
     renderPin({ pending: true });
 
@@ -59,6 +95,16 @@ describe("Pin", () => {
 
     expect(pin.getAttribute("data-state")).toBe("pending");
     expect(pin.className).toContain("border-dashed");
+  });
+
+  it("keeps the dashed pending style for an active pending pin", () => {
+    renderPin({ active: true, pending: true });
+
+    const pin = screen.getByRole("button", { name: "Thread 3, pending" });
+
+    expect(pin.className).toContain("border-dashed");
+    expect(pin.className).toContain("bg-white");
+    expect(pin.className).not.toContain("bg-orange-700");
   });
 
   it("calls onSelect on click, Enter and Space", async () => {

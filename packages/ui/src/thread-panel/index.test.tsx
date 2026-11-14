@@ -396,6 +396,70 @@ describe("ThreadPanel outside pointer", () => {
   });
 });
 
+describe("ThreadPanel pin", () => {
+  it("offers a pin toggle on an existing thread", () => {
+    renderPanel();
+
+    const pin = screen.getByRole("button", { name: "Keep thread open" });
+
+    expect(pin.getAttribute("aria-pressed")).toBe("false");
+    expect(pin.getAttribute("title")).toBe("Keep thread open");
+  });
+
+  it("does not offer a pin toggle for a new thread", () => {
+    renderPanel({ thread: null });
+
+    expect(screen.queryByRole("button", { name: "Keep thread open" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Unpin thread" })).toBeNull();
+  });
+
+  it("marks the thread as pinned when the toggle is clicked", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "Keep thread open" }));
+
+    const pin = screen.getByRole("button", { name: "Unpin thread" });
+    expect(pin.getAttribute("aria-pressed")).toBe("true");
+    expect(pin.getAttribute("title")).toBe("Unpin thread");
+  });
+
+  it("keeps a pinned thread open on a pointerdown outside the panel", async () => {
+    const user = userEvent.setup();
+    const { onClose } = renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "Keep thread open" }));
+    fireEvent.pointerDown(document.body);
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("still closes a pinned thread on Escape and the close button", async () => {
+    const user = userEvent.setup();
+    const { onClose } = renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "Keep thread open" }));
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Close thread" }));
+
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it("closes again on an outside pointerdown once unpinned", async () => {
+    const user = userEvent.setup();
+    const { onClose } = renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "Keep thread open" }));
+    await user.click(screen.getByRole("button", { name: "Unpin thread" }));
+    fireEvent.pointerDown(document.body);
+
+    expect(
+      screen.getByRole("button", { name: "Keep thread open" }).getAttribute("aria-pressed"),
+    ).toBe("false");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("ThreadPanel context", () => {
   it("shows the context section inside the scrolling area of an existing thread", () => {
     renderPanel({
@@ -489,5 +553,33 @@ describe("ThreadPanel context", () => {
     renderPanel({ thread: null });
 
     expect(screen.queryByRole("region", { name: "Page context" })).toBeNull();
+  });
+});
+
+describe("ThreadPanel share", () => {
+  const share = {
+    access: "workspace" as const,
+    pending: false,
+    onAccessChange: vi.fn(),
+    onCopy: vi.fn(() => true),
+  };
+
+  it("shows the share control in the header of an existing thread", () => {
+    renderPanel({ share });
+
+    expect(screen.getByRole("button", { name: "Share" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Who can open the link" })).toBeTruthy();
+  });
+
+  it("leaves the share control out when the viewer cannot manage shares", () => {
+    renderPanel();
+
+    expect(screen.queryByRole("combobox", { name: "Who can open the link" })).toBeNull();
+  });
+
+  it("leaves the share control out of a new thread", () => {
+    renderPanel({ thread: null, share });
+
+    expect(screen.queryByRole("combobox", { name: "Who can open the link" })).toBeNull();
   });
 });

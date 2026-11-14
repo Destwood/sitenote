@@ -11,6 +11,7 @@ import type {
   Preferences,
   SiteInfo,
   ThreadRecord,
+  ThreadShareInfo,
   ThreadStatus,
 } from "../transport";
 import type { MessageResult } from "../result";
@@ -47,6 +48,7 @@ export interface CreateThreadInput {
   body: string;
   mentions: string[];
   startsSignedOut?: boolean;
+  attachRecording?: boolean;
 }
 
 export interface CreateCommentInput {
@@ -89,5 +91,10 @@ export interface WidgetBackend {
   createClickUpTask: (threadId: string) => Promise<MessageResult<ClickUpTaskResult>>;
   getJiraStatus: (workspaceId: string) => Promise<MessageResult<boolean>>;
   linkJiraIssue: (threadId: string, issueKey: string) => Promise<MessageResult<JiraLinkResult>>;
+  getThreadShare: (threadId: string) => Promise<MessageResult<ThreadShareInfo | null>>;
+  setThreadShare: (
+    threadId: string,
+    enabled: boolean,
+  ) => Promise<MessageResult<ThreadShareInfo | null>>;
   getSelectionPlacement?: () => Promise<MessageResult<SelectionPlacement>>;
 }

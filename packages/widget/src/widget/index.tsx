@@ -12,6 +12,7 @@ export interface WidgetOptions {
   backend: WidgetBackend;
   document: Document;
   window: Window;
+  webUrl: string;
 }
 
 export interface MountWidgetOptions extends WidgetOptions {
@@ -57,7 +58,7 @@ function isInSitenoteRoot(node: Node): boolean {
   return false;
 }
 
-export function createWidget({ backend, document, window }: WidgetOptions): Widget {
+export function createWidget({ backend, document, window, webUrl }: WidgetOptions): Widget {
   let container: HTMLElement | null = null;
 
   function isOwn(node: Node | null): boolean {
@@ -72,6 +73,7 @@ export function createWidget({ backend, document, window }: WidgetOptions): Widg
     win: window,
     doc: document,
     origin: window.location.origin,
+    webUrl,
     isOwn,
     backend,
     preference: createPreferenceClient(backend),

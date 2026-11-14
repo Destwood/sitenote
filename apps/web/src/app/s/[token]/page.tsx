@@ -1,3 +1,4 @@
+import { isRecordedAction } from "@sitenote/core";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -62,7 +63,7 @@ export default async function SharedThreadPage({ params }: SharedThreadPageProps
             startUrl={detail.context?.recording?.startUrl}
             threadId={detail.id}
             extensionId={extensionId}
-            hasSteps={(detail.context?.recording?.steps?.length ?? 0) > 0}
+            hasSteps={detail.context?.recording?.steps?.some(isRecordedAction) === true}
           />
         )}
       </header>

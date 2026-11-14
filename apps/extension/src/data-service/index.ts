@@ -1,6 +1,7 @@
 import {
   anchorSchema,
   fitThreadContext,
+  isRecordedAction,
   parsePageUrl,
   parseThreadContext,
   withoutConsoleErrors,
@@ -25,6 +26,7 @@ import {
   jiraLinkResultSchema,
   type MessageResult,
   success,
+  type ThreadShareInfo,
 } from "@sitenote/widget";
 import type {
   CommentRecord,
@@ -164,6 +166,12 @@ export interface DataService {
   ) => Promise<MessageResult<ClickUpTaskResult>>;
   jiraStatus: (request: Handled<"jira.status">) => Promise<MessageResult<boolean>>;
   jiraLinkIssue: (request: Handled<"jira.linkIssue">) => Promise<MessageResult<JiraLinkResult>>;
+  getShare: (
+    request: Handled<"threads.getShare">,
+  ) => Promise<MessageResult<ThreadShareInfo | null>>;
+  setShare: (
+    request: Handled<"threads.setShare">,
+  ) => Promise<MessageResult<ThreadShareInfo | null>>;
   createComment: (request: Handled<"comments.create">) => Promise<MessageResult<CommentRecord>>;
   updateComment: (request: Handled<"comments.update">) => Promise<MessageResult<CommentRecord>>;
   deleteComment: (request: Handled<"comments.delete">) => Promise<MessageResult<CommentRecord>>;
@@ -193,6 +201,15 @@ function toAnchor(value: unknown): Anchor | null {
 
 function toContext(value: unknown): ThreadContext | null {
   return parseThreadContext(value);
+}
+
+function toShare(
+  row: { token: string; expires_at: string } | null,
+  at: number,
+): ThreadShareInfo | null {
+  return row === null || new Date(row.expires_at).getTime() <= at
+    ? null
+    : { token: row.token, expiresAt: toIso(row.expires_at) };
 }
 
 function toPerson(profile: ProfileRow | null, userId: string | null): PersonRecord {
@@ -419,7 +436,17 @@ export function createDataService(deps: DataServiceDeps): DataService {
       }),
 
     createThread: (
-      { siteId, pageUrl, anchor, context, captureId, body, mentions, startsSignedOut },
+      {
+        siteId,
+        pageUrl,
+        anchor,
+        context,
+        captureId,
+        body,
+        mentions,
+        startsSignedOut,
+        attachRecording,
+      },
       sender,
     ) =>
       guarded(async () => {
@@ -436,7 +463,7 @@ export function createDataService(deps: DataServiceDeps): DataService {
         const threadId = attachment?.threadId ?? crypto.randomUUID();
         const tabId = sender?.tabId;
         const recording =
-          tabId === undefined
+          tabId === undefined || attachRecording !== true
             ? null
             : await deps.recordings.attach(tabId, enabled.workspaceId, threadId);
         const stored =
@@ -518,7 +545,7 @@ export function createDataService(deps: DataServiceDeps): DataService {
           return failure("not_found");
         }
         const recording = parseThreadContext(row.data.context)?.recording;
-        if (recording?.steps === undefined || recording.steps.length === 0) {
+        if (recording?.steps?.some(isRecordedAction) !== true) {
           return success(null);
         }
         return success({
@@ -562,6 +589,32 @@ export function createDataService(deps: DataServiceDeps): DataService {
         }
         const parsed = z.safeParse(jiraLinkResultSchema, result.data);
         return parsed.success ? success(parsed.data) : failure("unknown");
+      }),
+
+    getShare: ({ threadId }) =>
+      guarded(async () => {
+        const row = await client
+          .from("thread_shares")
+          .select("token, expires_at")
+          .eq("thread_id", threadId)
+          .maybeSingle();
+        return row.error === null ? success(toShare(row.data, now())) : fail(row.error);
+      }),
+
+    setShare: ({ threadId, enabled }) =>
+      guarded(async () => {
+        if (!enabled) {
+          const result = await client.rpc("thread_share_disable", { p_thread_id: threadId });
+          return result.error === null ? success(null) : fail(result.error);
+        }
+        const result = await client.rpc("thread_share_enable", { p_thread_id: threadId });
+        if (result.error !== null) {
+          return fail(result.error);
+        }
+        const row = result.data[0];
+        return row === undefined
+          ? failure("unknown")
+          : success({ token: row.token, expiresAt: toIso(row.expires_at) });
       }),
 
     setThreadStatus: ({ threadId, status }) =>

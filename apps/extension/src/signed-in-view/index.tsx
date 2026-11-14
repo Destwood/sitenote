@@ -170,7 +170,7 @@ export function SignedInView({ user, webUrl, onSignedOut }: SignedInViewProps) {
 function PopupFooter({ webUrl, workspaceControl }: PopupFooterProps) {
   const dashboardUrl =
     workspaceControl === null || workspaceControl.value === ""
-      ? `${webUrl}/app`
+      ? `${webUrl}/app/dashboard`
       : `${webUrl}/app/w/${workspaceControl.value}`;
   return (
     <footer className="flex h-10 items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-50 px-4">

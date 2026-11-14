@@ -15,6 +15,7 @@ import {
 } from "wxt/utils/content-script-ui/shadow-root";
 
 import { createToggleListener, restoreRecording } from "../comment-mode";
+import { getExtensionEnv } from "../env";
 import { createExtensionBackend } from "../extension-backend";
 import { sendMessage } from "../message-client";
 import { createRecordingPill } from "../recording-pill";
@@ -24,7 +25,12 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
   let ui: ShadowRootContentScriptUi<() => void> | null = null;
   let mounting = false;
 
-  const widget = createWidget({ backend: createExtensionBackend(), document, window });
+  const widget = createWidget({
+    backend: createExtensionBackend(),
+    document,
+    window,
+    webUrl: getExtensionEnv().webUrl,
+  });
   const recordingPill = createRecordingPill(ctx, css, () => {
     void sendMessage({ type: "recording.stop" });
   });

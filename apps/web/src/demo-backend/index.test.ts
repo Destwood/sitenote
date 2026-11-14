@@ -511,6 +511,18 @@ describe("members, screenshots and clickup", () => {
       error: { code: "not_configured" },
     });
   });
+
+  it("has no thread sharing in the demo", async () => {
+    const { backend } = setup();
+    expect(await backend.getThreadShare(THREAD_ID)).toMatchObject({
+      ok: false,
+      error: { code: "not_configured" },
+    });
+    expect(await backend.setThreadShare(THREAD_ID, true)).toMatchObject({
+      ok: false,
+      error: { code: "not_configured" },
+    });
+  });
 });
 
 describe("realtime subscription", () => {

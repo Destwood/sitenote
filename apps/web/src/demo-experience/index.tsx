@@ -49,6 +49,7 @@ async function connectVisit(host: HTMLElement, name: string): Promise<WidgetHand
     host,
     document,
     window,
+    webUrl: window.location.origin,
     backend: createDemoBackend({
       client,
       win: window,

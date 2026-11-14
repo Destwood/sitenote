@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState, type KeyboardEvent } from "react";
 
 import { FOCUS_RING, ICON_BUTTON, TEXT_BUTTON } from "../control-classes";
 import { useNow } from "../now";
@@ -99,6 +99,35 @@ export function Sidebar({
   const now = useNow();
   const titleId = useId();
   const [scopeFilter, setScopeFilter] = useState("all");
+  const asideRef = useRef<HTMLElement>(null);
+
+  const closeOnOutsidePointer = useEffectEvent(() => {
+    onClose();
+  });
+
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      if (!event.isTrusted) {
+        return;
+      }
+      const aside = asideRef.current;
+      if (aside === null) {
+        return;
+      }
+      const root = aside.getRootNode();
+      const inside =
+        root instanceof ShadowRoot
+          ? event.composedPath().includes(root.host)
+          : aside.contains(event.target as Node);
+      if (!inside) {
+        closeOnOutsidePointer();
+      }
+    }
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+    };
+  }, []);
 
   const placed = threads.filter((thread) => !thread.orphaned);
   const open = placed.filter(isOpen);
@@ -187,6 +216,7 @@ export function Sidebar({
 
   return (
     <aside
+      ref={asideRef}
       aria-labelledby={titleId}
       onKeyDown={handleKeyDown}
       style={{ width: SIDEBAR_WIDTH, zIndex: Z_INDEX.sidebar }}
