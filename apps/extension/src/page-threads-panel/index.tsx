@@ -3,7 +3,7 @@ import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import { ERROR_CLASS, LINK_BUTTON_CLASS } from "../form-controls";
 import { Icon } from "../icon";
 import { listPageThreads, openPageSidebar, openPageThread } from "../message-client";
-import { RouteLabel, routeDisplayText } from "@sitenote/ui";
+import { RouteLabel, ThreadTypeBadge, routeDisplayText } from "@sitenote/ui";
 import { ERROR_MESSAGES, type PageThreadSummary } from "@sitenote/widget";
 
 type View =
@@ -274,6 +274,7 @@ export function PageThreadsPanel({
                           <span className="line-clamp-2 text-xs text-neutral-600">
                             {thread.excerpt === "" ? "(no text)" : thread.excerpt}
                           </span>
+                          <ThreadTypeBadge video={thread.hasRecording} />
                           {thread.status === "open" ? null : (
                             <span className="text-[10px] text-neutral-500">Resolved</span>
                           )}

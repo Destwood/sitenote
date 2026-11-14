@@ -77,6 +77,7 @@ beforeEach(() => {
         commentCount: 1,
         lastActivity: "2026-10-22T09:00:00Z",
         firstBody: "Headline is cut off",
+        hasRecording: false,
       },
     ],
     total: 30,

@@ -13,6 +13,8 @@ import {
   type ContentController,
   type ContentState,
 } from "../content-controller";
+import { Z_INDEX } from "@sitenote/ui";
+
 import { ContentApp } from ".";
 
 const ME = "00000000-0000-4000-8000-000000000002";
@@ -78,9 +80,12 @@ function measurement(
   return {
     x,
     y,
+    pageX: x,
+    pageY: y,
     rect: { x: x - 20, y: y - 10, width: 40, height: 20 },
     rects: [],
     visible: true,
+    near: true,
     ...overrides,
   };
 }
@@ -328,7 +333,7 @@ describe("pins", () => {
         [SECOND_ID, ORPHANED],
       ]),
       positions: new Map([
-        [FIRST_ID, measurement(-50, 200, { visible: false })],
+        [FIRST_ID, measurement(-50, 200, { visible: false, near: false })],
         [SECOND_ID, measurement(300, 400)],
       ]),
     });
@@ -629,10 +634,8 @@ describe("thread panel", () => {
     });
 
     const dialog = screen.getByRole("dialog", { name: "Thread 1" });
-    await user.selectOptions(
-      within(dialog).getByRole("combobox", { name: "Who can open the link" }),
-      "link",
-    );
+    await user.click(within(dialog).getByRole("button", { name: "Who can open the link" }));
+    await user.click(within(dialog).getByRole("menuitemradio", { name: "Anyone with the link" }));
 
     expect(actions.setShareAccess).toHaveBeenCalledWith(FIRST_ID, "link");
   });
@@ -650,11 +653,14 @@ describe("thread panel", () => {
     });
 
     const dialog = screen.getByRole("dialog", { name: "Thread 1" });
+    await user.click(within(dialog).getByRole("button", { name: "Who can open the link" }));
     expect(
-      within(dialog).getByRole<HTMLSelectElement>("combobox", { name: "Who can open the link" })
-        .value,
-    ).toBe("link");
-    await user.click(within(dialog).getByRole("button", { name: "Share" }));
+      within(dialog)
+        .getByRole("menuitemradio", { name: "Anyone with the link" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    await user.keyboard("{Escape}");
+    await user.click(within(dialog).getByRole("button", { name: "Copy link" }));
 
     expect(actions.copyThreadLink).toHaveBeenCalledWith(FIRST_ID);
     expect(await within(dialog).findByRole("button", { name: "Copied" })).toBeTruthy();
@@ -670,8 +676,8 @@ describe("thread panel", () => {
     });
 
     const dialog = screen.getByRole("dialog", { name: "Thread 1" });
-    expect(within(dialog).queryByRole("combobox", { name: "Who can open the link" })).toBeNull();
-    expect(within(dialog).queryByRole("button", { name: "Share" })).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "Who can open the link" })).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "Copy link" })).toBeNull();
   });
 
   it("opens the active thread and replies through the controller", async () => {
@@ -916,5 +922,43 @@ describe("toasts", () => {
     await user.click(screen.getByRole("button", { name: "Dismiss notification" }));
 
     expect(actions.dismissToast).toHaveBeenCalledWith("toast-1");
+  });
+});
+
+describe("comment stacking", () => {
+  it("raises the active panel and the pin layer above a z-indexed anchor", () => {
+    const header = document.createElement("header");
+    header.style.zIndex = "2147483100";
+    const heading = document.createElement("h2");
+    header.append(heading);
+    document.body.append(header);
+    const target = { kind: "element" as const, element: heading, offset: { x: 0.5, y: 0.5 } };
+    try {
+      setup({
+        threads: [thread(FIRST_ID)],
+        resolutions: new Map<string, Resolution>([[FIRST_ID, { status: "resolved", target }]]),
+        positions: new Map([[FIRST_ID, measurement(100, 200)]]),
+        activeThreadId: FIRST_ID,
+      });
+
+      expect(screen.getByRole("dialog").style.zIndex).toBe("2147483101");
+      expect(screen.getByRole("group", { name: "Comment pins" }).style.zIndex).toBe("2147483101");
+    } finally {
+      header.remove();
+    }
+  });
+
+  it("keeps the default panel stacking when the anchor is below it", () => {
+    setup({
+      threads: [thread(FIRST_ID)],
+      resolutions: new Map([[FIRST_ID, RESOLVED]]),
+      positions: new Map([[FIRST_ID, measurement(100, 200)]]),
+      activeThreadId: FIRST_ID,
+    });
+
+    expect(screen.getByRole("dialog").style.zIndex).toBe(String(Z_INDEX.panel));
+    expect(screen.getByRole("group", { name: "Comment pins" }).style.zIndex).toBe(
+      String(Z_INDEX.pins),
+    );
   });
 });

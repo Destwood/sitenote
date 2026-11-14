@@ -7,6 +7,7 @@ import { ICON_BUTTON, PANEL_SURFACE, SECONDARY_BUTTON } from "../control-classes
 import { useNow } from "../now";
 import { ReplayButton } from "../replay-button";
 import { RouteLabel } from "../route-label";
+import { ThreadTypeBadge } from "../thread-type-badge";
 import type { SiteThreadItem, ThreadView } from "../types";
 import { Z_INDEX } from "../z-index";
 
@@ -65,6 +66,7 @@ export function OffPageThreadCard({
         <span>
           {item.authorName} · {item.replies} {item.replies === 1 ? "reply" : "replies"}
         </span>
+        <ThreadTypeBadge video={item.hasRecording} />
         {item.status === "resolved" ? (
           <span className="rounded-full bg-neutral-200 px-2 py-0.5 font-medium text-neutral-800">
             Resolved

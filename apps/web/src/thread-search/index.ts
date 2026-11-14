@@ -12,6 +12,7 @@ export interface ThreadRow {
   commentCount: number;
   lastActivity: string;
   firstBody: string;
+  hasRecording: boolean;
 }
 
 export interface ThreadSearch {
@@ -32,6 +33,26 @@ function searchArguments(workspaceId: string, filters: ThreadFilters, pageNumber
   };
 }
 
+function isRecording(value: unknown): boolean {
+  return (
+    typeof value === "object" && value !== null && "path" in value && typeof value.path === "string"
+  );
+}
+
+async function readRecordingIds(supabase: SitenoteClient, ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) {
+    return new Set();
+  }
+  const { data, error } = await supabase
+    .from("threads")
+    .select("id, recording:context->recording")
+    .in("id", ids);
+  if (error !== null) {
+    throw new Error("Could not read the thread types.");
+  }
+  return new Set(data.filter((row) => isRecording(row.recording)).map((row) => row.id));
+}
+
 export async function searchThreads(
   supabase: SitenoteClient,
   workspaceId: string,
@@ -45,6 +66,10 @@ export async function searchThreads(
   if (error !== null) {
     throw new Error("Could not search the threads.");
   }
+  const recordingIds = await readRecordingIds(
+    supabase,
+    data.map((row) => row.thread_id),
+  );
   return {
     rows: data.map((row) => ({
       id: row.thread_id,
@@ -55,6 +80,7 @@ export async function searchThreads(
       commentCount: row.comment_count,
       lastActivity: row.last_activity,
       firstBody: row.first_body,
+      hasRecording: recordingIds.has(row.thread_id),
     })),
     total: data[0]?.total_count ?? 0,
   };

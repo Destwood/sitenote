@@ -40,10 +40,14 @@ describe("GET /", () => {
     render(await HomePage());
 
     const header = within(screen.getByRole("banner"));
-    expect(header.getByRole("link", { name: "Dashboard" }).getAttribute("href")).toBe("/app");
+    expect(header.getByRole("link", { name: "Dashboard" }).getAttribute("href")).toBe(
+      "/app/dashboard",
+    );
     expect(header.queryByRole("link", { name: "Sign in" })).toBeNull();
     const footer = within(screen.getByRole("navigation", { name: "Footer" }));
-    expect(footer.getByRole("link", { name: "Dashboard" }).getAttribute("href")).toBe("/app");
+    expect(footer.getByRole("link", { name: "Dashboard" }).getAttribute("href")).toBe(
+      "/app/dashboard",
+    );
   });
 
   it("still renders the landing with sign-in when reading the session fails", async () => {

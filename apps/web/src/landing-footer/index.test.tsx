@@ -13,10 +13,24 @@ describe("LandingFooter", () => {
     );
   });
 
+  it("prefixes the in-page anchors with the base path", () => {
+    render(<LandingFooter signedIn={false} basePath="/" />);
+    const nav = screen.getByRole("navigation", { name: "Footer" });
+    expect(within(nav).getByRole("link", { name: "Features" }).getAttribute("href")).toBe(
+      "/#features",
+    );
+    expect(within(nav).getByRole("link", { name: "Download" }).getAttribute("href")).toBe(
+      "/#install",
+    );
+    expect(within(nav).getByRole("link", { name: "Questions" }).getAttribute("href")).toBe("/#faq");
+  });
+
   it("links a signed-in member to the dashboard instead of sign-in", () => {
     render(<LandingFooter signedIn />);
     const nav = screen.getByRole("navigation", { name: "Footer" });
-    expect(within(nav).getByRole("link", { name: "Dashboard" }).getAttribute("href")).toBe("/app");
+    expect(within(nav).getByRole("link", { name: "Dashboard" }).getAttribute("href")).toBe(
+      "/app/dashboard",
+    );
     expect(within(nav).queryByRole("link", { name: "Sign in" })).toBeNull();
   });
 });

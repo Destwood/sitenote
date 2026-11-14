@@ -40,11 +40,11 @@ test("the owner finds a thread by search, filters it by status and resolves it",
   await expect(row).toHaveCount(1);
   await expect(row).toContainText("Open");
 
-  await page.getByLabel("Status").selectOption("resolved");
+  await page.locator('select[name="status"]').selectOption("resolved");
   await page.getByRole("button", { name: "Apply filters" }).click();
   await expect(page.getByText("No threads match these filters.")).toBeVisible();
 
-  await page.getByLabel("Status").selectOption("all");
+  await page.locator('select[name="status"]').selectOption("all");
   await page.getByRole("button", { name: "Apply filters" }).click();
   await page.getByRole("link", { name: thread.pagePath }).click();
   await expect(page.getByRole("heading", { name: `Thread on ${thread.pagePath}` })).toBeVisible();

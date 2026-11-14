@@ -21,7 +21,7 @@ const FEATURES = [
 
 export function DemoSample() {
   return (
-    <main className="mx-auto flex max-w-4xl flex-col gap-16 px-6 py-16">
+    <main id="main" className="mx-auto flex max-w-4xl flex-col gap-16 px-6 py-16">
       <section className="flex flex-col gap-4">
         <p className="text-sm font-semibold tracking-wide text-neutral-500 uppercase">
           Harbor, a sample product

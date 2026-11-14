@@ -1,4 +1,4 @@
-export const DEFAULT_REDIRECT_PATH = "/app";
+export const DEFAULT_REDIRECT_PATH = "/app/dashboard";
 
 const PLACEHOLDER_ORIGIN = "http://sitenote.invalid";
 const MAX_LENGTH = 2048;
