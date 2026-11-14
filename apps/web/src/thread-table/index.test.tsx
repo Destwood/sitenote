@@ -32,13 +32,29 @@ describe("ThreadTable", () => {
     expect(screen.getByText(NO_MATCHES_TEXT)).toBeTruthy();
   });
 
-  it("shows each thread with its page, author, status, counts and times", () => {
+  it("shows the columns in order, starting with the domain and the route", () => {
+    render(<ThreadTable workspaceId={WORKSPACE_ID} rows={[ROW]} names={NAMES} filtered={false} />);
+
+    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "Domain",
+      "Route",
+      "First comment",
+      "Author",
+      "Status",
+      "Comments",
+      "Created",
+      "Last activity",
+    ]);
+  });
+
+  it("shows each thread with its domain, route, author, status, counts and times", () => {
     render(<ThreadTable workspaceId={WORKSPACE_ID} rows={[ROW]} names={NAMES} filtered={false} />);
 
     const row = screen.getAllByRole("row")[1];
     if (row === undefined) {
       throw new Error("The thread row is missing");
     }
+    expect(within(row).getByText("example.test")).toBeTruthy();
     expect(within(row).getByRole("link", { name: "/pricing?plan=pro" }).getAttribute("href")).toBe(
       `/app/w/${WORKSPACE_ID}/threads/${THREAD_ID}`,
     );

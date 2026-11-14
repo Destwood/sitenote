@@ -101,7 +101,6 @@ describe("formatThreadContextMarkdown", () => {
         "### Steps to reproduce",
         '1. click "Buy now" (`#buy`)',
         '2. Type into "Email" (value not recorded)',
-        "3. Go to /cart",
         "",
         "Starts signed out: yes",
         "Recording started at: https://example.com/start",
@@ -174,7 +173,8 @@ describe("formatThreadContextMarkdown", () => {
       anchor: null,
     });
 
-    expect(markdown).toContain('1. click "Reveal"\n2. Go to "Vault"');
+    expect(markdown).toContain('1. click "Reveal"');
+    expect(markdown).not.toContain("Vault");
     expect(markdown).not.toContain("#secret");
     expect(markdown).not.toContain("/vault");
   });

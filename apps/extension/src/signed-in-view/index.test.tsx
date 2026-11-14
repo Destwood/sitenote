@@ -254,7 +254,7 @@ describe("SignedInView main screen", () => {
 
     expect(await screen.findByText("Northwind")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Open dashboard" }).getAttribute("href")).toBe(
-      `${WEB_URL}/app`,
+      `${WEB_URL}/app/dashboard`,
     );
   });
 

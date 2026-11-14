@@ -79,6 +79,26 @@ describe("SiteMenu", () => {
     expect(screen.queryByRole("group", { name: "More options" })).toBeNull();
   });
 
+  it("closes on a pointer press outside the menu on a non-focusable area", async () => {
+    const user = userEvent.setup();
+    renderMenu();
+    await user.click(trigger());
+
+    await user.click(document.body);
+
+    expect(screen.queryByRole("group", { name: "More options" })).toBeNull();
+  });
+
+  it("stays open on a pointer press inside the menu", async () => {
+    const user = userEvent.setup();
+    renderMenu();
+    await user.click(trigger());
+
+    await user.click(screen.getByText("Attach recent errors to comments"));
+
+    expect(screen.getByRole("group", { name: "More options" })).toBeTruthy();
+  });
+
   it("hides the capture checkbox and disable button when the site is not enabled", async () => {
     const user = userEvent.setup();
     renderMenu({ captureErrors: null });

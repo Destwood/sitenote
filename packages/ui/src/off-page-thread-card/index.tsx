@@ -1,15 +1,18 @@
 import type { ReplayMode } from "@sitenote/core";
 import type { KeyboardEvent } from "react";
 
-import { CopyContextButton } from "../context-section";
+import { CommentItem } from "../comment-item";
+import { ContextSection, CopyContextButton } from "../context-section";
 import { ICON_BUTTON, PANEL_SURFACE, SECONDARY_BUTTON } from "../control-classes";
+import { useNow } from "../now";
 import { ReplayButton } from "../replay-button";
 import { RouteLabel } from "../route-label";
-import type { SiteThreadItem } from "../types";
+import type { SiteThreadItem, ThreadView } from "../types";
 import { Z_INDEX } from "../z-index";
 
 export interface OffPageThreadCardProps {
   item: SiteThreadItem;
+  thread?: ThreadView | undefined;
   sidebarOpen: boolean;
   onReproduce: (mode: ReplayMode) => void;
   onOpenPage: () => void;
@@ -21,6 +24,7 @@ export interface OffPageThreadCardProps {
 
 export function OffPageThreadCard({
   item,
+  thread,
   sidebarOpen,
   onReproduce,
   onOpenPage,
@@ -29,6 +33,8 @@ export function OffPageThreadCard({
   onCopyContext,
   onClose,
 }: OffPageThreadCardProps) {
+  const now = useNow();
+
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape" && !event.defaultPrevented) {
       event.stopPropagation();
@@ -42,16 +48,20 @@ export function OffPageThreadCard({
       aria-label="Comment on another page"
       onKeyDown={handleKeyDown}
       style={{ zIndex: Z_INDEX.panel }}
-      className={`fixed top-20 flex w-[300px] max-w-[calc(100vw-32px)] flex-col gap-2 p-3 font-sans ${sidebarOpen ? "right-[336px]" : "right-4"} ${PANEL_SURFACE}`}
+      className={`fixed top-20 flex max-h-[calc(100vh-112px)] w-[300px] max-w-[calc(100vw-32px)] flex-col gap-2 p-3 font-sans ${sidebarOpen ? "right-[336px]" : "right-4"} ${PANEL_SURFACE}`}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <h2 className="flex-1 text-sm font-semibold">Comment on another page</h2>
         <button type="button" aria-label="Close" onClick={onClose} className={ICON_BUTTON}>
           <span aria-hidden="true">×</span>
         </button>
       </div>
-      <RouteLabel route={item.route} onCopy={onCopyRoute} className="text-xs text-neutral-600" />
-      <p className="flex items-center gap-2 text-xs text-neutral-600">
+      <RouteLabel
+        route={item.route}
+        onCopy={onCopyRoute}
+        className="shrink-0 text-xs text-neutral-600"
+      />
+      <p className="flex shrink-0 items-center gap-2 text-xs text-neutral-600">
         <span>
           {item.authorName} · {item.replies} {item.replies === 1 ? "reply" : "replies"}
         </span>
@@ -61,8 +71,31 @@ export function OffPageThreadCard({
           </span>
         ) : null}
       </p>
-      <p className="line-clamp-3 break-words">{item.excerpt}</p>
-      <div className="flex flex-wrap gap-2">
+      {thread === undefined ? (
+        <p className="line-clamp-3 break-words">{item.excerpt}</p>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <ul className="divide-y divide-neutral-100">
+            {thread.comments.map((comment) => (
+              <CommentItem
+                key={comment.id}
+                comment={comment}
+                now={now}
+                onEdit={() => Promise.resolve()}
+                onDelete={() => Promise.resolve()}
+              />
+            ))}
+          </ul>
+          <ContextSection
+            context={thread.context}
+            hasScreenshot={false}
+            screenshot={{ status: "unavailable" }}
+            recording={{ status: "unavailable" }}
+            onCopyContext={undefined}
+          />
+        </div>
+      )}
+      <div className="flex shrink-0 flex-wrap gap-2">
         {item.hasSteps ? <ReplayButton label="Reproduce" onReplay={onReproduce} /> : null}
         <button type="button" onClick={onOpenPage} className={SECONDARY_BUTTON}>
           Open page

@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -262,7 +262,7 @@ describe("SitePanel when the site is not enabled", () => {
     );
   });
 
-  it("opens the plain web app from the menu when the user has no workspace", async () => {
+  it("opens the dashboard route from the menu when the user has no workspace", async () => {
     const user = userEvent.setup();
     notEnabled([]);
     renderPanel();
@@ -271,7 +271,7 @@ describe("SitePanel when the site is not enabled", () => {
     await openMenu(user);
 
     expect(screen.getByRole("link", { name: "Open dashboard" }).getAttribute("href")).toBe(
-      "https://web.test/app",
+      "https://web.test/app/dashboard",
     );
   });
 
@@ -455,13 +455,13 @@ describe("SitePanel when the site is enabled", () => {
     expect(screen.queryByRole("button", { name: "Switch" })).toBeNull();
   });
 
-  it("disables the site when another workspace is chosen and then selects it", async () => {
-    let isEnabled = true;
+  it("re-binds the site to the chosen workspace in place and asks to refresh the page", async () => {
+    let current: SiteInfo = SITE;
     route({
-      "sites.forOrigin": () => success(isEnabled ? SITE : null),
+      "sites.forOrigin": () => success(current),
       "workspaces.list": () => success([NORTHWIND, { ...AGENCY, role: "member" }]),
-      "sites.disable": () => {
-        isEnabled = false;
+      "sites.switchWorkspace": () => {
+        current = { ...SITE, workspaceId: AGENCY.id, workspaceName: AGENCY.name };
         return success(null);
       },
     });
@@ -472,16 +472,60 @@ describe("SitePanel when the site is enabled", () => {
 
     chooseWorkspace(AGENCY.id);
 
-    expect(await screen.findByRole("button", { name: "Enable on this site" })).toBeTruthy();
-    expect(mocks.sendMessage).toHaveBeenCalledWith({ type: "sites.disable", origin: ORIGIN });
+    const hint = await screen.findByRole("status");
+    expect(within(hint).getByText("Workspace updated")).toBeTruthy();
+    expect(
+      within(hint).getByText("Refresh the page to load this workspace's comments."),
+    ).toBeTruthy();
+    expect(screen.queryByTestId("page-threads-panel")).toBeNull();
+    expect(mocks.sendMessage).toHaveBeenCalledWith({
+      type: "sites.switchWorkspace",
+      origin: ORIGIN,
+      workspaceId: AGENCY.id,
+    });
+    expect(mocks.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "sites.disable" }),
+    );
+    expect(localStorage.getItem(LAST_WORKSPACE_KEY)).toBe(AGENCY.id);
+    expect(screen.getByTestId("site-state").textContent).toBe("Enabled in Agency");
+    expect(screen.queryByRole("button", { name: "Enable on this site" })).toBeNull();
     expect(lastControl().value).toBe(AGENCY.id);
   });
 
-  it("keeps the enabled state when switching fails", async () => {
+  it("drops the workspace hint once the site is disabled", async () => {
+    const user = userEvent.setup();
+    let current: SiteInfo | null = SITE;
+    route({
+      "sites.forOrigin": () => success(current),
+      "workspaces.list": () => success([NORTHWIND, AGENCY]),
+      "sites.switchWorkspace": () => {
+        current = { ...SITE, workspaceId: AGENCY.id, workspaceName: AGENCY.name };
+        return success(null);
+      },
+      "sites.disable": () => {
+        current = null;
+        return success(null);
+      },
+    });
+    renderPanel();
+    await vi.waitFor(() => {
+      expect(lastControl().value).toBe(NORTHWIND.id);
+    });
+    chooseWorkspace(AGENCY.id);
+    expect(await screen.findByRole("status")).toBeTruthy();
+
+    await openMenu(user);
+    await user.click(screen.getByRole("button", { name: "Disable on this site" }));
+
+    expect(await screen.findByRole("button", { name: "Enable on this site" })).toBeTruthy();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("keeps the enabled state and shows no notice when switching fails", async () => {
     route({
       "sites.forOrigin": () => success(SITE),
       "workspaces.list": () => success([NORTHWIND, AGENCY]),
-      "sites.disable": () => failure("unknown"),
+      "sites.switchWorkspace": () => failure("unknown"),
     });
     renderPanel();
     await vi.waitFor(() => {
@@ -491,6 +535,12 @@ describe("SitePanel when the site is enabled", () => {
     chooseWorkspace(AGENCY.id);
 
     expect((await screen.findByRole("alert")).textContent).toBe("Something went wrong. Try again.");
+    expect(
+      screen.queryByText("Workspace updated. Refresh the page to see its comments."),
+    ).toBeNull();
+    expect(mocks.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "sites.disable" }),
+    );
     expect(screen.getByTestId("site-state").textContent).toBe("Enabled in Northwind");
     expect(lastControl().value).toBe(NORTHWIND.id);
   });

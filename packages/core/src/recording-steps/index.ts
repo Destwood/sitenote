@@ -1,5 +1,11 @@
 import type { RecordingStep } from "../context";
 
+export type RecordedAction = RecordingStep & { kind: Exclude<RecordingStep["kind"], "navigate"> };
+
+export function isRecordedAction(step: RecordingStep): step is RecordedAction {
+  return step.kind !== "navigate";
+}
+
 const LINE_BREAKS = /[\r\n\u2028\u2029]/g;
 
 function commentLines(label: string): string[] {

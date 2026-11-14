@@ -37,6 +37,7 @@ export { ClickUpTask } from "./clickup-task";
 export type { ClickUpTaskState } from "./clickup-task";
 export { JiraIssue } from "./jira-issue";
 export type { JiraIssueState } from "./jira-issue";
+export type { ShareAccess, ThreadShareControl } from "./share-control";
 export { Toast, ToastRegion } from "./toast";
 export type { ToastProps, ToastRegionProps, ToastVariant, ToastView } from "./toast";
 export type {

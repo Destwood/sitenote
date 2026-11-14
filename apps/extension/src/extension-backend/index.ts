@@ -41,6 +41,9 @@ export function createExtensionBackend(): WidgetBackend {
     getJiraStatus: (workspaceId) => sendMessage({ type: "jira.status", workspaceId }),
     linkJiraIssue: (threadId, issueKey) =>
       sendMessage({ type: "jira.linkIssue", threadId, issueKey }),
+    getThreadShare: (threadId) => sendMessage({ type: "threads.getShare", threadId }),
+    setThreadShare: (threadId, enabled) =>
+      sendMessage({ type: "threads.setShare", threadId, enabled }),
     getSelectionPlacement: () => sendMessage({ type: "preferences.getSelectionPlacement" }),
     replayProgress: {
       load: async () => {

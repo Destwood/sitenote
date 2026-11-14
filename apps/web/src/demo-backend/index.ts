@@ -370,5 +370,9 @@ export function createDemoBackend(deps: DemoBackendDeps): WidgetBackend {
     getJiraStatus: () => Promise.resolve(success(false)),
 
     linkJiraIssue: () => Promise.resolve(failure("not_configured")),
+
+    getThreadShare: () => Promise.resolve(failure("not_configured")),
+
+    setThreadShare: () => Promise.resolve(failure("not_configured")),
   };
 }

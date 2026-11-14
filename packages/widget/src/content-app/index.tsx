@@ -1,4 +1,4 @@
-import { formatThreadContextMarkdown, parsePageUrl } from "@sitenote/core";
+import { formatThreadContextMarkdown, isRecordedAction, parsePageUrl } from "@sitenote/core";
 import {
   CommentModeBanner,
   HighlightBox,
@@ -147,7 +147,7 @@ function buildOtherPages(
       excerpt: excerptOf(thread),
       replies: Math.max(0, thread.comments.filter((comment) => !comment.deleted).length - 1),
       route: routeOf(pageUrl),
-      hasSteps: (thread.context?.recording?.steps?.length ?? 0) > 0,
+      hasSteps: thread.context?.recording?.steps?.some(isRecordedAction) === true,
     })),
   );
 }
@@ -197,6 +197,10 @@ export function ContentApp({ controller }: ContentAppProps) {
     offPageItem === undefined
       ? undefined
       : state.siteThreads.find((thread) => thread.id === offPageItem.id);
+  const offPageThread =
+    offPageRecord === undefined
+      ? undefined
+      : buildThreadViews([offPageRecord], new Map(), "", members)[0];
   const openCount = views.filter((view) => view.status === "open").length;
   const siteOpenCount =
     state.siteThreads.length === 0
@@ -270,6 +274,18 @@ export function ContentApp({ controller }: ContentAppProps) {
             void controller.linkJiraIssue(activeView.id, issueKey);
           },
         }}
+        share={
+          site.role === "guest"
+            ? undefined
+            : {
+                access: state.shares.get(activeView.id) ? "link" : "workspace",
+                pending: state.sharePending.has(activeView.id),
+                onAccessChange: (access) => {
+                  void controller.setShareAccess(activeView.id, access);
+                },
+                onCopy: () => controller.copyThreadLink(activeView.id),
+              }
+        }
         onSubmit={(submission) => controller.reply(activeView.id, submission)}
         onEditComment={controller.editComment}
         onDeleteComment={controller.deleteComment}
@@ -340,6 +356,7 @@ export function ContentApp({ controller }: ContentAppProps) {
           status={state.replay.view.status}
           label={state.replay.view.label}
           message={state.replay.view.message}
+          inputRect={state.replay.view.status === "input" ? state.replay.highlight : null}
           onBack={controller.replayBack}
           onNext={controller.replayNext}
           onPause={controller.replayPause}
@@ -353,6 +370,7 @@ export function ContentApp({ controller }: ContentAppProps) {
       {offPageItem === undefined ? null : (
         <OffPageThreadCard
           item={offPageItem}
+          thread={offPageThread}
           sidebarOpen={sidebarOpen}
           onReproduce={(mode) => {
             controller.reproduceOffPage(offPageItem.id, mode);

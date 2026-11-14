@@ -52,6 +52,11 @@ export interface EnableRequest {
   workspaceId: string;
 }
 
+export interface SwitchWorkspaceRequest {
+  origin: string;
+  workspaceId: string;
+}
+
 export interface ErrorCaptureRequest {
   tabId: number;
   origin: string;
@@ -61,6 +66,7 @@ export interface ErrorCaptureRequest {
 export interface SiteEnablement {
   enable: (request: EnableRequest) => Promise<MessageResult<null>>;
   disable: (origin: string) => Promise<MessageResult<null>>;
+  switchWorkspace: (request: SwitchWorkspaceRequest) => Promise<MessageResult<null>>;
   setErrorCapture: (request: ErrorCaptureRequest) => Promise<MessageResult<null>>;
   reconcile: () => Promise<void>;
 }
@@ -174,6 +180,26 @@ export function createSiteEnablement(deps: SiteEnablementDeps): SiteEnablement {
     async disable(origin) {
       try {
         await teardown(origin, true);
+        return success(null);
+      } catch {
+        return failure("unknown");
+      }
+    },
+
+    async switchWorkspace({ origin, workspaceId }) {
+      try {
+        const entry = await store.get(origin);
+        if (entry === null) {
+          return failure("not_found");
+        }
+        if (entry.workspaceId === workspaceId) {
+          return success(null);
+        }
+        const site = await deps.data.ensureSite(workspaceId, origin);
+        if (!site.ok) {
+          return site;
+        }
+        await store.set(origin, { ...entry, siteId: site.data, workspaceId });
         return success(null);
       } catch {
         return failure("unknown");

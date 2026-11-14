@@ -507,11 +507,12 @@ describe("createOffscreenRecorder steps", () => {
     );
   });
 
-  it("drops an exact repeat of the previous step and keeps the order", async () => {
+  it("keeps repeated actions and drops consecutive identical routes", async () => {
     const { start, call } = setup();
     await start(4);
-    const cancel = { t: 20, kind: "click" as const, selector: "#cancel", label: "Cancel" };
-    for (const step of [CLICK, { ...CLICK, t: 11 }, cancel, CLICK]) {
+    const secondClick = { ...CLICK, t: 11 };
+    const navigate = { t: 20, kind: "navigate" as const, selector: "", label: "", url: "/saved" };
+    for (const step of [CLICK, secondClick, navigate, { ...navigate, t: 21 }]) {
       await call({ type: "offscreen.step", tabId: 4, step });
     }
     await call({ type: "offscreen.stop", discard: false });
@@ -522,7 +523,7 @@ describe("createOffscreenRecorder steps", () => {
         durationMs: 0,
         blobUrl: "blob:0",
         size: 0,
-        steps: [CLICK, cancel, CLICK],
+        steps: [CLICK, secondClick, navigate],
       }),
     );
   });

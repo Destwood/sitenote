@@ -77,6 +77,8 @@ function createFakes() {
     clickUpCreateTask: vi.fn(),
     jiraStatus: vi.fn(() => Promise.resolve(success(true))),
     jiraLinkIssue: vi.fn(),
+    getShare: vi.fn(() => Promise.resolve(success(null))),
+    setShare: vi.fn(() => Promise.resolve(success(null))),
     createComment: vi.fn(),
     updateComment: vi.fn(),
     deleteComment: vi.fn(),
@@ -93,6 +95,7 @@ function createFakes() {
   const enablement: SiteEnablement = {
     enable: vi.fn(() => Promise.resolve(success(null))),
     disable: vi.fn(() => Promise.resolve(success(null))),
+    switchWorkspace: vi.fn(() => Promise.resolve(success(null))),
     setErrorCapture: vi.fn(() => Promise.resolve(success(null))),
     reconcile: vi.fn(),
   };
@@ -222,6 +225,10 @@ describe("createMessageRouter extension page requests", () => {
       POPUP,
     );
     await route({ type: "sites.disable", origin: ORIGIN }, POPUP);
+    await route(
+      { type: "sites.switchWorkspace", origin: ORIGIN, workspaceId: WORKSPACE_ID },
+      POPUP,
+    );
 
     expect(service.getState).toHaveBeenCalledTimes(1);
     expect(service.sendCode).toHaveBeenCalledWith("a@b.test");
@@ -236,6 +243,11 @@ describe("createMessageRouter extension page requests", () => {
       expect.objectContaining({ tabId: 3, origin: ORIGIN, workspaceId: WORKSPACE_ID }),
     );
     expect(enablement.disable).toHaveBeenCalledWith(ORIGIN);
+    expect(enablement.switchWorkspace).toHaveBeenCalledExactlyOnceWith({
+      type: "sites.switchWorkspace",
+      origin: ORIGIN,
+      workspaceId: WORKSPACE_ID,
+    });
   });
 
   it("answers sites.forOrigin for any origin", async () => {
@@ -511,6 +523,38 @@ describe("createMessageRouter Jira requests", () => {
   });
 });
 
+describe("createMessageRouter thread share requests", () => {
+  const SHARE_REQUESTS = [
+    { type: "threads.getShare", threadId: THREAD_ID },
+    { type: "threads.setShare", threadId: THREAD_ID, enabled: true },
+  ] as const;
+
+  it("routes the share requests from an enabled page to the data service", async () => {
+    const { route, data } = setup();
+
+    expect(await route(SHARE_REQUESTS[0], CONTENT)).toEqual(success(null));
+    expect(data.getShare).toHaveBeenCalledExactlyOnceWith(SHARE_REQUESTS[0]);
+    expect(await route(SHARE_REQUESTS[1], CONTENT)).toEqual(success(null));
+    expect(data.setShare).toHaveBeenCalledExactlyOnceWith(SHARE_REQUESTS[1]);
+  });
+
+  it("refuses the share requests from a page whose origin is not enabled and from a popup", async () => {
+    const disabled = setup({ enabled: false });
+    for (const request of SHARE_REQUESTS) {
+      expect(await disabled.route(request, CONTENT)).toEqual(failure("forbidden"));
+    }
+    const { route, data } = setup();
+    for (const request of SHARE_REQUESTS) {
+      expect(await route(request, POPUP)).toEqual(failure("forbidden_sender"));
+    }
+
+    expect(disabled.data.getShare).not.toHaveBeenCalled();
+    expect(disabled.data.setShare).not.toHaveBeenCalled();
+    expect(data.getShare).not.toHaveBeenCalled();
+    expect(data.setShare).not.toHaveBeenCalled();
+  });
+});
+
 describe("createMessageRouter content script requests", () => {
   const LIST = { type: "threads.list", siteId: SITE_ID, pageUrl: PAGE_URL };
 
@@ -523,6 +567,10 @@ describe("createMessageRouter content script requests", () => {
     ["notifications.markAllRead", { type: "notifications.markAllRead" }],
     ["sites.enable", { type: "sites.enable", tabId: 4, origin: ORIGIN, workspaceId: WORKSPACE_ID }],
     ["sites.disable", { type: "sites.disable", origin: ORIGIN }],
+    [
+      "sites.switchWorkspace",
+      { type: "sites.switchWorkspace", origin: ORIGIN, workspaceId: WORKSPACE_ID },
+    ],
     [
       "sites.setErrorCapture",
       { type: "sites.setErrorCapture", tabId: 4, origin: ORIGIN, enabled: false },
@@ -539,6 +587,7 @@ describe("createMessageRouter content script requests", () => {
     expect(notifications.markAllRead).not.toHaveBeenCalled();
     expect(enablement.enable).not.toHaveBeenCalled();
     expect(enablement.disable).not.toHaveBeenCalled();
+    expect(enablement.switchWorkspace).not.toHaveBeenCalled();
     expect(enablement.setErrorCapture).not.toHaveBeenCalled();
   });
 

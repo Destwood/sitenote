@@ -163,12 +163,15 @@ describe("createPinTracker", () => {
 
     expect(measured).toHaveLength(0);
 
-    observers[0]?.report(box.element, true);
-    flush();
     observers[0]?.report(box.element, false);
     flush();
 
-    expect(measured.at(-1)?.has("a")).toBe(false);
+    expect(measured).toHaveLength(0);
+
+    observers[0]?.report(box.element, true);
+    flush();
+
+    expect(measured.at(-1)?.has("a")).toBe(true);
   });
 
   it("always measures a forced target even when it is not intersecting", () => {
@@ -231,6 +234,7 @@ describe("createPinTracker", () => {
     flush();
     expect(measured).toHaveLength(1);
 
+    vi.spyOn(window, "scrollY", "get").mockReturnValue(50);
     box.move(100, 150);
     window.dispatchEvent(new Event("scroll"));
     flush();
@@ -239,17 +243,103 @@ describe("createPinTracker", () => {
     expect(measured[1]?.get("a")?.y).toBe(150);
   });
 
-  it("re-measures on invalidate", () => {
+  it("keeps a measured pin in place when the element moves and the tracker is invalidated", () => {
     const { tracker, flush, measured } = setup(false);
     const box = makeBox(100, 200);
     tracker.setTargets([{ id: "a", target: box.target, always: false }]);
     flush();
 
-    box.move(120, 200);
+    box.move(120, 260);
     tracker.invalidate();
     flush();
 
-    expect(measured.at(-1)?.get("a")?.x).toBe(120);
+    expect(measured.at(-1)?.get("a")).toMatchObject({ x: 100, y: 200 });
+  });
+
+  it("keeps a frozen pin in place when the same target is re-synced and its element moves", () => {
+    const { tracker, flush, measured } = setup(false);
+    const box = makeBox(100, 200);
+    tracker.setTargets([{ id: "a", target: box.target, always: false }]);
+    flush();
+
+    box.move(120, 260);
+    tracker.setTargets([{ id: "a", target: box.target, always: false }]);
+    flush();
+
+    expect(measured.at(-1)?.get("a")).toMatchObject({ x: 100, y: 200 });
+  });
+
+  it("reports the new element's position when the same id is reused for another target", () => {
+    const { tracker, flush, measured } = setup(false);
+    const first = makeBox(100, 200);
+    tracker.setTargets([{ id: "a", target: first.target, always: false }]);
+    flush();
+
+    const second = makeBox(300, 400);
+    tracker.setTargets([{ id: "a", target: second.target, always: false }]);
+    flush();
+
+    expect(measured.at(-1)?.get("a")).toMatchObject({ x: 300, y: 400, visible: true });
+  });
+
+  it("moves a frozen pin by the window scroll delta and keeps its page position", () => {
+    const { tracker, flush, measured } = setup(false);
+    const box = makeBox(100, 200);
+    tracker.setTargets([{ id: "a", target: box.target, always: false }]);
+    flush();
+
+    vi.spyOn(window, "scrollX", "get").mockReturnValue(10);
+    vi.spyOn(window, "scrollY", "get").mockReturnValue(40);
+    box.move(90, 160);
+    window.dispatchEvent(new Event("scroll"));
+    flush();
+
+    expect(measured.at(-1)?.get("a")).toMatchObject({ x: 90, y: 160 });
+  });
+
+  it("re-freezes from the live element on resize", () => {
+    const { tracker, flush, measured } = setup(false);
+    const box = makeBox(100, 200);
+    tracker.setTargets([{ id: "a", target: box.target, always: false }]);
+    flush();
+
+    box.move(100, 260);
+    window.dispatchEvent(new Event("resize"));
+    flush();
+
+    expect(measured.at(-1)?.get("a")).toMatchObject({ x: 100, y: 260 });
+  });
+
+  it("keeps reporting a frozen pin when its element stops intersecting", () => {
+    const { tracker, flush, observers, measured } = setup();
+    const box = makeBox(100, 200);
+    tracker.setTargets([{ id: "a", target: box.target, always: false }]);
+    observers[0]?.report(box.element, true);
+    flush();
+
+    observers[0]?.report(box.element, false);
+    flush();
+
+    expect(measured.at(-1)?.get("a")).toMatchObject({ x: 100, y: 200, visible: true });
+  });
+
+  it("drops a pin whose element is disconnected and freezes it again at the new target", () => {
+    const { tracker, flush, measured } = setup(false);
+    const first = makeBox(100, 200);
+    tracker.setTargets([{ id: "a", target: first.target, always: false }]);
+    flush();
+
+    first.element.remove();
+    tracker.invalidate();
+    flush();
+
+    expect(measured.at(-1)?.has("a")).toBe(false);
+
+    const second = makeBox(300, 400);
+    tracker.setTargets([{ id: "a", target: second.target, always: false }]);
+    flush();
+
+    expect(measured.at(-1)?.get("a")).toMatchObject({ x: 300, y: 400 });
   });
 
   it("stops observing removed targets and keeps the others", () => {

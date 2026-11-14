@@ -112,6 +112,8 @@ function makeState(overrides: Partial<ContentState> = {}): ContentState {
     clickUpPending: new Set<string>(),
     jiraConfigured: false,
     jiraPending: new Set<string>(),
+    shares: new Map(),
+    sharePending: new Set<string>(),
     selectionPlacement: "below",
     replayAvailable: false,
     replay: null,
@@ -145,6 +147,8 @@ function makeController(store: Store<ContentState>) {
     toggleStatus: vi.fn(() => Promise.resolve()),
     createClickUpTask: vi.fn(() => Promise.resolve()),
     linkJiraIssue: vi.fn(() => Promise.resolve()),
+    setShareAccess: vi.fn(() => Promise.resolve()),
+    copyThreadLink: vi.fn(() => Promise.resolve(true)),
     dismissToast: vi.fn(),
     startReplay: vi.fn(),
     gateRun: vi.fn(),
@@ -488,6 +492,37 @@ describe("thread panel", () => {
     expect(screen.getByText("Loading screenshot…")).toBeTruthy();
   });
 
+  it("shows the replay frame and keeps Stop available while waiting", async () => {
+    const user = userEvent.setup();
+    const { actions } = setup({
+      replay: {
+        view: { mode: "step", index: 0, total: 3, status: "waiting", label: "Preparing replay…" },
+        highlight: null,
+      },
+    });
+
+    expect(screen.getByTestId("sitenote-replay-frame")).toBeTruthy();
+    expect(screen.getByText("Sitenote is controlling this page")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Stop replay" }));
+    expect(actions.replayStop).toHaveBeenCalledOnce();
+  });
+
+  it("shows one visible completion message at the end of a replay", () => {
+    setup({
+      replay: {
+        view: { mode: "step", index: 2, total: 3, status: "done", label: "Replay finished" },
+        highlight: null,
+      },
+    });
+
+    const controls = within(screen.getByRole("region", { name: "Replay controls" }));
+    expect(controls.getAllByText("Replay finished", { selector: ":not(.sr-only)" })).toHaveLength(
+      1,
+    );
+    expect(controls.getByRole("button", { name: "Close" })).toBeTruthy();
+    expect(screen.queryByTestId("sitenote-replay-frame")).toBeNull();
+  });
+
   it("plays the signed recording of the open thread", () => {
     setup({
       threads: [
@@ -584,6 +619,61 @@ describe("thread panel", () => {
     );
   });
 
+  it("changes the access of the open thread through the controller", async () => {
+    const user = userEvent.setup();
+    const { actions } = setup({
+      threads: [thread(FIRST_ID)],
+      resolutions: new Map([[FIRST_ID, RESOLVED]]),
+      positions: new Map([[FIRST_ID, measurement(100, 200)]]),
+      activeThreadId: FIRST_ID,
+    });
+
+    const dialog = screen.getByRole("dialog", { name: "Thread 1" });
+    await user.selectOptions(
+      within(dialog).getByRole("combobox", { name: "Who can open the link" }),
+      "link",
+    );
+
+    expect(actions.setShareAccess).toHaveBeenCalledWith(FIRST_ID, "link");
+  });
+
+  it("shows the access of a shared thread and copies its link through the controller", async () => {
+    const user = userEvent.setup();
+    const { actions } = setup({
+      threads: [thread(FIRST_ID)],
+      resolutions: new Map([[FIRST_ID, RESOLVED]]),
+      positions: new Map([[FIRST_ID, measurement(100, 200)]]),
+      activeThreadId: FIRST_ID,
+      shares: new Map([
+        [FIRST_ID, { token: "a".repeat(64), expiresAt: "2026-12-14T10:00:00.000Z" }],
+      ]),
+    });
+
+    const dialog = screen.getByRole("dialog", { name: "Thread 1" });
+    expect(
+      within(dialog).getByRole<HTMLSelectElement>("combobox", { name: "Who can open the link" })
+        .value,
+    ).toBe("link");
+    await user.click(within(dialog).getByRole("button", { name: "Share" }));
+
+    expect(actions.copyThreadLink).toHaveBeenCalledWith(FIRST_ID);
+    expect(await within(dialog).findByRole("button", { name: "Copied" })).toBeTruthy();
+  });
+
+  it("hides the share control from guests", () => {
+    setup({
+      site: { ...SITE, role: "guest" },
+      threads: [thread(FIRST_ID)],
+      resolutions: new Map([[FIRST_ID, RESOLVED]]),
+      positions: new Map([[FIRST_ID, measurement(100, 200)]]),
+      activeThreadId: FIRST_ID,
+    });
+
+    const dialog = screen.getByRole("dialog", { name: "Thread 1" });
+    expect(within(dialog).queryByRole("combobox", { name: "Who can open the link" })).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "Share" })).toBeNull();
+  });
+
   it("opens the active thread and replies through the controller", async () => {
     const user = userEvent.setup();
     const { actions } = setup({
@@ -617,6 +707,7 @@ describe("thread panel", () => {
     expect(
       within(dialog)
         .getAllByRole("option")
+        .filter((option) => option.closest("select") === null)
         .map((option) => option.textContent),
     ).toEqual(["OOlena Owner", "OOther"]);
 
@@ -786,6 +877,31 @@ describe("off-page comment card", () => {
     });
 
     expect(screen.getByRole("button", { name: "Reopen" })).toBeTruthy();
+  });
+
+  it("shows every comment of an off-page thread, not only the excerpt", () => {
+    const reply = comment(SECOND_ID, {
+      id: "40000000-0000-4000-8000-000000000099",
+      author: { id: OTHER, displayName: "Other", avatarUrl: null },
+      body: "A reply from another member",
+      createdAt: "2026-10-21T12:00:00.000Z",
+    });
+    setup({
+      siteThreads: [
+        thread(SECOND_ID, {
+          pageUrl: "https://example.test/other",
+          comments: [comment(SECOND_ID, { body: "The opening comment" }), reply],
+        }),
+      ],
+      offPageThreadId: SECOND_ID,
+    });
+
+    const card = screen.getByRole("dialog", { name: "Comment on another page" });
+
+    expect(within(card).getByText("The opening comment")).toBeTruthy();
+    expect(within(card).getByText("A reply from another member")).toBeTruthy();
+    expect(within(card).getByRole("region", { name: "Page context" })).toBeTruthy();
+    expect(within(card).queryByRole("button", { name: "Edit" })).toBeNull();
   });
 });
 

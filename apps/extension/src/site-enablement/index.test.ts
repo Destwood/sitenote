@@ -286,6 +286,63 @@ describe("disable with the console error script", () => {
   });
 });
 
+describe("switchWorkspace", () => {
+  const OTHER_WORKSPACE_ID = "10000000-0000-4000-8000-000000000002";
+  const OTHER_SITE_ID = "20000000-0000-4000-8000-000000000002";
+  const ENTRY: EnabledEntry = { siteId: SITE_ID, workspaceId: WORKSPACE_ID, captureErrors: false };
+  const REQUEST_OTHER = { origin: ORIGIN, workspaceId: OTHER_WORKSPACE_ID };
+
+  it("re-binds the entry to the new workspace and keeps the scripts and the permission", async () => {
+    const { service, entries, scripting, permissions, data, onDisabled } = setup({
+      initial: { [ORIGIN]: ENTRY },
+      registered: [scriptIdFor(ORIGIN)],
+      ensure: success(OTHER_SITE_ID),
+    });
+
+    expect(await service.switchWorkspace(REQUEST_OTHER)).toEqual(success(null));
+
+    expect(data.ensureSite).toHaveBeenCalledWith(OTHER_WORKSPACE_ID, ORIGIN);
+    expect(entries.get(ORIGIN)).toEqual({
+      siteId: OTHER_SITE_ID,
+      workspaceId: OTHER_WORKSPACE_ID,
+      captureErrors: false,
+    });
+    expect(scripting.registerContentScripts).not.toHaveBeenCalled();
+    expect(scripting.unregisterContentScripts).not.toHaveBeenCalled();
+    expect(permissions.remove).not.toHaveBeenCalled();
+    expect(onDisabled).not.toHaveBeenCalled();
+  });
+
+  it("answers not found for an origin that is not enabled", async () => {
+    const { service, data, store } = setup();
+
+    expect(await service.switchWorkspace(REQUEST_OTHER)).toEqual(failure("not_found"));
+    expect(data.ensureSite).not.toHaveBeenCalled();
+    expect(store.set).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when the site already belongs to that workspace", async () => {
+    const { service, data, store } = setup({ initial: { [ORIGIN]: ENTRY } });
+
+    expect(await service.switchWorkspace({ origin: ORIGIN, workspaceId: WORKSPACE_ID })).toEqual(
+      success(null),
+    );
+    expect(data.ensureSite).not.toHaveBeenCalled();
+    expect(store.set).not.toHaveBeenCalled();
+  });
+
+  it("propagates the data error and leaves the entry unchanged", async () => {
+    const { service, entries, store } = setup({
+      initial: { [ORIGIN]: ENTRY },
+      ensure: failure("forbidden"),
+    });
+
+    expect(await service.switchWorkspace(REQUEST_OTHER)).toEqual(failure("forbidden"));
+    expect(entries.get(ORIGIN)).toEqual(ENTRY);
+    expect(store.set).not.toHaveBeenCalled();
+  });
+});
+
 describe("setErrorCapture", () => {
   const ENTRY: EnabledEntry = { siteId: SITE_ID, workspaceId: WORKSPACE_ID, captureErrors: true };
   const REQUEST_OFF = { tabId: 7, origin: ORIGIN, enabled: false };

@@ -119,6 +119,25 @@ describe("authStateChangedSchema", () => {
   });
 });
 
+describe("thread share requests", () => {
+  const SHARE = { token: "a".repeat(64), expiresAt: "2026-12-14T10:00:00.000Z" };
+
+  it("answers with a share or no share", () => {
+    expect(RESPONSE_SCHEMAS["threads.getShare"].safeParse(success(SHARE)).success).toBe(true);
+    expect(RESPONSE_SCHEMAS["threads.setShare"].safeParse(success(null)).success).toBe(true);
+    expect(RESPONSE_SCHEMAS["threads.getShare"].safeParse(success({ token: 1 })).success).toBe(
+      false,
+    );
+  });
+
+  it("rejects a toggle without a boolean", () => {
+    expect(
+      dataRequestSchema.safeParse({ type: "threads.setShare", threadId: THREAD_ID, enabled: "yes" })
+        .success,
+    ).toBe(false);
+  });
+});
+
 describe("responses", () => {
   it("builds a fixed message for every error code", () => {
     for (const code of ERROR_CODES) {
@@ -250,8 +269,11 @@ describe("dataRequestSchema", () => {
       { type: "notifications.list", limit: 30 },
       { type: "notifications.markRead", ids: [NOTIFICATION.id] },
       { type: "notifications.markAllRead" },
+      { type: "threads.getShare", threadId: THREAD_ID },
+      { type: "threads.setShare", threadId: THREAD_ID, enabled: true },
       ENABLE,
       { type: "sites.disable", origin: ORIGIN },
+      { type: "sites.switchWorkspace", origin: ORIGIN, workspaceId: WORKSPACE_ID },
     ];
     for (const request of accepted) {
       expect(dataRequestSchema.safeParse(request).success, request.type).toBe(true);

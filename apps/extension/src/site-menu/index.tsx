@@ -1,4 +1,4 @@
-import { useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
 
 import { MENU_ITEM_CLASS } from "../form-controls";
 import { Icon } from "../icon";
@@ -24,6 +24,21 @@ export function SiteMenu({
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    function closeOnOutsidePointer(event: PointerEvent) {
+      if (!(event.target instanceof Node) || !wrapperRef.current?.contains(event.target)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+    };
+  }, [open]);
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (open && event.key === "Escape") {

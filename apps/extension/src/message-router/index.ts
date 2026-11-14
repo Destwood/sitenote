@@ -60,6 +60,8 @@ const PAGE_SCOPED: ReadonlySet<ExtensionRequest["type"]> = new Set([
   "clickup.createTask",
   "jira.status",
   "jira.linkIssue",
+  "threads.getShare",
+  "threads.setShare",
   "recording.step",
   "replay.save",
   "replay.load",
@@ -286,6 +288,8 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
         return enablement.enable(request);
       case "sites.disable":
         return enablement.disable(request.origin);
+      case "sites.switchWorkspace":
+        return enablement.switchWorkspace(request);
       case "sites.setErrorCapture":
         return enablement.setErrorCapture(request);
       case "clickup.status":
@@ -296,6 +300,10 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
         return data.jiraStatus(request);
       case "jira.linkIssue":
         return data.jiraLinkIssue(request);
+      case "threads.getShare":
+        return data.getShare(request);
+      case "threads.setShare":
+        return data.setShare(request);
     }
   };
 }

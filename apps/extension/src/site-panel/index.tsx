@@ -109,6 +109,7 @@ export function SitePanel({ webUrl, onManageSites, onWorkspaceControl }: SitePan
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
+  const [switched, setSwitched] = useState(false);
 
   const show = useCallback((next: View) => {
     if (next.kind === "disabled") {
@@ -148,6 +149,7 @@ export function SitePanel({ webUrl, onManageSites, onWorkspaceControl }: SitePan
       if (site.ok && site.data !== null) {
         saveLastWorkspace(workspaceId);
         await load();
+        setSwitched(false);
         setBusy(false);
         return;
       }
@@ -187,6 +189,7 @@ export function SitePanel({ webUrl, onManageSites, onWorkspaceControl }: SitePan
     }
     saveLastWorkspace(workspaceId);
     await load();
+    setSwitched(false);
     setBusy(false);
   }
 
@@ -198,6 +201,7 @@ export function SitePanel({ webUrl, onManageSites, onWorkspaceControl }: SitePan
       setBusy(true);
       setFailed(null);
       setNotice(null);
+      setSwitched(false);
       const result = await sendMessage({ type: "sites.disable", origin: tab.origin });
       if (!result.ok) {
         setFailed(ERROR_MESSAGES[result.error.code]);
@@ -214,16 +218,33 @@ export function SitePanel({ webUrl, onManageSites, onWorkspaceControl }: SitePan
   const handleWorkspaceChange = useCallback(
     async (id: string) => {
       if (view.kind === "enabled") {
-        if (id !== view.site.workspaceId && (await disable(view.tab))) {
-          setWorkspaceId(id);
+        if (id === view.site.workspaceId) {
+          return;
         }
+        setBusy(true);
+        setFailed(null);
+        setNotice(null);
+        const result = await sendMessage({
+          type: "sites.switchWorkspace",
+          origin: view.tab.origin,
+          workspaceId: id,
+        });
+        if (!result.ok) {
+          setFailed(ERROR_MESSAGES[result.error.code]);
+          setBusy(false);
+          return;
+        }
+        saveLastWorkspace(id);
+        await load();
+        setSwitched(true);
+        setBusy(false);
         return;
       }
       if (view.kind === "disabled") {
         setWorkspaceId(id);
       }
     },
-    [disable, view],
+    [load, view],
   );
 
   useEffect(() => {
@@ -330,7 +351,9 @@ export function SitePanel({ webUrl, onManageSites, onWorkspaceControl }: SitePan
       : undefined;
   const dashboardWorkspaceId = enabled ? view.site.workspaceId : workspaceId;
   const dashboardUrl =
-    dashboardWorkspaceId === "" ? `${webUrl}/app` : `${webUrl}/app/w/${dashboardWorkspaceId}`;
+    dashboardWorkspaceId === ""
+      ? `${webUrl}/app/dashboard`
+      : `${webUrl}/app/w/${dashboardWorkspaceId}`;
 
   return (
     <section aria-label="This site" className="flex flex-col gap-3">
@@ -373,7 +396,17 @@ export function SitePanel({ webUrl, onManageSites, onWorkspaceControl }: SitePan
       </div>
       {enabled ? (
         <>
-          <PageThreadsPanel tabId={tab.id} dashboardUrl={dashboardUrl} />
+          {switched ? (
+            <div
+              role="status"
+              className="rounded-md border border-neutral-200 bg-neutral-100 px-3 py-2.5 text-xs leading-relaxed text-neutral-600"
+            >
+              <p className="font-semibold text-neutral-900">Workspace updated</p>
+              <p>Refresh the page to load this workspace's comments.</p>
+            </div>
+          ) : (
+            <PageThreadsPanel tabId={tab.id} dashboardUrl={dashboardUrl} />
+          )}
           <div className="flex flex-wrap gap-2">
             <button
               type="button"

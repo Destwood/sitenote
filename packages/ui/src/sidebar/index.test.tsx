@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -247,5 +247,62 @@ describe("Sidebar", () => {
     await user.keyboard("{Escape}");
 
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+});
+
+function trustedPointerDown(target: EventTarget) {
+  const event = new PointerEvent("pointerdown", { bubbles: true, composed: true });
+  Object.defineProperty(event, "isTrusted", { value: true });
+  target.dispatchEvent(event);
+}
+
+describe("Sidebar outside pointer", () => {
+  it("closes on a trusted pointerdown outside the sidebar", () => {
+    const { onClose } = renderSidebar();
+
+    trustedPointerDown(document.body);
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the sidebar open on a trusted pointerdown inside it", () => {
+    const { onClose } = renderSidebar();
+
+    trustedPointerDown(screen.getByRole("button", { name: /Fix the header/ }));
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("keeps the sidebar open on a trusted pointerdown inside the Sitenote shadow host", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const shadow = host.attachShadow({ mode: "open" });
+    const container = document.createElement("div");
+    const pin = document.createElement("button");
+    shadow.append(pin, container);
+    const onClose = vi.fn();
+    render(
+      <Sidebar
+        threads={threads()}
+        showResolved={false}
+        onShowResolvedChange={vi.fn()}
+        onSelectThread={vi.fn()}
+        onClose={onClose}
+      />,
+      { container },
+    );
+
+    trustedPointerDown(pin);
+
+    expect(onClose).not.toHaveBeenCalled();
+    host.remove();
+  });
+
+  it("ignores untrusted synthetic pointerdown events", () => {
+    const { onClose } = renderSidebar();
+
+    fireEvent.pointerDown(document.body);
+
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

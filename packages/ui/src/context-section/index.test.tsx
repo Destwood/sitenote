@@ -356,26 +356,25 @@ describe("ContextSection recording steps", () => {
     fireEvent.click(screen.getByRole("tab", { name: /^Steps/ }));
   }
 
-  it("lists every step with its time, kind and label", () => {
+  it("counts and lists user actions while hiding navigation", () => {
     render(<ContextSection context={context({ recording })} hasScreenshot={false} />);
     openStepsTab();
 
-    const list = screen.getByRole("list", { name: "What the reporter did (4)" });
+    expect(screen.getByRole("tab", { name: "Steps (3)" })).toBeTruthy();
+    const list = screen.getByRole("list", { name: "What the reporter did (3)" });
     const items = within(list).getAllByRole("listitem");
     expect(items.map((item) => item.textContent)).toEqual([
       "0:00ClickBuy now",
       "0:04Field changed#email",
       "0:09Form submittedCheckout",
-      "1:05Page opened/thanks",
     ]);
   });
 
-  it("falls back to the selector without a label and to the url for navigation", () => {
+  it("falls back to the selector without a label", () => {
     render(<ContextSection context={context({ recording })} hasScreenshot={false} />);
     openStepsTab();
 
     expect(screen.getByText("#email")).toBeTruthy();
-    expect(screen.getByText("/thanks")).toBeTruthy();
   });
 
   it("keeps the full text of a step in its title", () => {
@@ -383,7 +382,6 @@ describe("ContextSection recording steps", () => {
     openStepsTab();
 
     expect(screen.getByTitle("Buy now").textContent).toBe("Buy now");
-    expect(screen.getByTitle("/thanks").textContent).toBe("/thanks");
   });
 
   it("renders step text as plain text", () => {
@@ -404,10 +402,12 @@ describe("ContextSection recording steps", () => {
     expect(screen.getByText("<img src=x onerror=alert(1)>")).toBeTruthy();
   });
 
-  it("says no steps were recorded when the recording has none", () => {
+  it("says no steps were recorded when the recording only has navigation", () => {
     render(
       <ContextSection
-        context={context({ recording: { path: "ws/thread.webm", durationMs: 1_000, size: 1 } })}
+        context={context({
+          recording: { ...recording, steps: steps.filter((step) => step.kind === "navigate") },
+        })}
         hasScreenshot={false}
       />,
     );
@@ -434,6 +434,7 @@ describe("ContextSection recording steps", () => {
     expect(writeText).toHaveBeenCalledTimes(1);
     expect(writeText).toHaveBeenCalledWith(stepsToPlaywright("https://example.com/pricing", steps));
     expect(writeText.mock.calls[0]?.[0]).toContain('await page.locator("#buy").click();');
+    expect(writeText.mock.calls[0]?.[0]).toContain('await page.waitForURL("**/thanks");');
   });
 
   it("returns to the copy label two seconds after copying", async () => {

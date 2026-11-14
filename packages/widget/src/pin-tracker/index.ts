@@ -94,6 +94,7 @@ export function createPinTracker(deps: PinTrackerDeps): PinTracker {
   let frame: number | null = null;
   let listening = false;
   let last: Measurements = new Map();
+  const frozen = new Map<string, { target: AnchorTarget; pageX: number; pageY: number }>();
 
   function schedule(): void {
     if (frame !== null || targets.length === 0) {
@@ -110,12 +111,27 @@ export function createPinTracker(deps: PinTrackerDeps): PinTracker {
     const height = win.innerHeight;
     const next = new Map<string, PinMeasurement>();
     for (const { id, target, always } of targets) {
-      const element = observableElement(target);
-      const inView = always || observer === null || (element !== null && intersecting.has(element));
-      if (!inView || !isTargetAlive(target)) {
+      if (!isTargetAlive(target)) {
+        frozen.delete(id);
         continue;
       }
-      const { x, y, rect, rects, hidden } = measureTarget(target);
+      const element = observableElement(target);
+      const inView =
+        always ||
+        observer === null ||
+        frozen.get(id)?.target === target ||
+        (element !== null && intersecting.has(element));
+      if (!inView) {
+        continue;
+      }
+      const { x: liveX, y: liveY, rect, rects, hidden } = measureTarget(target);
+      let anchor = frozen.get(id);
+      if (anchor?.target !== target) {
+        anchor = { target, pageX: liveX + win.scrollX, pageY: liveY + win.scrollY };
+        frozen.set(id, anchor);
+      }
+      const x = anchor.pageX - win.scrollX;
+      const y = anchor.pageY - win.scrollY;
       next.set(id, {
         x,
         y,
@@ -141,11 +157,16 @@ export function createPinTracker(deps: PinTrackerDeps): PinTracker {
     schedule();
   }
 
+  function handleResize(): void {
+    frozen.clear();
+    schedule();
+  }
+
   function listen(): void {
     if (!listening) {
       listening = true;
       win.addEventListener("scroll", schedule, { capture: true, passive: true });
-      win.addEventListener("resize", schedule, { passive: true });
+      win.addEventListener("resize", handleResize, { passive: true });
     }
   }
 
@@ -153,7 +174,7 @@ export function createPinTracker(deps: PinTrackerDeps): PinTracker {
     if (listening) {
       listening = false;
       win.removeEventListener("scroll", schedule, { capture: true });
-      win.removeEventListener("resize", schedule);
+      win.removeEventListener("resize", handleResize);
     }
     if (frame !== null) {
       cancelFrame(frame);
@@ -163,6 +184,7 @@ export function createPinTracker(deps: PinTrackerDeps): PinTracker {
     observer = null;
     observed.clear();
     intersecting.clear();
+    frozen.clear();
   }
 
   function syncObserved(): void {
@@ -192,6 +214,12 @@ export function createPinTracker(deps: PinTrackerDeps): PinTracker {
   return {
     setTargets: (next) => {
       targets = next;
+      const ids = new Set(next.map(({ id }) => id));
+      for (const id of [...frozen.keys()]) {
+        if (!ids.has(id)) {
+          frozen.delete(id);
+        }
+      }
       if (targets.length === 0) {
         unlisten();
         if (last.size > 0) {

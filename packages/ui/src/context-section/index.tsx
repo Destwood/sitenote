@@ -1,8 +1,10 @@
 import {
+  isRecordedAction,
   stepsToPlaywright,
   type ConsoleErrorRecord,
   type NetworkErrorRecord,
   type RecordingRef,
+  type RecordedAction,
   type RecordingStep,
   type ReplayMode,
   type ThreadContext,
@@ -181,11 +183,10 @@ function RecordingBlock({ recording, state, largeVideo }: RecordingBlockProps) {
   );
 }
 
-const STEP_KIND_LABELS: Readonly<Record<RecordingStep["kind"], string>> = {
+const STEP_KIND_LABELS: Readonly<Record<RecordedAction["kind"], string>> = {
   click: "Click",
   input: "Field changed",
   submit: "Form submitted",
-  navigate: "Page opened",
 };
 
 const COPY_LABELS = {
@@ -194,18 +195,14 @@ const COPY_LABELS = {
   failed: "Copy failed",
 } as const;
 
-function stepText(step: RecordingStep): string {
-  const text = step.kind === "navigate" ? (step.url ?? "") : step.label;
-  return text === "" ? step.selector : text;
-}
-
 interface RecordingStepsBlockProps {
+  actions: readonly RecordedAction[];
   steps: readonly RecordingStep[];
   pageUrl: string;
   onReplaySteps: ((mode: ReplayMode) => void) | undefined;
 }
 
-function RecordingStepsBlock({ steps, pageUrl, onReplaySteps }: RecordingStepsBlockProps) {
+function RecordingStepsBlock({ actions, steps, pageUrl, onReplaySteps }: RecordingStepsBlockProps) {
   const headingId = useId();
   const [copyState, setCopyState] = useState<keyof typeof COPY_LABELS>("idle");
 
@@ -234,7 +231,7 @@ function RecordingStepsBlock({ steps, pageUrl, onReplaySteps }: RecordingStepsBl
     <div className="space-y-2">
       <div className="space-y-1">
         <p id={headingId} className="font-medium text-neutral-900">
-          What the reporter did ({String(steps.length)})
+          What the reporter did ({String(actions.length)})
         </p>
         <p className="text-neutral-600">
           Open the page where the recording started, then play the steps.
@@ -245,8 +242,8 @@ function RecordingStepsBlock({ steps, pageUrl, onReplaySteps }: RecordingStepsBl
         tabIndex={0}
         className={`max-h-56 overflow-y-auto rounded-md border border-neutral-200 ${FOCUS_RING}`}
       >
-        {steps.map((step, index) => {
-          const text = stepText(step);
+        {actions.map((step, index) => {
+          const text = step.label === "" ? step.selector : step.label;
           return (
             <li
               key={`${String(step.t)}:${String(index)}`}
@@ -301,10 +298,11 @@ function RecordingTabs({
   const id = useId();
   const [tab, setTab] = useState<RecordingTab>("screenshot");
   const panelId = `${id}-panel`;
+  const actions = steps.filter(isRecordedAction);
   const tabIdOf = (value: RecordingTab) => `${id}-tab-${value}`;
   const tabs = [
     { value: "screenshot", label: "Screenshot" },
-    { value: "steps", label: `Steps (${String(steps.length)})` },
+    { value: "steps", label: `Steps (${String(actions.length)})` },
   ] as const;
 
   function onTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
@@ -349,10 +347,15 @@ function RecordingTabs({
       <div role="tabpanel" id={panelId} aria-labelledby={tabIdOf(tab)}>
         {tab === "screenshot" ? (
           <ScreenshotBlock hasScreenshot={hasScreenshot} screenshot={screenshot} />
-        ) : steps.length === 0 ? (
+        ) : actions.length === 0 ? (
           <p className="text-neutral-600">No steps were recorded for this video.</p>
         ) : (
-          <RecordingStepsBlock steps={steps} pageUrl={pageUrl} onReplaySteps={onReplaySteps} />
+          <RecordingStepsBlock
+            actions={actions}
+            steps={steps}
+            pageUrl={pageUrl}
+            onReplaySteps={onReplaySteps}
+          />
         )}
       </div>
     </div>

@@ -89,12 +89,7 @@ function appendStep(steps: RecordingStep[], step: RecordingStep): void {
   if (steps.length >= RECORDING_STEPS_MAX) {
     return;
   }
-  if (
-    last?.kind === sanitized.kind &&
-    last.selector === sanitized.selector &&
-    last.label === sanitized.label &&
-    last.url === sanitized.url
-  ) {
+  if (sanitized.kind === "navigate" && last?.kind === "navigate" && last.url === sanitized.url) {
     return;
   }
   steps.push(sanitized);
