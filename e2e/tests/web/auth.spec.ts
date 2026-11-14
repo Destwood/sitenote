@@ -50,7 +50,7 @@ test("a new user signs in with an email link, creates a workspace and signs out"
   );
 
   await page.goto("/sign-in");
-  await expect(page).toHaveURL("/app");
+  await expect(page).toHaveURL(/\/app\/w\/[0-9a-f-]+\/threads$/);
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL("/");
@@ -74,6 +74,7 @@ test("the workspace form rejects a blank name and keeps the user on the page", a
 
 test("the seeded owner signs in by link and sees Northwind Studio", async ({ page }) => {
   await signInOnWeb(page, SEEDED_OWNER);
+  await page.goto("/app");
 
   await expect(page).toHaveURL("/app");
   await expect(page.getByTestId("display-name")).toHaveText("Olena Owner");
@@ -84,6 +85,7 @@ test("the seeded owner signs in by link and sees Northwind Studio", async ({ pag
 
 test("a seeded member sees the workspace with the member role", async ({ page }) => {
   await signInOnWeb(page, SEEDED_MEMBER);
+  await page.goto("/app");
 
   await expect(page).toHaveURL("/app");
   const row = page.getByRole("listitem").filter({ hasText: WORKSPACE_NAME });
