@@ -132,9 +132,9 @@ describe("sameMeasurements", () => {
     expect(sameMeasurements(new Map([["a", base]]), new Map([["a", { ...base, x: 2 }]]))).toBe(
       false,
     );
-    expect(
-      sameMeasurements(new Map([["a", base]]), new Map([["a", { ...base, pageY: 23 }]])),
-    ).toBe(false);
+    expect(sameMeasurements(new Map([["a", base]]), new Map([["a", { ...base, pageY: 23 }]]))).toBe(
+      false,
+    );
     expect(
       sameMeasurements(new Map([["a", base]]), new Map([["a", { ...base, visible: false }]])),
     ).toBe(false);

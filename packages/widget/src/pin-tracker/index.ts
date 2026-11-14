@@ -146,8 +146,7 @@ export function createPinTracker(deps: PinTrackerDeps): PinTracker {
         rect,
         rects,
         visible: !hidden && x >= 0 && y >= 0 && x <= width && y <= height,
-        near:
-          !hidden && x >= -width && y >= -height && x <= 2 * width && y <= 2 * height,
+        near: !hidden && x >= -width && y >= -height && x <= 2 * width && y <= 2 * height,
       });
     }
     if (!sameMeasurements(last, next)) {

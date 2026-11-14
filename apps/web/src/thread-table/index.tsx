@@ -91,11 +91,19 @@ export function ThreadTable({ workspaceId, rows, names, filtered, footer }: Thre
             <tr>
               <th scope="col" data-col="domain" className={`${HEAD_CELL_CLASS} pr-4`}>
                 Domain
-                <ThreadColumnResizeHandle targetId={THREAD_TABLE_ID} columnId="domain" label="Domain" />
+                <ThreadColumnResizeHandle
+                  targetId={THREAD_TABLE_ID}
+                  columnId="domain"
+                  label="Domain"
+                />
               </th>
               <th scope="col" data-col="route" className={`${HEAD_CELL_CLASS} pr-4`}>
                 Route
-                <ThreadColumnResizeHandle targetId={THREAD_TABLE_ID} columnId="route" label="Route" />
+                <ThreadColumnResizeHandle
+                  targetId={THREAD_TABLE_ID}
+                  columnId="route"
+                  label="Route"
+                />
               </th>
               <th scope="col" data-col="firstComment" className={`${HEAD_CELL_CLASS} pr-4`}>
                 First comment
@@ -111,11 +119,19 @@ export function ThreadTable({ workspaceId, rows, names, filtered, footer }: Thre
               </th>
               <th scope="col" data-col="author" className={`${HEAD_CELL_CLASS} pr-4`}>
                 Author
-                <ThreadColumnResizeHandle targetId={THREAD_TABLE_ID} columnId="author" label="Author" />
+                <ThreadColumnResizeHandle
+                  targetId={THREAD_TABLE_ID}
+                  columnId="author"
+                  label="Author"
+                />
               </th>
               <th scope="col" data-col="status" className={`${HEAD_CELL_CLASS} pr-4`}>
                 Status
-                <ThreadColumnResizeHandle targetId={THREAD_TABLE_ID} columnId="status" label="Status" />
+                <ThreadColumnResizeHandle
+                  targetId={THREAD_TABLE_ID}
+                  columnId="status"
+                  label="Status"
+                />
               </th>
               <th scope="col" data-col="comments" className={`${HEAD_CELL_CLASS} pr-4 text-right`}>
                 Comments
@@ -127,7 +143,11 @@ export function ThreadTable({ workspaceId, rows, names, filtered, footer }: Thre
               </th>
               <th scope="col" data-col="created" className={`${HEAD_CELL_CLASS} pr-4`}>
                 Created
-                <ThreadColumnResizeHandle targetId={THREAD_TABLE_ID} columnId="created" label="Created" />
+                <ThreadColumnResizeHandle
+                  targetId={THREAD_TABLE_ID}
+                  columnId="created"
+                  label="Created"
+                />
               </th>
               <th scope="col" data-col="lastActivity" className={`${HEAD_CELL_CLASS} pr-12`}>
                 Last activity

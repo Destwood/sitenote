@@ -75,9 +75,11 @@ function saveWidth(columnId: ThreadColumnWidthId, width: number) {
 }
 
 function findCol(targetId: string, columnId: ThreadColumnWidthId): HTMLTableColElement | null {
-  return document
-    .getElementById(targetId)
-    ?.querySelector<HTMLTableColElement>(`col[data-col="${columnId}"]`) ?? null;
+  return (
+    document
+      .getElementById(targetId)
+      ?.querySelector<HTMLTableColElement>(`col[data-col="${columnId}"]`) ?? null
+  );
 }
 
 function syncTableWidth(targetId: string) {
@@ -109,7 +111,11 @@ interface ThreadColumnResizeHandleProps {
   label: string;
 }
 
-export function ThreadColumnResizeHandle({ targetId, columnId, label }: ThreadColumnResizeHandleProps) {
+export function ThreadColumnResizeHandle({
+  targetId,
+  columnId,
+  label,
+}: ThreadColumnResizeHandleProps) {
   const drag = useRef<{ startX: number; startWidth: number } | null>(null);
 
   useEffect(() => {
@@ -135,7 +141,9 @@ export function ThreadColumnResizeHandle({ targetId, columnId, label }: ThreadCo
     if (Number.isFinite(width)) {
       return width;
     }
-    return handle.closest("th")?.getBoundingClientRect().width ?? THREAD_COLUMN_DEFAULT_WIDTHS[columnId];
+    return (
+      handle.closest("th")?.getBoundingClientRect().width ?? THREAD_COLUMN_DEFAULT_WIDTHS[columnId]
+    );
   }
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
