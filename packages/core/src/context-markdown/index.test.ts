@@ -51,6 +51,60 @@ function networkError(
 }
 
 describe("formatThreadContextMarkdown", () => {
+  it("adds environment details and a chronological network log with durations", () => {
+    const markdown = formatThreadContextMarkdown({
+      excerpt: "x",
+      pageUrl: PAGE,
+      context: context({
+        environment: {
+          locale: "uk-UA",
+          timeZone: "Europe/Budapest",
+          colorScheme: "dark",
+          scroll: { x: 0, y: 125 },
+          referrer: "https://example.com/start",
+          online: false,
+        },
+        networkLog: [
+          networkError(1, { status: 200, durationMs: 42 }),
+          networkError(2, { status: 0 }),
+        ],
+      }),
+    });
+    expect(markdown).toContain(
+      "Locale: uk-UA\nTime zone: Europe/Budapest\nTheme: dark\nScroll position: 0, 125\nReferrer: https://example.com/start\nOnline: No",
+    );
+    expect(markdown).toContain("### Network log\n| Time | Method | URL | Status | Duration |");
+    expect(markdown).toContain("| 09:30:00 UTC | GET | https://api.example.com/1 | 200 | 42 ms |");
+    expect(markdown).toContain("| 09:30:00 UTC | GET | https://api.example.com/2 | failed | - |");
+    const older = formatThreadContextMarkdown({ excerpt: "x", pageUrl: PAGE, context: context() });
+    expect(older).not.toContain("Network log");
+    expect(older).not.toContain("Locale:");
+    expect(older).not.toContain("Referrer:");
+  });
+
+  it("trims log entries oldest-first before removing errors when markdown exceeds its limit", () => {
+    const log = Array.from({ length: 30 }, (_, index) =>
+      networkError(index, {
+        status: 200,
+        url: `https://example.com/${String(index)}/${"u".repeat(290)}`,
+      }),
+    );
+    const markdown = formatThreadContextMarkdown({
+      excerpt: "x".repeat(3000),
+      pageUrl: PAGE,
+      context: context({
+        networkLog: log,
+        networkErrors: [networkError(99)],
+        consoleErrors: [consoleError(99)],
+      }),
+    });
+    expect(markdown.length).toBeLessThanOrEqual(CONTEXT_MARKDOWN_MAX);
+    expect(markdown).not.toContain(log[0]?.url);
+    expect(markdown).toContain(log.at(-1)?.url);
+    expect(markdown).toContain("https://api.example.com/99");
+    expect(markdown).toContain("Boom 99");
+    expect(markdown).toContain("…truncated");
+  });
   it("writes every section in order with the thread header", () => {
     const markdown = formatThreadContextMarkdown({
       excerpt: "Checkout button does nothing\nsecond line",

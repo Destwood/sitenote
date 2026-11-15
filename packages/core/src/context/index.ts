@@ -6,6 +6,7 @@ export const CONSOLE_MESSAGE_MAX = 1000;
 export const CONSOLE_SOURCE_MAX = 500;
 export const CONSOLE_STACK_MAX = 4000;
 export const NETWORK_ERRORS_MAX = 20;
+export const NETWORK_LOG_MAX = 30;
 export const NETWORK_METHOD_MAX = 10;
 export const NETWORK_URL_MAX = 300;
 export const NETWORK_STATUS_TEXT_MAX = 60;
@@ -121,6 +122,17 @@ export const threadContextSchema = z
     networkErrors: z.optional(
       z.array(networkErrorRecordSchema).check(z.maxLength(NETWORK_ERRORS_MAX)),
     ),
+    networkLog: z.optional(z.array(networkErrorRecordSchema).check(z.maxLength(NETWORK_LOG_MAX))),
+    environment: z.optional(
+      z.object({
+        locale: z.string().check(z.maxLength(35)),
+        timeZone: z.string().check(z.maxLength(64)),
+        colorScheme: z.enum(["light", "dark"]),
+        scroll: z.object({ x: nonNegativeInteger, y: nonNegativeInteger }),
+        referrer: z.optional(z.string().check(z.maxLength(300))),
+        online: z.boolean(),
+      }),
+    ),
     capturedAt: z.iso.datetime(),
     recording: z.optional(recordingRefSchema),
   })
@@ -132,6 +144,36 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[
 
 export function sanitizeText(value: string): string {
   return value.replaceAll("\u0000", "").replace(LONE_SURROGATE, "�");
+}
+
+export function redactNetworkUrl(value: string): string {
+  const text = sanitizeText(value);
+  const url = URL.parse(text);
+  if (url === null) {
+    return text.split(/[?#]/)[0] ?? "";
+  }
+  let changed = url.username !== "" || url.password !== "" || text.includes("#");
+  url.username = "";
+  url.password = "";
+  url.hash = "";
+  const params = Array.from(url.searchParams, ([name, value]) => {
+    if (
+      /token|key|auth|pass(word)?|secret|session|code|sig(nature)?|jwt|cred/i.test(name) ||
+      /[^\s@]+@[^\s@]+\.[^\s@]+/.test(value) ||
+      /^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(value) ||
+      (/^[A-Za-z0-9_+/=-]{32,}$/.test(value) &&
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))
+    ) {
+      changed = true;
+      return [name, "[redacted]"];
+    }
+    return [name, value];
+  });
+  if (!changed) {
+    return text;
+  }
+  url.search = new URLSearchParams(params).toString();
+  return url.href;
 }
 
 function sanitizeOptional(value: string | undefined): string | undefined {
@@ -157,7 +199,7 @@ function sanitizeNetworkRecord(record: NetworkErrorRecord): NetworkErrorRecord {
   return {
     kind: record.kind,
     method: sanitizeText(record.method),
-    url: sanitizeText(record.url),
+    url: truncate(redactNetworkUrl(record.url), NETWORK_URL_MAX),
     status: record.status,
     ...(statusText === undefined ? {} : { statusText: sanitizeText(statusText) }),
     ...(durationMs === undefined ? {} : { durationMs }),
@@ -232,10 +274,31 @@ export function fitThreadContext(context: ThreadContext): ThreadContext {
     ...(context.networkErrors === undefined
       ? {}
       : { networkErrors: context.networkErrors.map(sanitizeNetworkRecord) }),
+    ...(context.networkLog === undefined
+      ? {}
+      : { networkLog: context.networkLog.slice(-NETWORK_LOG_MAX).map(sanitizeNetworkRecord) }),
+    ...(context.environment === undefined
+      ? {}
+      : {
+          environment: {
+            locale: sanitizeText(context.environment.locale),
+            timeZone: sanitizeText(context.environment.timeZone),
+            colorScheme: context.environment.colorScheme,
+            scroll: { ...context.environment.scroll },
+            ...(context.environment.referrer === undefined
+              ? {}
+              : {
+                  referrer: sanitizeText(context.environment.referrer),
+                }),
+            online: context.environment.online,
+          },
+        }),
     capturedAt: context.capturedAt,
   };
   while (byteLength(fitted) > FITTED_MAX_BYTES) {
-    if (fitted.networkErrors !== undefined && fitted.networkErrors.length > 0) {
+    if (fitted.networkLog !== undefined && fitted.networkLog.length > 0) {
+      fitted = { ...fitted, networkLog: fitted.networkLog.slice(1) };
+    } else if (fitted.networkErrors !== undefined && fitted.networkErrors.length > 0) {
       fitted = { ...fitted, networkErrors: fitted.networkErrors.slice(1) };
     } else if (fitted.consoleErrors.length > 0) {
       fitted = { ...fitted, consoleErrors: fitted.consoleErrors.slice(1) };

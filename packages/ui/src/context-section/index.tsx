@@ -457,6 +457,81 @@ interface DetailsProps {
   context: ThreadContext;
 }
 
+function NetworkLog({ records }: NetworkErrorsProps) {
+  if (records.length === 0) {
+    return null;
+  }
+  return (
+    <details className="rounded-md border border-neutral-200">
+      <summary className={`cursor-pointer rounded-md px-2 py-1 font-medium ${FOCUS_RING}`}>
+        Network ({records.length})
+      </summary>
+      <ul className="max-h-60 overflow-y-auto border-t border-neutral-200">
+        {records.map((record, index) => (
+          <li
+            key={`${String(index)}:${record.url}`}
+            className="flex min-w-0 items-baseline gap-2 border-t border-neutral-100 px-2 py-1.5 first:border-t-0"
+          >
+            <span className="shrink-0 font-mono font-semibold">{record.method}</span>
+            <span title={record.url} className="min-w-0 truncate font-mono">
+              {record.url}
+            </span>
+            <span
+              className={
+                record.status === 0 || record.status >= 400
+                  ? "shrink-0 text-red-900"
+                  : "shrink-0 text-neutral-600"
+              }
+            >
+              {formatRequestStatus(record.status)}
+            </span>
+            {record.durationMs === undefined ? null : (
+              <span className="shrink-0 text-neutral-600">{record.durationMs} ms</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+function Environment({ environment }: Pick<ThreadContext, "environment">) {
+  const headingId = useId();
+  if (environment === undefined) {
+    return null;
+  }
+  return (
+    <div className="space-y-1">
+      <p id={headingId} className="font-medium text-neutral-900">
+        Environment
+      </p>
+      <dl
+        aria-labelledby={headingId}
+        className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1"
+      >
+        <dt className="font-medium text-neutral-900">Locale</dt>
+        <dd className="break-words">{environment.locale}</dd>
+        <dt className="font-medium text-neutral-900">Time zone</dt>
+        <dd className="break-words">{environment.timeZone}</dd>
+        <dt className="font-medium text-neutral-900">Theme</dt>
+        <dd>{environment.colorScheme}</dd>
+        <dt className="font-medium text-neutral-900">Scroll position</dt>
+        <dd>
+          {environment.scroll.x}, {environment.scroll.y}
+        </dd>
+        {environment.referrer === undefined ? null : (
+          <>
+            <dt className="font-medium text-neutral-900">Referrer</dt>
+            <dd className="break-all">{environment.referrer}</dd>
+          </>
+        )}
+        <dt className="font-medium text-neutral-900">Online</dt>
+        <dd>{environment.online ? "Yes" : "No"}</dd>
+      </dl>
+    </div>
+  );
+}
+
 function Details({ context }: DetailsProps) {
   return (
     <>
@@ -472,6 +547,8 @@ function Details({ context }: DetailsProps) {
         <dt className="font-medium text-neutral-900">Page title</dt>
         <dd className="break-words">{context.pageTitle === "" ? "Untitled" : context.pageTitle}</dd>
       </dl>
+      <Environment environment={context.environment} />
+      <NetworkLog records={context.networkLog ?? []} />
       <NetworkErrors records={context.networkErrors ?? []} />
       <ConsoleErrors records={context.consoleErrors} />
     </>

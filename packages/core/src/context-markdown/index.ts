@@ -94,11 +94,21 @@ function environmentBlock(context: ThreadContext | null): string {
   if (context === null) {
     return "";
   }
-  const { viewport, devicePixelRatio, browser, os } = context;
+  const { viewport, devicePixelRatio, browser, os, environment } = context;
   return block("Environment", [
     `Browser: ${named(browser.name, browser.version)}`,
     `OS: ${named(os.name, os.version)}`,
     `Viewport: ${String(viewport.width)}x${String(viewport.height)} @ ${String(Number(devicePixelRatio.toFixed(2)))}x`,
+    ...(environment === undefined
+      ? []
+      : keepLines([
+          `Locale: ${oneLine(environment.locale)}`,
+          `Time zone: ${oneLine(environment.timeZone)}`,
+          `Theme: ${environment.colorScheme}`,
+          `Scroll position: ${String(environment.scroll.x)}, ${String(environment.scroll.y)}`,
+          environment.referrer === undefined ? null : `Referrer: ${oneLine(environment.referrer)}`,
+          `Online: ${environment.online ? "Yes" : "No"}`,
+        ])),
   ]);
 }
 
@@ -165,6 +175,22 @@ function networkBlock(records: readonly NetworkErrorRecord[]): string {
   ]);
 }
 
+function networkLogBlock(records: readonly NetworkErrorRecord[]): string {
+  return block(
+    "Network log",
+    records.length === 0
+      ? []
+      : [
+          "| Time | Method | URL | Status | Duration |",
+          "| --- | --- | --- | --- | --- |",
+          ...records.map(
+            (record) =>
+              `${networkRow(record)} ${record.durationMs === undefined ? "-" : `${String(record.durationMs)} ms`} |`,
+          ),
+        ],
+  );
+}
+
 function stackLines(stack: string): string[] {
   const clipped = stack.slice(0, STACK_MAX);
   const fence = "`".repeat(Math.max(3, longestBacktickRun(clipped) + 1));
@@ -186,8 +212,9 @@ function render(
   lead: readonly string[],
   network: readonly NetworkErrorRecord[],
   consoleErrors: readonly ConsoleErrorRecord[],
+  networkLog: readonly NetworkErrorRecord[],
 ): string {
-  return [...lead, networkBlock(network), consoleBlock(consoleErrors)]
+  return [...lead, networkLogBlock(networkLog), networkBlock(network), consoleBlock(consoleErrors)]
     .filter((part) => part !== "")
     .join("\n\n");
 }
@@ -196,20 +223,23 @@ function fit(
   lead: readonly string[],
   network: readonly NetworkErrorRecord[],
   consoleErrors: readonly ConsoleErrorRecord[],
+  networkLog: readonly NetworkErrorRecord[],
 ): string {
-  let kept = { network, consoleErrors };
+  let kept = { network, consoleErrors, networkLog };
   let dropped = false;
-  let text = render(lead, kept.network, kept.consoleErrors);
+  let text = render(lead, kept.network, kept.consoleErrors, kept.networkLog);
   while (
     text.length + (dropped ? TRUNCATED_SUFFIX.length : 0) > CONTEXT_MARKDOWN_MAX &&
-    (kept.consoleErrors.length > 0 || kept.network.length > 0)
+    (kept.networkLog.length > 0 || kept.consoleErrors.length > 0 || kept.network.length > 0)
   ) {
     dropped = true;
     kept =
-      kept.consoleErrors.length > 0
-        ? { network: kept.network, consoleErrors: kept.consoleErrors.slice(1) }
-        : { network: kept.network.slice(1), consoleErrors: kept.consoleErrors };
-    text = render(lead, kept.network, kept.consoleErrors);
+      kept.networkLog.length > 0
+        ? { ...kept, networkLog: kept.networkLog.slice(1) }
+        : kept.consoleErrors.length > 0
+          ? { ...kept, consoleErrors: kept.consoleErrors.slice(1) }
+          : { ...kept, network: kept.network.slice(1) };
+    text = render(lead, kept.network, kept.consoleErrors, kept.networkLog);
   }
   if (!dropped && text.length <= CONTEXT_MARKDOWN_MAX) {
     return text;
@@ -227,5 +257,10 @@ export function formatThreadContextMarkdown(input: ThreadContextMarkdownInput): 
     elementBlock(input.anchor),
     stepsBlock(context?.recording),
   ];
-  return fit(lead, context?.networkErrors ?? [], context?.consoleErrors ?? []);
+  return fit(
+    lead,
+    context?.networkErrors ?? [],
+    context?.consoleErrors ?? [],
+    context?.networkLog ?? [],
+  );
 }

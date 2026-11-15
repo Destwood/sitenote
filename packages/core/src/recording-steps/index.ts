@@ -13,7 +13,8 @@ function commentLines(label: string): string[] {
 }
 
 function stepLines(step: RecordingStep): string[] {
-  const locator = `page.locator(${JSON.stringify(step.selector)})`;
+  const textFilter = step.label === "" ? "" : `.filter({ hasText: ${JSON.stringify(step.label)} })`;
+  const locator = `page.locator(${JSON.stringify(step.selector)})${textFilter}.first()`;
   const comment = commentLines(step.label);
   switch (step.kind) {
     case "click":

@@ -208,6 +208,7 @@ export function installErrorCapture(
   win: CaptureTarget,
   buffer: ErrorBuffer,
   network: Pick<NetworkBuffer, "snapshot">,
+  networkLog?: Pick<NetworkBuffer, "snapshot">,
 ): void {
   if (hasMark(win.console.error)) {
     return;
@@ -260,6 +261,7 @@ export function installErrorCapture(
           nonce,
           records: buffer.snapshot(),
           network: network.snapshot(),
+          ...(networkLog === undefined ? {} : { networkLog: networkLog.snapshot() }),
         },
         win.location.origin,
       );

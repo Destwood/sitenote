@@ -148,6 +148,21 @@ describe("requestConsoleErrors", () => {
 });
 
 describe("requestPageDiagnostics", () => {
+  it("validates the log and keeps the newest thirty requests including successes", async () => {
+    const { win, deliver } = fakeWindow();
+    const many = Array.from({ length: 35 }, (_, index) => ({
+      ...NETWORK,
+      status: 200,
+      url: String(index),
+    }));
+    const pending = requestPageDiagnostics({ win, newNonce: () => NONCE });
+    deliver({
+      data: response({ networkLog: [...many, { ...NETWORK, status: 600 }, null, "invalid"] }),
+    });
+    const { networkLog } = await pending;
+    expect(networkLog).toEqual(many.slice(8));
+    expect(networkLog.at(-1)?.url).toBe("34");
+  });
   it("returns the console errors and the network records of the reply", async () => {
     const { win, deliver } = fakeWindow();
 
@@ -157,6 +172,7 @@ describe("requestPageDiagnostics", () => {
     expect(await pending).toEqual({
       consoleErrors: [GOOD],
       networkErrors: [NETWORK, { ...NETWORK, status: 0 }],
+      networkLog: [],
     });
   });
 
@@ -166,7 +182,7 @@ describe("requestPageDiagnostics", () => {
     const pending = requestPageDiagnostics({ win, newNonce: () => NONCE });
     deliver({ data: response() });
 
-    expect(await pending).toEqual({ consoleErrors: [GOOD], networkErrors: [] });
+    expect(await pending).toEqual({ consoleErrors: [GOOD], networkErrors: [], networkLog: [] });
   });
 
   it("drops invalid network records and keeps the newest twenty", async () => {
@@ -187,7 +203,7 @@ describe("requestPageDiagnostics", () => {
     const pending = requestPageDiagnostics({ win, newNonce: () => NONCE, timeoutMs: 50 });
     await vi.advanceTimersByTimeAsync(50);
 
-    expect(await pending).toEqual({ consoleErrors: [], networkErrors: [] });
+    expect(await pending).toEqual({ consoleErrors: [], networkErrors: [], networkLog: [] });
   });
 });
 

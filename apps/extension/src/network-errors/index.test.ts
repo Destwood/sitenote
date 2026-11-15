@@ -1,5 +1,6 @@
 import {
   NETWORK_ERRORS_MAX,
+  NETWORK_LOG_MAX,
   NETWORK_METHOD_MAX,
   NETWORK_STATUS_TEXT_MAX,
   NETWORK_URL_MAX,
@@ -41,8 +42,9 @@ function setup(
     XMLHttpRequest: Xhr,
   } as unknown as NetworkCaptureTarget;
   const buffer = createNetworkBuffer(() => NOW);
-  installNetworkCapture(win, buffer);
-  return { win, buffer, fetchMock, Xhr };
+  const log = createNetworkBuffer(() => NOW, NETWORK_LOG_MAX);
+  installNetworkCapture(win, buffer, log);
+  return { win, buffer, log, fetchMock, Xhr };
 }
 
 describe("limits", () => {
@@ -105,6 +107,50 @@ describe("createNetworkBuffer", () => {
 });
 
 describe("installNetworkCapture for fetch", () => {
+  it("logs successful, failed, opaque and aborted requests in completion order with timing", async () => {
+    const response = new Response("private body", { status: 200 });
+    const { win, buffer, log, fetchMock } = setup(() => Promise.resolve(response));
+    await win.fetch("/api?item=7&apiKey=secret#private", {
+      headers: { Authorization: "private" },
+      method: "post",
+      body: "private",
+    });
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 404 }));
+    await win.fetch("/missing");
+    fetchMock.mockResolvedValueOnce(Response.error());
+    await win.fetch("/opaque");
+    const abort = new DOMException("aborted", "AbortError");
+    fetchMock.mockRejectedValueOnce(abort);
+    await expect(win.fetch("/slow")).rejects.toBe(abort);
+    expect(log.snapshot().map((record) => record.status)).toEqual([200, 404, 0, 0]);
+    expect(log.snapshot()[0]).toMatchObject({
+      kind: "fetch",
+      method: "POST",
+      url: "https://example.test/api?item=7&apiKey=%5Bredacted%5D",
+      status: 200,
+      at: NOW.toISOString(),
+    });
+    expect(log.snapshot()[0]?.durationMs).toBeGreaterThanOrEqual(0);
+    expect(buffer.snapshot().map((record) => record.status)).toEqual([404]);
+    expect(await response.text()).toBe("private body");
+    expect(JSON.stringify(log.snapshot())).not.toContain("private");
+  });
+
+  it("keeps the last thirty requests, skips non-http urls and redacts before clipping", async () => {
+    const { win, log, buffer } = setup();
+    for (let index = 0; index < 35; index += 1) {
+      await win.fetch(`/api/${String(index)}?token=${"s".repeat(500)}&item=7`);
+    }
+    await win.fetch("data:text/plain,secret");
+    await win.fetch("blob:https://example.test/id");
+    expect(log.snapshot()).toHaveLength(NETWORK_LOG_MAX);
+    expect(log.snapshot()[0]?.url).toBe("https://example.test/api/5?token=%5Bredacted%5D&item=7");
+    expect(log.snapshot().at(-1)?.url).toContain("/34?");
+    expect(buffer.snapshot()).toEqual([]);
+    const [copy] = log.snapshot();
+    if (copy !== undefined) copy.url = "changed";
+    expect(log.snapshot()[0]?.url).not.toBe("changed");
+  });
   it("records a failed response without the query or hash and returns the response untouched", async () => {
     const response = new Response("nope", { status: 500, statusText: "Server Error" });
     const { win, buffer } = setup(() => Promise.resolve(response));
@@ -175,6 +221,33 @@ describe("installNetworkCapture for fetch", () => {
 });
 
 describe("installNetworkCapture for XMLHttpRequest", () => {
+  it("logs successes, failures and aborts without credentials, fragments or secret query values", () => {
+    const { Xhr, buffer, log } = setup();
+    for (const status of [200, 302, 503, 0]) {
+      const xhr = new Xhr();
+      xhr.open("get", "https://user:pass@example.test/api?token=secret&item=7#private");
+      xhr.send();
+      xhr.status = status;
+      if (status === 0) xhr.dispatchEvent(new Event("abort"));
+      xhr.dispatchEvent(new Event("loadend"));
+    }
+    expect(log.snapshot().map((record) => record.status)).toEqual([200, 302, 503, 0]);
+    expect(
+      log
+        .snapshot()
+        .every(
+          (record) =>
+            record.url === "https://example.test/api?token=%5Bredacted%5D&item=7" &&
+            record.durationMs !== undefined,
+        ),
+    ).toBe(true);
+    expect(buffer.snapshot()).toMatchObject([{ status: 503, url: "https://example.test/api" }]);
+    const other = new Xhr();
+    other.open("get", "data:text/plain,hello");
+    other.send();
+    other.dispatchEvent(new Event("loadend"));
+    expect(log.snapshot()).toHaveLength(4);
+  });
   it("records a failed status with its status text once the request ends", () => {
     const { Xhr, buffer } = setup();
     const xhr = new Xhr();

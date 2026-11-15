@@ -19,6 +19,7 @@ const MAX_DEVICE_PIXEL_RATIO = 16;
 export interface PageDiagnosticsRecords {
   consoleErrors: ConsoleErrorRecord[];
   networkErrors: NetworkErrorRecord[];
+  networkLog?: NetworkErrorRecord[];
 }
 
 export interface ContextCollectorDeps {
@@ -105,18 +106,20 @@ function normalizedRatio(ratio: number): number {
 export function createContextCollector(deps: ContextCollectorDeps): () => Promise<ThreadContext> {
   const { win, doc } = deps;
   const now = deps.now ?? (() => new Date());
-  const requestDiagnostics =
+  const requestDiagnostics: () => Promise<PageDiagnosticsRecords> =
     deps.requestDiagnostics ??
     (async () => ({
       consoleErrors: await deps.requestErrors(),
       networkErrors: [],
     }));
   return async () => {
-    const [{ consoleErrors, networkErrors }, agent] = await Promise.all([
+    const [{ consoleErrors, networkErrors, networkLog }, agent] = await Promise.all([
       requestDiagnostics(),
       readUserAgentInput(win.navigator, deps.highEntropyTimeoutMs),
     ]);
     const { browser, os } = parseUserAgentData(agent);
+    const intl = Reflect.get(win, "Intl") as typeof Intl;
+    const referrer = URL.parse(doc.referrer);
     return fitThreadContext({
       viewport: { width: Math.round(win.innerWidth), height: Math.round(win.innerHeight) },
       devicePixelRatio: normalizedRatio(win.devicePixelRatio),
@@ -133,6 +136,22 @@ export function createContextCollector(deps: ContextCollectorDeps): () => Promis
       userAgent: clip(win.navigator.userAgent, CONTEXT_USER_AGENT_MAX),
       consoleErrors,
       ...(networkErrors.length === 0 ? {} : { networkErrors }),
+      ...(networkLog === undefined || networkLog.length === 0 ? {} : { networkLog }),
+      environment: {
+        locale: clip(win.navigator.language, 35),
+        timeZone: clip(intl.DateTimeFormat().resolvedOptions().timeZone, 64),
+        colorScheme: win.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
+        scroll: {
+          x: Math.max(0, Math.round(win.scrollX)),
+          y: Math.max(0, Math.round(win.scrollY)),
+        },
+        ...(referrer === null || !["http:", "https:"].includes(referrer.protocol)
+          ? {}
+          : {
+              referrer: clip(`${referrer.origin}${referrer.pathname}`, 300),
+            }),
+        online: win.navigator.onLine,
+      },
       capturedAt: now().toISOString(),
     });
   };
