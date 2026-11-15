@@ -4,6 +4,7 @@ import { FOCUS_RING, ICON_BUTTON, TEXT_BUTTON } from "../control-classes";
 import { useNow } from "../now";
 import { formatRelativeTime } from "../relative-time";
 import { RouteLabel, routeDisplayText } from "../route-label";
+import { ThreadTypeBadge } from "../thread-type-badge";
 import type { SiteThreadItem, ThreadView } from "../types";
 import { Z_INDEX } from "../z-index";
 
@@ -68,8 +69,12 @@ function ThreadListItem({ thread, active, now, showAnchor, onSelect }: ThreadLis
               {thread.anchorLabel}
             </span>
           ) : null}
-          <span className="mt-0.5 block text-xs text-neutral-600">
-            {count} {count === 1 ? "comment" : "comments"}
+          <span className="mt-0.5 flex items-center gap-1.5 text-xs text-neutral-600">
+            <span>
+              {count} {count === 1 ? "comment" : "comments"}
+            </span>
+            <span aria-hidden="true">·</span>
+            <ThreadTypeBadge video={thread.context?.recording !== undefined} />
           </span>
         </span>
       </button>
@@ -203,7 +208,8 @@ export function Sidebar({
             <span className="block text-xs text-neutral-600">
               <span className="sr-only">Thread {item.number}, </span>
               {item.status === "resolved" ? "Resolved · " : null}
-              {item.authorName} · {item.replies} {item.replies === 1 ? "reply" : "replies"}
+              {item.authorName} · {item.replies} {item.replies === 1 ? "reply" : "replies"} ·{" "}
+              <ThreadTypeBadge video={item.hasRecording} />
             </span>
             <span className="line-clamp-2 block break-words">{item.excerpt}</span>
           </span>

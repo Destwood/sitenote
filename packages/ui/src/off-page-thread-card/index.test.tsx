@@ -15,6 +15,7 @@ const ITEM: SiteThreadItem = {
   replies: 1,
   route: "/other",
   hasSteps: false,
+  hasRecording: false,
 };
 
 function renderCard(props: Partial<OffPageThreadCardProps> = {}) {
@@ -71,6 +72,20 @@ describe("OffPageThreadCard", () => {
     expect(items[1]?.textContent).toContain("Second");
     const section = screen.getByRole("region", { name: "Page context" });
     expect(within(section).getByText("1440×900 @2x")).toBeTruthy();
+  });
+
+  it("labels a thread without a recording as Text", () => {
+    renderCard();
+
+    expect(screen.getByText("Text")).toBeTruthy();
+    expect(screen.queryByText("Video")).toBeNull();
+  });
+
+  it("labels a thread with a recording as Video", () => {
+    renderCard({ item: { ...ITEM, hasRecording: true } });
+
+    expect(screen.getByText("Video")).toBeTruthy();
+    expect(screen.queryByText("Text")).toBeNull();
   });
 
   it("offers no edit or delete actions on the comments", () => {

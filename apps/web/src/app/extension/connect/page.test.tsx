@@ -65,6 +65,8 @@ describe("GET /extension/connect", () => {
 
     render(await ExtensionConnectPage());
 
-    expect(screen.getByRole("link", { name: "Go to dashboard" }).getAttribute("href")).toBe("/app");
+    expect(screen.getByRole("link", { name: "Go to dashboard" }).getAttribute("href")).toBe(
+      "/app/dashboard",
+    );
   });
 });

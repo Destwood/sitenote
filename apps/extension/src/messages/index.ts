@@ -446,6 +446,7 @@ export const pageThreadSummarySchema = z.object({
   detached: z.boolean(),
   route: z.string(),
   current: z.boolean(),
+  hasRecording: z.boolean(),
 });
 
 export const pageThreadsResponseSchema = resultSchema(z.array(pageThreadSummarySchema));

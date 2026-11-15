@@ -181,6 +181,29 @@ describe("Sidebar", () => {
     expect(screen.getByText(/Bob Reviewer/)).toBeTruthy();
   });
 
+  it("labels each thread as Video when it has a recording and as Text otherwise", () => {
+    const recorded = makeThread({
+      id: "video-5",
+      number: 5,
+      context: {
+        viewport: { width: 1440, height: 900 },
+        devicePixelRatio: 2,
+        pageTitle: "Northwind",
+        url: "https://example.test/",
+        browser: { name: "Chrome", version: "130" },
+        os: { name: "Windows", version: "11" },
+        userAgent: "ua",
+        consoleErrors: [],
+        capturedAt: "2026-10-22T09:30:00.000Z",
+        recording: { path: "ws/thread.webm", durationMs: 65_000, size: 1_572_864 },
+      },
+    });
+    renderSidebar([...threads().slice(0, 1), recorded]);
+
+    expect(screen.getByText("Video")).toBeTruthy();
+    expect(screen.getByText("Text")).toBeTruthy();
+  });
+
   it("gives each item an accessible thread number", () => {
     renderSidebar();
 

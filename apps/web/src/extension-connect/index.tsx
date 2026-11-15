@@ -62,7 +62,7 @@ export function ExtensionConnect({ extensionId }: ExtensionConnectProps) {
           <p role="status" data-testid="extension-connected" className="font-medium">
             The extension is connected. You are still signed in here.
           </p>
-          <Link href="/app" className={`${PUBLIC_PRIMARY_BUTTON_CLASS} w-fit`}>
+          <Link href="/app/dashboard" className={`${PUBLIC_PRIMARY_BUTTON_CLASS} w-fit`}>
             Open dashboard
           </Link>
         </div>

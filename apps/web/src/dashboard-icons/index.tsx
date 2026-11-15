@@ -1,7 +1,17 @@
 import type { ReactNode } from "react";
 
 export type DashIconName =
-  "chevron" | "check" | "copy" | "globe" | "comment" | "users" | "sites" | "invite" | "integration";
+  | "chevron"
+  | "check"
+  | "copy"
+  | "globe"
+  | "comment"
+  | "users"
+  | "sites"
+  | "invite"
+  | "integration"
+  | "columns"
+  | "video";
 
 const PATHS: Readonly<Record<DashIconName, ReactNode>> = {
   chevron: <path d="m6 9 6 6 6-6" />,
@@ -40,6 +50,18 @@ const PATHS: Readonly<Record<DashIconName, ReactNode>> = {
   ),
   integration: (
     <path d="M17 3a4 4 0 0 0-4 4v1h-2V7a4 4 0 1 0-4 4h1v2H7a4 4 0 1 0 4 4v-1h2v1a4 4 0 1 0 4-4h-1v-2h1a4 4 0 0 0 0-8Z" />
+  ),
+  columns: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9 4v16M15 4v16" />
+    </>
+  ),
+  video: (
+    <>
+      <rect x="2" y="6" width="14" height="12" rx="2" />
+      <path d="m22 8-6 4 6 4V8Z" />
+    </>
   ),
 };
 

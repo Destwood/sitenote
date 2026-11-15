@@ -226,6 +226,7 @@ describe("listPageThreads", () => {
     detached: false,
     route: "/",
     current: true,
+    hasRecording: false,
   } as const;
 
   it("asks the top frame of the tab for its threads and returns them", async () => {

@@ -235,6 +235,7 @@ test("a guest joins on the web without the extension, keeps the web session and 
 
 test("a member cannot open the invites page of the workspace either", async ({ page }) => {
   await signInOnWeb(page, "member@sitenote.test");
+  await page.goto(`${WEB_ORIGIN}/app`);
   await expect(page).toHaveURL(`${WEB_ORIGIN}/app`);
 
   const response = await page.goto(`${WEB_ORIGIN}/app/w/${SEEDED_WORKSPACE_ID}/invites`);

@@ -14,6 +14,7 @@ export interface PageThreadSummary {
   detached: boolean;
   route: string;
   current: boolean;
+  hasRecording: boolean;
 }
 
 function excerptOf(thread: ThreadRecord): string {
@@ -47,6 +48,7 @@ export function summarizeThreads(
       detached: current && isOrphaned(resolutions, thread.id),
       route: routeOf(pageUrl),
       current,
+      hasRecording: thread.context?.recording !== undefined,
     }));
   });
   return summaries.sort(

@@ -27,6 +27,7 @@ export const PANEL_WIDTH = 320;
 export interface ThreadPanelProps {
   thread: ThreadView | null;
   anchorRect: AnchorRect;
+  zIndex?: number | undefined;
   canChangeStatus: boolean;
   error?: string | undefined;
   mentionCandidates?: readonly PersonView[] | undefined;
@@ -56,6 +57,7 @@ function activeElementIn(node: Node): Element | null {
 export function ThreadPanel({
   thread,
   anchorRect,
+  zIndex = Z_INDEX.panel,
   canChangeStatus,
   error,
   mentionCandidates,
@@ -155,7 +157,7 @@ export function ThreadPanel({
         top,
         width: PANEL_WIDTH,
         maxHeight: viewport.height - 2 * VIEWPORT_MARGIN,
-        zIndex: Z_INDEX.panel,
+        zIndex,
       }}
       className={`fixed flex flex-col ${PANEL_SURFACE}`}
     >

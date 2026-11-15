@@ -14,13 +14,27 @@ describe("LandingHeader", () => {
       "#how-it-works",
     );
     expect(screen.getByRole("link", { name: "Demo" }).getAttribute("href")).toBe("/demo");
-    expect(screen.getByRole("link", { name: "Install" }).getAttribute("href")).toBe("#install");
+    expect(screen.getByRole("link", { name: "Download" }).getAttribute("href")).toBe("#install");
     expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/sign-in");
+  });
+
+  it("prefixes the in-page anchors with the base path", () => {
+    render(<LandingHeader githubUrl={null} signedIn={false} basePath="/" />);
+    expect(screen.getByRole("link", { name: "Skip to content" }).getAttribute("href")).toBe(
+      "/#main",
+    );
+    expect(screen.getByRole("link", { name: "Features" }).getAttribute("href")).toBe("/#features");
+    expect(screen.getByRole("link", { name: "How it works" }).getAttribute("href")).toBe(
+      "/#how-it-works",
+    );
+    expect(screen.getByRole("link", { name: "Download" }).getAttribute("href")).toBe("/#install");
   });
 
   it("links a signed-in member to the dashboard instead of sign-in", () => {
     render(<LandingHeader githubUrl={null} signedIn />);
-    expect(screen.getByRole("link", { name: "Dashboard" }).getAttribute("href")).toBe("/app");
+    expect(screen.getByRole("link", { name: "Dashboard" }).getAttribute("href")).toBe(
+      "/app/dashboard",
+    );
     expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
   });
 

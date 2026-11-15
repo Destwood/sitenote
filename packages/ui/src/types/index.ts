@@ -41,6 +41,7 @@ export interface SiteThreadItem {
   replies: number;
   route: string;
   hasSteps: boolean;
+  hasRecording: boolean;
 }
 
 export type ScreenshotState =

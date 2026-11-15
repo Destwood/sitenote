@@ -32,12 +32,39 @@ const SESSION_ERROR = "We could not start the demo. Try again.";
 const BANNER_BUTTON_CLASS =
   "inline-flex items-center justify-center rounded-md bg-white px-4 py-2 text-sm font-semibold text-neutral-900 hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-60";
 const NAME_ERROR = `Enter a name of 1 to ${String(DEMO_NAME_MAX_LENGTH)} characters.`;
+const GUIDE_DISMISSED_KEY = "sitenote.demo-guide-dismissed";
+const GUIDE_STEPS = [
+  "Press Start commenting and pick a name — no account needed.",
+  "Click any element in the framed sample page, or select some text, to pin a comment to it.",
+  "Write your comment. Everyone trying the demo sees it appear in place.",
+  "Open the Threads list in the widget to reply, resolve or review all comments.",
+];
 
 async function readSavedVisit(): Promise<string | null> {
   try {
     return await readVisitorName(getDemoSupabaseClient());
   } catch {
     return null;
+  }
+}
+
+function readGuideDismissed(): boolean {
+  try {
+    return window.localStorage.getItem(GUIDE_DISMISSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeGuideDismissed(dismissed: boolean) {
+  try {
+    if (dismissed) {
+      window.localStorage.setItem(GUIDE_DISMISSED_KEY, "1");
+    } else {
+      window.localStorage.removeItem(GUIDE_DISMISSED_KEY);
+    }
+  } catch {
+    return;
   }
 }
 
@@ -73,7 +100,16 @@ export function DemoExperience({ children }: DemoExperienceProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bannerError, setBannerError] = useState<string | null>(null);
+  const [guideVisible, setGuideVisible] = useState(true);
   const isMounted = () => activeRef.current;
+
+  useEffect(() => {
+    void Promise.resolve(readGuideDismissed()).then((dismissed) => {
+      if (dismissed) {
+        setGuideVisible(false);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     activeRef.current = true;
@@ -114,6 +150,16 @@ export function DemoExperience({ children }: DemoExperienceProps) {
       handleRef.current = null;
     };
   }, []);
+
+  function dismissGuide() {
+    writeGuideDismissed(true);
+    setGuideVisible(false);
+  }
+
+  function showGuide() {
+    writeGuideDismissed(false);
+    setGuideVisible(true);
+  }
 
   function startCommenting() {
     setBannerError(null);
@@ -166,13 +212,47 @@ export function DemoExperience({ children }: DemoExperienceProps) {
         >
           Start commenting
         </button>
+        {guideVisible ? null : (
+          <button type="button" onClick={showGuide} className={SECONDARY_BUTTON_CLASS}>
+            How it works
+          </button>
+        )}
         {bannerError === null ? null : (
           <p role="alert" className={`${ERROR_CLASS} w-full`}>
             {bannerError}
           </p>
         )}
       </div>
-      {children}
+      {guideVisible ? (
+        <section
+          aria-labelledby="demo-guide-heading"
+          data-testid="demo-guide"
+          className="mx-auto mt-6 w-full max-w-5xl rounded-xl border border-blue-200 bg-blue-50 p-5 text-sm text-neutral-800"
+        >
+          <h2 id="demo-guide-heading" className="text-base font-semibold">
+            How the demo works
+          </h2>
+          <ol className="mt-3 flex list-decimal flex-col gap-1.5 pl-5">
+            {GUIDE_STEPS.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+          <div className="mt-4">
+            <button type="button" onClick={dismissGuide} className={SECONDARY_BUTTON_CLASS}>
+              Got it
+            </button>
+          </div>
+        </section>
+      ) : null}
+      <div
+        data-testid="demo-frame"
+        className="relative mx-auto my-8 w-full max-w-5xl rounded-2xl border-2 border-dashed border-blue-400 bg-white"
+      >
+        <span className="absolute -top-3 left-6 rounded-full bg-blue-600 px-3 py-0.5 text-xs font-semibold text-white">
+          Sample page — comment on anything in this frame
+        </span>
+        {children}
+      </div>
       <div ref={hostRef} />
       {dialogOpen ? (
         <div

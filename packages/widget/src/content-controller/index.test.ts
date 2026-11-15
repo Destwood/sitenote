@@ -1579,7 +1579,18 @@ describe("selecting threads", () => {
     expect(state().activeThreadId).toBeNull();
   });
 
-  it("scrolls an off-screen thread into view before opening it", async () => {
+  it("smoothly scrolls an off-screen thread into view when selected from the list", async () => {
+    const { controller: api } = await setup([first]);
+    const scroll = vi.fn();
+    element("#cta").scrollIntoView = scroll;
+
+    api.selectThread(THREAD_ID);
+
+    expect(scroll).toHaveBeenCalledWith({ block: "center", inline: "nearest", behavior: "smooth" });
+  });
+
+  it("scrolls instantly when the user prefers reduced motion", async () => {
+    vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true } as MediaQueryList);
     const { controller: api } = await setup([first]);
     const scroll = vi.fn();
     element("#cta").scrollIntoView = scroll;
@@ -1587,6 +1598,17 @@ describe("selecting threads", () => {
     api.selectThread(THREAD_ID);
 
     expect(scroll).toHaveBeenCalledWith({ block: "center", inline: "nearest", behavior: "auto" });
+  });
+
+  it("never scrolls the page when a pin is clicked", async () => {
+    const { controller: api, state } = await setup([first]);
+    const scroll = vi.fn();
+    element("#cta").scrollIntoView = scroll;
+
+    api.togglePin(THREAD_ID);
+
+    expect(state().activeThreadId).toBe(THREAD_ID);
+    expect(scroll).not.toHaveBeenCalled();
   });
 
   it("opens an orphaned thread without scrolling", async () => {

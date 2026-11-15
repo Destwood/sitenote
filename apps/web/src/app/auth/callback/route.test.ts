@@ -42,7 +42,7 @@ describe("GET /auth/callback", () => {
   it("defaults to the dashboard when next is missing", async () => {
     const response = await call("?code=abc");
 
-    expect(location(response)).toBe("/app");
+    expect(location(response)).toBe("/app/dashboard");
   });
 
   it.each(["//evil.example", "https://evil.example", "/\\evil.example", "%2F%2Fevil.example"])(
@@ -50,7 +50,7 @@ describe("GET /auth/callback", () => {
     async (next) => {
       const response = await call(`?code=abc&next=${encodeURIComponent(next)}`);
 
-      expect(response.headers.get("location")).toBe("http://localhost:3000/app");
+      expect(response.headers.get("location")).toBe("http://localhost:3000/app/dashboard");
     },
   );
 

@@ -2,12 +2,13 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 
-import { DASH_BUTTON_SECONDARY_CLASS } from "../dashboard-classes";
+import { DashIcon } from "../dashboard-icons";
 
 export const THREAD_COLUMNS = [
   { id: "domain", label: "Domain" },
   { id: "route", label: "Route" },
   { id: "firstComment", label: "First comment" },
+  { id: "type", label: "Type" },
   { id: "author", label: "Author" },
   { id: "status", label: "Status" },
   { id: "comments", label: "Comments" },
@@ -107,9 +108,11 @@ export function ThreadColumnPicker({ targetId }: ThreadColumnPickerProps) {
         onClick={() => {
           setOpen((isOpen) => !isOpen);
         }}
-        className={DASH_BUTTON_SECONDARY_CLASS}
+        aria-label="Columns"
+        title="Columns"
+        className="inline-flex size-8 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
       >
-        Columns
+        <DashIcon name="columns" className="size-4" />
       </button>
       {open ? (
         <div

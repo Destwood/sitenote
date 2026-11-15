@@ -5,6 +5,7 @@ import { DEFAULT_REDIRECT_PATH, safeRedirectPath } from ".";
 describe("safeRedirectPath accepts same-origin relative paths", () => {
   it.each([
     ["/app", "/app"],
+    ["/app/dashboard", "/app/dashboard"],
     ["/", "/"],
     ["/app/settings", "/app/settings"],
     ["/app?tab=members", "/app?tab=members"],

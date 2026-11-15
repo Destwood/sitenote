@@ -7,9 +7,10 @@ const LINK_CLASS = `rounded-sm text-neutral-600 transition-colors hover:text-neu
 
 interface LandingFooterProps {
   signedIn: boolean;
+  basePath?: string;
 }
 
-export function LandingFooter({ signedIn }: LandingFooterProps) {
+export function LandingFooter({ signedIn, basePath = "" }: LandingFooterProps) {
   return (
     <footer className="border-t border-neutral-200 bg-neutral-50">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-6 px-6 py-10 text-sm text-neutral-600">
@@ -20,7 +21,7 @@ export function LandingFooter({ signedIn }: LandingFooterProps) {
         <nav aria-label="Footer">
           <ul className="flex flex-wrap gap-x-6 gap-y-2">
             <li>
-              <a href="#features" className={LINK_CLASS}>
+              <a href={`${basePath}#features`} className={LINK_CLASS}>
                 Features
               </a>
             </li>
@@ -30,17 +31,17 @@ export function LandingFooter({ signedIn }: LandingFooterProps) {
               </Link>
             </li>
             <li>
-              <a href="#install" className={LINK_CLASS}>
-                Install
+              <a href={`${basePath}#install`} className={LINK_CLASS}>
+                Download
               </a>
             </li>
             <li>
-              <a href="#faq" className={LINK_CLASS}>
+              <a href={`${basePath}#faq`} className={LINK_CLASS}>
                 Questions
               </a>
             </li>
             <li>
-              <Link href={signedIn ? "/app" : "/sign-in"} className={LINK_CLASS}>
+              <Link href={signedIn ? "/app/dashboard" : "/sign-in"} className={LINK_CLASS}>
                 {signedIn ? "Dashboard" : "Sign in"}
               </Link>
             </li>

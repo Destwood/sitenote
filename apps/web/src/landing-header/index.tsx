@@ -14,12 +14,13 @@ const SKIP_LINK_CLASS =
 interface LandingHeaderProps {
   githubUrl: string | null;
   signedIn: boolean;
+  basePath?: string;
 }
 
-export function LandingHeader({ githubUrl, signedIn }: LandingHeaderProps) {
+export function LandingHeader({ githubUrl, signedIn, basePath = "" }: LandingHeaderProps) {
   return (
     <header className="sticky top-0 z-10 border-b border-neutral-200 bg-white/90 backdrop-blur">
-      <a href="#main" className={SKIP_LINK_CLASS}>
+      <a href={`${basePath}#main`} className={SKIP_LINK_CLASS}>
         Skip to content
       </a>
       <nav
@@ -32,12 +33,12 @@ export function LandingHeader({ githubUrl, signedIn }: LandingHeaderProps) {
         </Link>
         <ul className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm font-medium">
           <li>
-            <a href="#features" className={LINK_CLASS}>
+            <a href={`${basePath}#features`} className={LINK_CLASS}>
               Features
             </a>
           </li>
           <li>
-            <a href="#how-it-works" className={LINK_CLASS}>
+            <a href={`${basePath}#how-it-works`} className={LINK_CLASS}>
               How it works
             </a>
           </li>
@@ -47,8 +48,8 @@ export function LandingHeader({ githubUrl, signedIn }: LandingHeaderProps) {
             </Link>
           </li>
           <li>
-            <a href="#install" className={LINK_CLASS}>
-              Install
+            <a href={`${basePath}#install`} className={LINK_CLASS}>
+              Download
             </a>
           </li>
           {githubUrl !== null && (
@@ -60,7 +61,7 @@ export function LandingHeader({ githubUrl, signedIn }: LandingHeaderProps) {
           )}
           <li>
             <Link
-              href={signedIn ? "/app" : "/sign-in"}
+              href={signedIn ? "/app/dashboard" : "/sign-in"}
               className={`${PUBLIC_PRIMARY_BUTTON_CLASS} px-3.5 py-2`}
             >
               {signedIn ? "Dashboard" : "Sign in"}

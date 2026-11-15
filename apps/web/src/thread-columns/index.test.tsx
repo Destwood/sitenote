@@ -48,7 +48,7 @@ describe("ThreadColumnPicker", () => {
 
     await user.click(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getAllByRole("checkbox")).toHaveLength(8);
+    expect(screen.getAllByRole("checkbox")).toHaveLength(9);
 
     await user.keyboard("{Escape}");
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
@@ -60,7 +60,7 @@ describe("ThreadColumnPicker", () => {
     renderPicker();
 
     await user.click(screen.getByRole("button", { name: "Columns" }));
-    expect(screen.getAllByRole("checkbox")).toHaveLength(8);
+    expect(screen.getAllByRole("checkbox")).toHaveLength(9);
 
     await user.click(document.body);
     expect(screen.queryByRole("checkbox")).toBeNull();
@@ -111,6 +111,27 @@ describe("ThreadColumnPicker", () => {
     expect(target().getAttribute("data-hidden-cols")).toBe("domain");
   });
 
+  it("keeps a column added after the saved list visible", () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([
+        "domain",
+        "route",
+        "firstComment",
+        "author",
+        "status",
+        "comments",
+        "created",
+        "lastActivity",
+      ]),
+    );
+    renderPicker();
+
+    expect(target().getAttribute("data-hidden-cols")).toBe(
+      "domain route firstComment author status comments created lastActivity",
+    );
+  });
+
   it("ignores a stored list that hides every column", () => {
     window.localStorage.setItem(
       STORAGE_KEY,
@@ -118,6 +139,7 @@ describe("ThreadColumnPicker", () => {
         "domain",
         "route",
         "firstComment",
+        "type",
         "author",
         "status",
         "comments",
@@ -137,7 +159,7 @@ describe("ThreadColumnPicker", () => {
     await user.click(screen.getByRole("button", { name: "Columns" }));
     await user.click(checkbox("Domain"));
     await user.click(checkbox("Route"));
-    for (const label of ["First comment", "Author", "Status", "Comments", "Created"]) {
+    for (const label of ["First comment", "Type", "Author", "Status", "Comments", "Created"]) {
       await user.click(checkbox(label));
     }
 

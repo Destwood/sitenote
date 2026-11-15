@@ -165,7 +165,7 @@ export interface ContentController {
   toggleSidebar: () => void;
   closeSidebar: () => void;
   setShowResolved: (show: boolean) => void;
-  selectThread: (threadId: string) => void;
+  selectThread: (threadId: string, scroll?: boolean) => void;
   openThread: (threadId: string) => boolean;
   togglePin: (threadId: string) => void;
   closePanel: () => void;
@@ -874,7 +874,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     );
   }
 
-  function selectThread(threadId: string): void {
+  function selectThread(threadId: string, scroll = true): void {
     const state = store.getState();
     if (!state.threads.some((thread) => thread.id === threadId)) {
       return;
@@ -884,8 +884,12 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     void loadJiraStatus();
     void loadShare(threadId);
     const resolution = state.resolutions.get(threadId);
-    if (resolution?.status === "resolved" && state.positions.get(threadId)?.visible !== true) {
-      scrollTargetIntoView(resolution.target);
+    if (
+      scroll &&
+      resolution?.status === "resolved" &&
+      state.positions.get(threadId)?.visible !== true
+    ) {
+      scrollTargetIntoView(resolution.target, prefersReducedMotion() ? "auto" : "smooth");
     }
     store.setState((current) => ({
       ...current,
@@ -1342,7 +1346,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       if (store.getState().activeThreadId === threadId) {
         closePanel();
       } else {
-        selectThread(threadId);
+        selectThread(threadId, false);
       }
     },
     closePanel,

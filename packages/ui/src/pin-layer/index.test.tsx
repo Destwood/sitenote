@@ -12,15 +12,51 @@ const PINS: PinLayerPin[] = [
 ];
 
 describe("PinLayer", () => {
-  it("is a fixed, click-through layer below the panel", () => {
+  it("is an absolute, click-through layer anchored at the document origin", () => {
     render(<PinLayer pins={PINS} onSelectPin={vi.fn()} />);
 
     const layer = screen.getByRole("group", { name: "Comment pins" });
 
-    expect(layer.className).toContain("fixed");
-    expect(layer.className).toContain("inset-0");
+    expect(layer.className).toContain("absolute");
+    expect(layer.className).toContain("top-0");
+    expect(layer.className).toContain("left-0");
     expect(layer.className).toContain("pointer-events-none");
+    expect(layer.className).not.toContain("fixed");
     expect(layer.style.zIndex).toBe(String(Z_INDEX.pins));
+  });
+
+  it("cancels the layer origin offset so pins use document coordinates", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      left: 30,
+      top: 40,
+      width: 0,
+      height: 0,
+      right: 30,
+      bottom: 40,
+      x: 30,
+      y: 40,
+      toJSON: () => ({}),
+    });
+    Object.defineProperty(window, "scrollX", { value: 5, configurable: true });
+    Object.defineProperty(window, "scrollY", { value: 7, configurable: true });
+
+    render(<PinLayer pins={PINS} onSelectPin={vi.fn()} />);
+
+    const layer = screen.getByRole("group", { name: "Comment pins" });
+
+    expect((layer.firstElementChild as HTMLElement).style.transform).toBe(
+      "translate(-35px, -47px)",
+    );
+
+    vi.restoreAllMocks();
+    Object.defineProperty(window, "scrollX", { value: 0, configurable: true });
+    Object.defineProperty(window, "scrollY", { value: 0, configurable: true });
+  });
+
+  it("honors a raised stacking order for the whole layer", () => {
+    render(<PinLayer pins={PINS} onSelectPin={vi.fn()} zIndex={2147483500} />);
+
+    expect(screen.getByRole("group").style.zIndex).toBe("2147483500");
   });
 
   it("renders only visible pins, each with pointer events enabled", () => {

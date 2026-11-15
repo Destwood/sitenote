@@ -28,6 +28,12 @@ import { DemoExperience } from ".";
 const BANNER = "Live demo — anyone can comment. Everything resets daily.";
 const NAME_ERROR = "Enter a name of 1 to 40 characters.";
 const SESSION_ERROR = "We could not start the demo. Try again.";
+const GUIDE_KEY = "sitenote.demo-guide-dismissed";
+const FRAME_LABEL = "Sample page — comment on anything in this frame";
+
+function guide() {
+  return screen.queryByTestId("demo-guide");
+}
 
 function renderDemo() {
   return render(
@@ -47,6 +53,7 @@ function dialog() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.localStorage.clear();
   mocks.readVisitorName.mockResolvedValue(null);
   mocks.startVisit.mockResolvedValue(undefined);
   mocks.enterSite.mockResolvedValue(undefined);
@@ -155,6 +162,50 @@ describe("DemoExperience", () => {
     await userEvent.click(startButton());
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("shows the how-it-works guide by default and the framed sample label", async () => {
+    renderDemo();
+    expect(guide()).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "How the demo works" })).toBeTruthy();
+    expect(within(screen.getByTestId("demo-guide")).getAllByRole("listitem")).toHaveLength(4);
+    const frame = within(screen.getByTestId("demo-frame"));
+    expect(frame.getByText(FRAME_LABEL)).toBeTruthy();
+    expect(frame.getByText("Sample page")).toBeTruthy();
+    await waitFor(() => {
+      expect(startButton().hasAttribute("disabled")).toBe(false);
+    });
+  });
+
+  it("hides the guide on Got it and remembers it", async () => {
+    renderDemo();
+    await userEvent.click(screen.getByRole("button", { name: "Got it" }));
+
+    expect(guide()).toBeNull();
+    expect(window.localStorage.getItem(GUIDE_KEY)).toBe("1");
+    expect(screen.getByRole("button", { name: "How it works" })).toBeTruthy();
+  });
+
+  it("keeps the guide hidden on a later visit once dismissed", async () => {
+    window.localStorage.setItem(GUIDE_KEY, "1");
+    renderDemo();
+    await waitFor(() => {
+      expect(guide()).toBeNull();
+    });
+    expect(screen.getByRole("button", { name: "How it works" })).toBeTruthy();
+  });
+
+  it("re-shows the guide from How it works and clears the saved flag", async () => {
+    window.localStorage.setItem(GUIDE_KEY, "1");
+    renderDemo();
+    await waitFor(() => {
+      expect(guide()).toBeNull();
+    });
+    await userEvent.click(screen.getByRole("button", { name: "How it works" }));
+
+    expect(guide()).not.toBeNull();
+    expect(window.localStorage.getItem(GUIDE_KEY)).toBeNull();
+    expect(screen.queryByRole("button", { name: "How it works" })).toBeNull();
   });
 
   it("unmounts the widget when the page is left", async () => {
