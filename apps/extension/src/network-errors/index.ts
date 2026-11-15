@@ -1,4 +1,4 @@
-import type { NetworkErrorRecord } from "@sitenote/core";
+import { redactNetworkUrl, type NetworkErrorRecord } from "@sitenote/core";
 
 export const BUFFER_SIZE = 20;
 export const URL_MAX = 300;
@@ -69,7 +69,7 @@ function elapsed(started: number): number {
 function publicUrl(raw: string, base: string): string | undefined {
   const url = new URL(raw, base);
   return url.protocol === "https:" || url.protocol === "http:"
-    ? `${url.origin}${url.pathname}`
+    ? redactNetworkUrl(url.href)
     : undefined;
 }
 
@@ -83,7 +83,12 @@ function describeFetch(
   return url === undefined ? undefined : { method: method.toUpperCase(), url };
 }
 
-function wrapFetch(original: typeof fetch, win: NetworkCaptureTarget, buffer: NetworkBuffer) {
+function wrapFetch(
+  original: typeof fetch,
+  win: NetworkCaptureTarget,
+  buffer: NetworkBuffer,
+  log: NetworkBuffer | undefined,
+) {
   const wrapped = function (this: unknown, ...args: Parameters<typeof fetch>): Promise<Response> {
     const started = performance.now();
     const target = tryValue(() => describeFetch(args[0], args[1], win.location.href));
@@ -92,28 +97,32 @@ function wrapFetch(original: typeof fetch, win: NetworkCaptureTarget, buffer: Ne
       void promise.then(
         (response) => {
           safely(() => {
+            const record: NetworkRecordInput = {
+              kind: "fetch",
+              method: target.method,
+              url: target.url,
+              status: response.status,
+              statusText: response.statusText,
+              durationMs: elapsed(started),
+            };
+            log?.push(record);
             if (response.status >= 400 && response.status <= 599) {
-              buffer.push({
-                kind: "fetch",
-                method: target.method,
-                url: target.url,
-                status: response.status,
-                statusText: response.statusText,
-                durationMs: elapsed(started),
-              });
+              buffer.push({ ...record, url: record.url.split("?")[0] ?? record.url });
             }
           });
         },
         (error: unknown) => {
           safely(() => {
+            const record: NetworkRecordInput = {
+              kind: "fetch",
+              method: target.method,
+              url: target.url,
+              status: 0,
+              durationMs: elapsed(started),
+            };
+            log?.push(record);
             if (error instanceof TypeError) {
-              buffer.push({
-                kind: "fetch",
-                method: target.method,
-                url: target.url,
-                status: 0,
-                durationMs: elapsed(started),
-              });
+              buffer.push({ ...record, url: record.url.split("?")[0] ?? record.url });
             }
           });
         },
@@ -125,7 +134,12 @@ function wrapFetch(original: typeof fetch, win: NetworkCaptureTarget, buffer: Ne
   return wrapped;
 }
 
-function wrapXhr(proto: XMLHttpRequest, win: NetworkCaptureTarget, buffer: NetworkBuffer): void {
+function wrapXhr(
+  proto: XMLHttpRequest,
+  win: NetworkCaptureTarget,
+  buffer: NetworkBuffer,
+  log: NetworkBuffer | undefined,
+): void {
   const targets = new WeakMap<XMLHttpRequest, RequestTarget | undefined>();
   const originalOpen = Reflect.get(proto, "open") as XhrMethod;
   const originalSend = Reflect.get(proto, "send") as XhrMethod;
@@ -162,20 +176,22 @@ function wrapXhr(proto: XMLHttpRequest, win: NetworkCaptureTarget, buffer: Netwo
         () => {
           safely(() => {
             const { status, statusText } = this;
+            const record: NetworkRecordInput = {
+              kind: "xhr",
+              method: target.method,
+              url: target.url,
+              status,
+              statusText,
+              durationMs: elapsed(started),
+            };
+            log?.push(record);
             if (status >= 400 && status <= 599) {
-              buffer.push({
-                kind: "xhr",
-                method: target.method,
-                url: target.url,
-                status,
-                statusText,
-                durationMs: elapsed(started),
-              });
+              buffer.push({ ...record, url: record.url.split("?")[0] ?? record.url });
             } else if (failed) {
               buffer.push({
                 kind: "xhr",
                 method: target.method,
-                url: target.url,
+                url: target.url.split("?")[0] ?? target.url,
                 status: 0,
                 durationMs: elapsed(started),
               });
@@ -195,14 +211,17 @@ function wrapXhr(proto: XMLHttpRequest, win: NetworkCaptureTarget, buffer: Netwo
   });
 }
 
-export function createNetworkBuffer(now: () => Date = () => new Date()): NetworkBuffer {
+export function createNetworkBuffer(
+  now: () => Date = () => new Date(),
+  max: number = BUFFER_SIZE,
+): NetworkBuffer {
   const records: NetworkErrorRecord[] = [];
   return {
     push: (input) => {
       const record: NetworkErrorRecord = {
         kind: input.kind,
         method: clip(input.method, METHOD_MAX),
-        url: clip(input.url, URL_MAX),
+        url: clip(redactNetworkUrl(input.url), URL_MAX),
         status: input.status,
         at: now().toISOString(),
       };
@@ -213,7 +232,7 @@ export function createNetworkBuffer(now: () => Date = () => new Date()): Network
         record.durationMs = input.durationMs;
       }
       records.push(record);
-      if (records.length > BUFFER_SIZE) {
+      if (records.length > max) {
         records.shift();
       }
     },
@@ -221,14 +240,18 @@ export function createNetworkBuffer(now: () => Date = () => new Date()): Network
   };
 }
 
-export function installNetworkCapture(win: NetworkCaptureTarget, buffer: NetworkBuffer): void {
+export function installNetworkCapture(
+  win: NetworkCaptureTarget,
+  buffer: NetworkBuffer,
+  log?: NetworkBuffer,
+): void {
   if (!hasMark(win.fetch)) {
-    const wrapped = wrapFetch(win.fetch, win, buffer);
+    const wrapped = wrapFetch(win.fetch, win, buffer, log);
     safely(() => {
       win.fetch = wrapped;
     });
   }
   if (!hasMark(win.XMLHttpRequest)) {
-    wrapXhr(win.XMLHttpRequest.prototype, win, buffer);
+    wrapXhr(win.XMLHttpRequest.prototype, win, buffer, log);
   }
 }

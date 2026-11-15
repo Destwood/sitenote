@@ -122,6 +122,31 @@ Done when: a thread becomes a ClickUp task and a mention produces an email in th
 
 Done when: the demo link works for a visitor without the extension and the extension works on real sites against production.
 
+### Phase 9 — Trial, plans and payments
+
+Start only after Phase 8 is done and the first pilot users have given feedback. The pricing numbers below are hypotheses to confirm with pilot users, see `docs/plans/venture-analysis.md` in the owner's notes.
+
+Plans: Solo (1 member), Team (up to 5), Agency (up to 10 and custom branding). Guests are unlimited on every plan. No free plan: a 14-day trial per account without a card, then the workspace becomes read-only.
+
+- [ ] Instrumentation: invite opened, extension installed, first guest comment (needed for the stop thresholds)
+- [ ] Waitlist and pricing page on the landing (no payments yet)
+- [ ] Migration: `subscriptions` (owner, plan, status trialing/active/past_due/canceled/expired, `trial_ends_at`, `current_period_end`, Stripe customer and subscription ids); trial starts for real accounts only, never for anonymous guests
+- [ ] Function "workspace is active" derived from the owner's subscription; used in insert policies of `threads`, `comments`, `invites` and in `thread_share_enable`; reads stay allowed
+- [ ] Member limit per plan enforced when an invite is accepted
+- [ ] Public thread-share token (`thread_shares`) is not served while the workspace is inactive
+- [ ] RLS tests for the expired state and the member limits
+- [ ] Stripe Payment Links first, then Checkout; webhook with signature check and idempotency updates `subscriptions`; Customer Portal for changes and cancellation
+- [ ] Tax decision: Stripe Tax or a merchant of record (Paddle, Lemon Squeezy, Polar); owner checks the tax and registration side with an accountant
+- [ ] Billing section in the dashboard: status, trial days left, upgrade, portal
+- [ ] Read-only state in the extension popup and widget (composer disabled with a message; guests see "workspace inactive")
+- [ ] Resend emails: trial ends in 3 days, trial ended, data deletion warning
+- [ ] `pg_cron` cleanup of screenshots and data for workspaces expired for 60 days
+- [ ] ClickUp Edge Function checks the plan
+- [ ] Terms of service, privacy policy, refund policy
+- [ ] Webhook tests with mocked Stripe
+
+Done when: a pilot user can start a trial, pay, and see the workspace switch to read-only after the trial or a cancellation, with the limits enforced by RLS.
+
 ## 3. One-time manual steps for the owner
 
 | When | Step | Why |
@@ -132,6 +157,8 @@ Done when: the demo link works for a visitor without the extension and the exten
 | Phase 8 | Create a production Supabase project and put keys into `.env` and Vercel (`SUPABASE_SECRET_KEY` is server-only, never `NEXT_PUBLIC_`) | Production backend |
 | Phase 8 | Import the GitHub repo into Vercel | Web deploy |
 | After MVP | Chrome Web Store developer account (one-time fee) if publishing there | Distribution |
+| Phase 9 | Create a Stripe account (or a merchant-of-record account), create products and prices, put keys into Vercel and Edge Function secrets | Payments |
+| Phase 9 | Talk to an accountant about VAT and registration for recurring income | Selling SaaS from the Czech Republic |
 
 ## 4. Post-MVP backlog
 

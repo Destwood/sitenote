@@ -9,7 +9,7 @@ const NOW = new Date("2026-10-22T09:30:00.000Z");
 const AT = NOW.toISOString();
 
 function navigatorWith(extra: Record<string, unknown> = {}, userAgent = CHROME_UA): Navigator {
-  return { userAgent, ...extra } as unknown as Navigator;
+  return { userAgent, language: "uk-UA", onLine: true, ...extra } as unknown as Navigator;
 }
 
 function userAgentData(overrides: Record<string, unknown> = {}) {
@@ -34,6 +34,10 @@ function windowWith(options: Record<string, unknown> = {}): Window {
     innerWidth: 1440.4,
     innerHeight: 900,
     devicePixelRatio: 2,
+    scrollX: 0,
+    scrollY: 0,
+    matchMedia: vi.fn(() => ({ matches: false })),
+    Intl: { DateTimeFormat: () => ({ resolvedOptions: () => ({ timeZone: "Europe/Budapest" }) }) },
     location: { href: "https://example.test/pricing?plan=pro#top" },
     navigator: navigatorWith({ userAgentData: userAgentData() }),
     ...options,
@@ -41,7 +45,7 @@ function windowWith(options: Record<string, unknown> = {}): Window {
 }
 
 function documentWith(title: string): Document {
-  return { title } as unknown as Document;
+  return { title, referrer: "" } as unknown as Document;
 }
 
 afterEach(() => {
@@ -118,6 +122,62 @@ describe("readUserAgentInput", () => {
 });
 
 describe("createContextCollector", () => {
+  it("collects environment from the injected window and document and includes successful diagnostics", async () => {
+    const request = {
+      kind: "fetch" as const,
+      method: "GET",
+      url: "https://example.test/api?token=secret",
+      status: 200,
+    };
+    const win = windowWith({
+      scrollX: -10.5,
+      scrollY: 125.6,
+      matchMedia: vi.fn(() => ({ matches: true })),
+      navigator: navigatorWith({ language: "x".repeat(40), onLine: false }),
+    });
+    const doc = {
+      title: "t",
+      referrer: "https://user:pass@example.test/start?token=secret#private",
+    } as Document;
+    const result = await createContextCollector({
+      win,
+      doc,
+      requestErrors: () => Promise.resolve([]),
+      requestDiagnostics: () =>
+        Promise.resolve({ consoleErrors: [], networkErrors: [], networkLog: [request] }),
+    })();
+    expect(result.environment).toEqual({
+      locale: "x".repeat(35),
+      timeZone: "Europe/Budapest",
+      colorScheme: "dark",
+      scroll: { x: 0, y: 126 },
+      referrer: "https://example.test/start",
+      online: false,
+    });
+    expect(result.networkLog).toEqual([
+      { ...request, url: "https://example.test/api?token=%5Bredacted%5D" },
+    ]);
+    expect(threadContextSchema.safeParse(result).success).toBe(true);
+  });
+
+  it("clips referrers and omits empty or non-http referrers and empty logs", async () => {
+    for (const referrer of [
+      "",
+      "about:blank",
+      `https://example.test/${"a".repeat(400)}?secret=x`,
+    ]) {
+      const result = await createContextCollector({
+        win: windowWith(),
+        doc: { title: "t", referrer } as Document,
+        requestErrors: () => Promise.resolve([]),
+        requestDiagnostics: () =>
+          Promise.resolve({ consoleErrors: [], networkErrors: [], networkLog: [] }),
+      })();
+      expect(result.networkLog).toBeUndefined();
+      if (referrer.startsWith("https:")) expect(result.environment?.referrer).toHaveLength(300);
+      else expect(result.environment).not.toHaveProperty("referrer");
+    }
+  });
   it("builds a context that satisfies the shared schema", async () => {
     const collect = createContextCollector({
       win: windowWith(),
@@ -138,6 +198,13 @@ describe("createContextCollector", () => {
       os: { name: "Windows", version: "11" },
       userAgent: CHROME_UA,
       consoleErrors: [{ kind: "error", message: "Boom", at: AT }],
+      environment: {
+        locale: "uk-UA",
+        timeZone: "Europe/Budapest",
+        colorScheme: "light",
+        scroll: { x: 0, y: 0 },
+        online: true,
+      },
       capturedAt: AT,
     });
   });

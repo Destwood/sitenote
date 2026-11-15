@@ -65,6 +65,42 @@ describe("helpers", () => {
 });
 
 describe("ContextSection details", () => {
+  it("renders the optional environment group with labels and omits it for old contexts", () => {
+    const { rerender } = render(
+      <ContextSection
+        hasScreenshot={false}
+        context={context({
+          environment: {
+            locale: "uk-UA",
+            timeZone: "Europe/Budapest",
+            colorScheme: "dark",
+            scroll: { x: 0, y: 125 },
+            referrer: "https://example.com/start",
+            online: false,
+          },
+        })}
+      />,
+    );
+    const group = screen.getByLabelText("Environment");
+    for (const value of [
+      "Locale",
+      "uk-UA",
+      "Time zone",
+      "Europe/Budapest",
+      "Theme",
+      "dark",
+      "Scroll position",
+      "0, 125",
+      "Referrer",
+      "https://example.com/start",
+      "Online",
+      "No",
+    ]) {
+      expect(within(group).getByText(value)).toBeTruthy();
+    }
+    rerender(<ContextSection hasScreenshot={false} context={context()} />);
+    expect(screen.queryByText("Environment")).toBeNull();
+  });
   it("shows the viewport, browser, system and page title", () => {
     render(<ContextSection context={context()} hasScreenshot={false} />);
 
@@ -107,6 +143,44 @@ describe("ContextSection details", () => {
 });
 
 describe("ContextSection console errors", () => {
+  it("lists all requests under a collapsed Network summary, colors failures and reveals full urls", async () => {
+    const user = userEvent.setup();
+    const url = `https://example.com/${"long/".repeat(30)}?item=7`;
+    const { rerender } = render(
+      <ContextSection
+        hasScreenshot={false}
+        context={context({
+          networkLog: [
+            { kind: "fetch", method: "GET", url, status: 200, durationMs: 42 },
+            { kind: "xhr", method: "POST", url: "https://example.com/api", status: 500 },
+            {
+              kind: "fetch",
+              method: "DELETE",
+              url: "https://example.com/api/1",
+              status: 0,
+              durationMs: 0,
+            },
+          ],
+        })}
+      />,
+    );
+    const summary = screen.getByText("Network (3)");
+    expect(summary.tagName).toBe("SUMMARY");
+    expect(summary.closest("details")?.open).toBe(false);
+    await user.click(summary);
+    expect(summary.closest("details")?.open).toBe(true);
+    expect(screen.getByTitle(url).className).toContain("truncate");
+    expect(screen.getByText("42 ms")).toBeTruthy();
+    expect(screen.getByText("0 ms")).toBeTruthy();
+    expect(screen.getByText("200").className).not.toContain("text-red");
+    expect(screen.getByText("500").className).toContain("text-red");
+    expect(screen.getByText("Failed").className).toContain("text-red");
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+    rerender(<ContextSection hasScreenshot={false} context={context({ networkLog: [] })} />);
+    expect(screen.queryByText(/Network \(/)).toBeNull();
+    rerender(<ContextSection hasScreenshot={false} context={context()} />);
+    expect(screen.queryByText(/Network \(/)).toBeNull();
+  });
   it("says there are none when the list is empty", () => {
     render(<ContextSection context={context()} hasScreenshot={false} />);
 
@@ -433,7 +507,9 @@ describe("ContextSection recording steps", () => {
     expect(await screen.findByRole("button", { name: "Copied" })).toBeTruthy();
     expect(writeText).toHaveBeenCalledTimes(1);
     expect(writeText).toHaveBeenCalledWith(stepsToPlaywright("https://example.com/pricing", steps));
-    expect(writeText.mock.calls[0]?.[0]).toContain('await page.locator("#buy").click();');
+    expect(writeText.mock.calls[0]?.[0]).toContain(
+      'await page.locator("#buy").filter({ hasText: "Buy now" }).first().click();',
+    );
     expect(writeText.mock.calls[0]?.[0]).toContain('await page.waitForURL("**/thanks");');
   });
 

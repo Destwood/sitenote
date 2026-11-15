@@ -1,5 +1,6 @@
 import {
   SITENOTE_ROOT_TAG,
+  STEP_SELECTOR_MAX,
   buildCssSelector,
   sanitizeStep,
   type RecordingStep,
@@ -86,10 +87,27 @@ function isSensitive(element: Element): boolean {
 }
 
 function selectorOf(element: Element): string {
+  let selector = element.localName;
   try {
-    return buildCssSelector(element);
+    selector = buildCssSelector(element);
+    const doc = element.ownerDocument;
+    if (doc.querySelectorAll(selector).length <= 1) {
+      return selector;
+    }
+    const siblings = [...(element.parentElement?.children ?? [])].filter(
+      (sibling) => sibling.localName === element.localName,
+    );
+    if (siblings.length <= 1) {
+      return selector;
+    }
+    const candidate = `${selector}:nth-of-type(${String(siblings.indexOf(element) + 1)})`;
+    if (candidate.length > STEP_SELECTOR_MAX) {
+      return selector;
+    }
+    const matches = doc.querySelectorAll(candidate);
+    return matches.length === 1 && matches[0] === element ? candidate : selector;
   } catch {
-    return element.localName;
+    return selector;
   }
 }
 

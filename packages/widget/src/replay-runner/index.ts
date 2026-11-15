@@ -1,4 +1,9 @@
-import { isRecordedAction, type RecordingStep, type ReplayMode } from "@sitenote/core";
+import {
+  isRecordedAction,
+  STEP_URL_MAX,
+  type RecordingStep,
+  type ReplayMode,
+} from "@sitenote/core";
 import type { ReplayBarStatus } from "@sitenote/ui";
 
 export interface ReplayProgress {
@@ -84,7 +89,11 @@ type Located = Element | true | Jump;
 const INPUT_MESSAGE = "Fill in this field yourself, then continue.";
 const ELEMENT_MISSING_MESSAGE = "Could not find this element on the page.";
 const NAVIGATE_MISSING_MESSAGE = "The page did not open as recorded.";
+const OFFSCREEN_MESSAGE =
+  "This element is outside the visible area, for example in a slider. Next still clicks it.";
 const DONE_LABEL = "Replay finished";
+const INTERACTIVE_SELECTOR =
+  "a,button,input,select,textarea,summary,label,[role=button],[role=link],[role=menuitem],[role=tab],[role=checkbox],[role=switch],[onclick]";
 
 function stepLabel(step: RecordingStep): string {
   const candidates = [step.kind === "navigate" ? step.url : undefined, step.label, step.selector];
@@ -357,23 +366,54 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
       return true;
     }
     const target = URL.parse(url, win.location.href);
+    const targetRoute = target === null ? null : target.pathname + target.search;
+    const currentRoute = win.location.pathname + win.location.search;
+    const recordedRoute = url.startsWith("/") ? url : targetRoute;
     return (
-      target !== null &&
-      target.pathname + target.search === win.location.pathname + win.location.search
+      targetRoute === currentRoute ||
+      (url.length >= STEP_URL_MAX &&
+        recordedRoute !== null &&
+        currentRoute.startsWith(recordedRoute))
     );
   }
 
-  function findVisible(selector: string): Element | null {
-    let element: Element | null;
+  function findVisible(selector: string, label: string): Element | null {
+    let matches: NodeListOf<Element>;
     try {
-      element = doc.querySelector(selector);
+      matches = doc.querySelectorAll(selector);
     } catch {
       return null;
     }
-    if (element === null || element.getClientRects().length === 0) {
-      return null;
+    const visible = Array.from(matches).filter(
+      (element) =>
+        element.getClientRects().length > 0 &&
+        win.getComputedStyle(element).visibility !== "hidden",
+    );
+    let best = visible[0] ?? null;
+    const normalize = (text: string): string => text.trim().replace(/\s+/g, " ").toLowerCase();
+    const normalizedLabel = normalize(label);
+    if (visible.length <= 1 || normalizedLabel === "") {
+      return best;
     }
-    return win.getComputedStyle(element).visibility === "hidden" ? null : element;
+    let bestScore = 0;
+    for (const element of visible) {
+      const text = normalize(
+        (element instanceof HTMLElement ? element.innerText : "") || element.textContent || "",
+      );
+      const score =
+        text === normalizedLabel
+          ? 3
+          : text.startsWith(normalizedLabel)
+            ? 2
+            : text.includes(normalizedLabel)
+              ? 1
+              : 0;
+      if (score > bestScore) {
+        best = element;
+        bestScore = score;
+      }
+    }
+    return best;
   }
 
   function reachedAhead(): { index: number; step: RecordingStep } | null {
@@ -394,7 +434,7 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
     if (step.kind === "navigate") {
       return routeReached(step.url) ? true : null;
     }
-    const element = findVisible(step.selector);
+    const element = findVisible(step.selector, step.label);
     if (element !== null) {
       return element;
     }
@@ -425,6 +465,12 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
   }
 
   function performClick(element: Element): void {
+    if (element.closest(INTERACTIVE_SELECTOR) === null) {
+      const descendants = element.querySelectorAll(INTERACTIVE_SELECTOR);
+      if (descendants.length === 1) {
+        element = descendants[0] ?? element;
+      }
+    }
     const init = { bubbles: true, cancelable: true, composed: true };
     element.dispatchEvent(new PointerEvent("pointerdown", init));
     element.dispatchEvent(new MouseEvent("mousedown", init));
@@ -516,7 +562,7 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
       }
       found.scrollIntoView({
         block: "center",
-        inline: "nearest",
+        inline: "center",
         behavior: win.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
       });
       await nextFrame();
@@ -539,8 +585,16 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
         index = action === "back" ? Math.max(0, index - 1) : index + 1;
         continue;
       }
+      const rect = found.getBoundingClientRect();
+      const message =
+        rect.right <= 0 ||
+        rect.bottom <= 0 ||
+        rect.left >= win.innerWidth ||
+        rect.top >= win.innerHeight
+          ? OFFSCREEN_MESSAGE
+          : undefined;
       if (mode === "step") {
-        publish(signal, "ready", label, found);
+        publish(signal, "ready", label, found, message);
         const action = await awaitAction(signal, ["next", "back"]);
         if (action === null) {
           return;
@@ -550,13 +604,13 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
           continue;
         }
       } else {
-        publish(signal, "running", label, found);
+        publish(signal, "running", label, found, message);
         await delay(signal, paceMs(timing, step, steps[index - 1]));
         if (isAborted(signal)) {
           return;
         }
         while (paused) {
-          publish(signal, "ready", label, found);
+          publish(signal, "ready", label, found, message);
           if ((await awaitAction(signal, ["resume"])) === null) {
             return;
           }

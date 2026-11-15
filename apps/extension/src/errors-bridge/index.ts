@@ -1,6 +1,7 @@
 import {
   CONSOLE_ERRORS_MAX,
   NETWORK_ERRORS_MAX,
+  NETWORK_LOG_MAX,
   consoleErrorRecordSchema,
   networkErrorRecordSchema,
   type ConsoleErrorRecord,
@@ -20,6 +21,7 @@ export interface ErrorsBridgeOptions {
 export interface PageDiagnostics {
   consoleErrors: ConsoleErrorRecord[];
   networkErrors: NetworkErrorRecord[];
+  networkLog: NetworkErrorRecord[];
 }
 
 function field(value: unknown, name: string): unknown {
@@ -51,8 +53,11 @@ export function parseRecords(value: unknown): ConsoleErrorRecord[] {
   });
 }
 
-export function parseNetworkRecords(value: unknown): NetworkErrorRecord[] {
-  return parseList(value, NETWORK_ERRORS_MAX, (candidate) => {
+export function parseNetworkRecords(
+  value: unknown,
+  max: number = NETWORK_ERRORS_MAX,
+): NetworkErrorRecord[] {
+  return parseList(value, max, (candidate) => {
     const parsed = networkErrorRecordSchema.safeParse(candidate);
     return parsed.success ? parsed.data : undefined;
   });
@@ -64,7 +69,7 @@ export function requestPageDiagnostics(options: ErrorsBridgeOptions): Promise<Pa
   return new Promise((resolve) => {
     const nonce = newNonce();
     const timer = setTimeout(() => {
-      finish({ consoleErrors: [], networkErrors: [] });
+      finish({ consoleErrors: [], networkErrors: [], networkLog: [] });
     }, options.timeoutMs ?? ERRORS_TIMEOUT_MS);
 
     function finish(diagnostics: PageDiagnostics): void {
@@ -87,6 +92,7 @@ export function requestPageDiagnostics(options: ErrorsBridgeOptions): Promise<Pa
       finish({
         consoleErrors: parseRecords(field(data, "records")),
         networkErrors: parseNetworkRecords(field(data, "network")),
+        networkLog: parseNetworkRecords(field(data, "networkLog"), NETWORK_LOG_MAX),
       });
     }
 
@@ -97,7 +103,7 @@ export function requestPageDiagnostics(options: ErrorsBridgeOptions): Promise<Pa
         win.location.origin,
       );
     } catch {
-      finish({ consoleErrors: [], networkErrors: [] });
+      finish({ consoleErrors: [], networkErrors: [], networkLog: [] });
     }
   });
 }

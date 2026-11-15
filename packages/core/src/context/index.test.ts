@@ -11,6 +11,7 @@ import {
   CONTEXT_URL_MAX,
   CONTEXT_USER_AGENT_MAX,
   NETWORK_ERRORS_MAX,
+  NETWORK_LOG_MAX,
   NETWORK_METHOD_MAX,
   NETWORK_STATUS_TEXT_MAX,
   NETWORK_URL_MAX,
@@ -24,6 +25,7 @@ import {
   networkErrorRecordSchema,
   parseThreadContext,
   recordingStepSchema,
+  redactNetworkUrl,
   sanitizeStep,
   sanitizeText,
   threadContextSchema,
@@ -295,6 +297,202 @@ describe("sanitizeText", () => {
   it("keeps valid surrogate pairs and ordinary text", () => {
     expect(sanitizeText("emoji 😀 ok")).toBe("emoji 😀 ok");
     expect(sanitizeText("Привіт, світе")).toBe("Привіт, світе");
+  });
+});
+
+describe("redactNetworkUrl", () => {
+  it.each([
+    "person@example.com",
+    "eyJhbGci.abc.def",
+    "0123456789abcdef0123456789abcdef01234567",
+    "a".repeat(32),
+    "a".repeat(28) + "+/=a",
+  ])("redacts a sensitive value under an ordinary name: %s", (value) => {
+    const output = new URL(redactNetworkUrl(`https://example.com/?q=${encodeURIComponent(value)}`));
+    expect(output.searchParams.get("q")).toBe("[redacted]");
+  });
+
+  it.each([
+    "123e4567-e89b-12d3-a456-426614174000",
+    "123E4567-E89B-12D3-A456-426614174000",
+    "item-123",
+    "12345",
+    "hello",
+    "a".repeat(31),
+    "person@localhost",
+  ])("preserves an ordinary value and the original URL text: %s", (value) => {
+    const input = `https://example.com/字?q=two%20words&id=${encodeURIComponent(value)}`;
+    expect(redactNetworkUrl(input)).toBe(input);
+  });
+
+  it("redacts names and values together while preserving ordinary parameters", () => {
+    const input =
+      "https://user:password@example.com/api?token=short&q=person%40example.com&q=eyJhbGci.abc.def&data=0123456789abcdef0123456789abcdef01234567&id=123e4567-e89b-12d3-a456-426614174000&page=7&sort=name#private";
+    const output = new URL(redactNetworkUrl(input));
+    expect(output.username).toBe("");
+    expect(output.password).toBe("");
+    expect(output.hash).toBe("");
+    expect(Array.from(output.searchParams)).toEqual([
+      ["token", "[redacted]"],
+      ["q", "[redacted]"],
+      ["q", "[redacted]"],
+      ["data", "[redacted]"],
+      ["id", "123e4567-e89b-12d3-a456-426614174000"],
+      ["page", "7"],
+      ["sort", "name"],
+    ]);
+  });
+
+  it("removes credentials and fragments, redacts repeated secret parameters, and preserves ordinary values", () => {
+    const names = [
+      "token",
+      "apiKey",
+      "AUTH",
+      "pass",
+      "password",
+      "secret",
+      "sessionId",
+      "code",
+      "sig",
+      "signature",
+      "jwt",
+      "credential",
+    ];
+    const input = new URL("https://user:password@example.com/api?item=7#secret");
+    for (const name of names) {
+      input.searchParams.append(name, "sensitive");
+      input.searchParams.append(name, "also-sensitive");
+    }
+    const output = new URL(redactNetworkUrl(input.href));
+    expect(output.username).toBe("");
+    expect(output.password).toBe("");
+    expect(output.hash).toBe("");
+    expect(output.searchParams.get("item")).toBe("7");
+    for (const name of names) {
+      expect(output.searchParams.getAll(name)).toEqual(["[redacted]", "[redacted]"]);
+    }
+    expect(redactNetworkUrl(output.href)).toBe(output.href);
+  });
+
+  it("keeps plain urls and strips query and fragment from malformed urls", () => {
+    expect(redactNetworkUrl("https://example.com/字?q=two%20words")).toBe(
+      "https://example.com/字?q=two%20words",
+    );
+    expect(redactNetworkUrl("invalid?token=secret#private")).toBe("invalid");
+    expect(redactNetworkUrl("https://example.com/api#")).toBe("https://example.com/api");
+  });
+});
+
+describe("network log and environment", () => {
+  const environment: NonNullable<ThreadContext["environment"]> = {
+    locale: "uk-UA",
+    timeZone: "Europe/Budapest",
+    colorScheme: "dark",
+    scroll: { x: 0, y: 120 },
+    referrer: "https://example.com/start",
+    online: false,
+  };
+
+  it("accepts optional fields and exactly thirty requests, including successes", () => {
+    const input = context({
+      environment,
+      networkLog: Array.from({ length: NETWORK_LOG_MAX }, () => network({ status: 200 })),
+    });
+    expect(parseThreadContext(input)).toEqual(input);
+    expect(
+      threadContextSchema.safeParse({
+        ...input,
+        networkLog: [...(input.networkLog ?? []), network()],
+      }).success,
+    ).toBe(false);
+    expect(parseThreadContext(context())).not.toHaveProperty("environment");
+    expect(parseThreadContext(context())).not.toHaveProperty("networkLog");
+    expect(
+      threadContextSchema.safeParse(
+        context({
+          environment: {
+            ...environment,
+            locale: "x".repeat(35),
+            timeZone: "x".repeat(64),
+            referrer: "x".repeat(300),
+          },
+        }),
+      ).success,
+    ).toBe(true);
+  });
+
+  it("rejects invalid environment fields", () => {
+    for (const invalid of [
+      { locale: "x".repeat(36) },
+      { timeZone: "x".repeat(65) },
+      { referrer: "x".repeat(301) },
+      { colorScheme: "auto" },
+      { scroll: { x: -1, y: 0 } },
+      { scroll: { x: 0, y: 0.5 } },
+      { online: "yes" },
+    ]) {
+      expect(
+        threadContextSchema.safeParse({ ...context(), environment: { ...environment, ...invalid } })
+          .success,
+      ).toBe(false);
+    }
+  });
+
+  it("sanitizes environment strings and redacts both network lists before clipping", () => {
+    const request = network({
+      url: "https://user:password@example.com/api?token=secret&id=7#private",
+    });
+    const fitted = fitThreadContext(
+      context({
+        environment: {
+          ...environment,
+          locale: "uk\u0000-UA",
+          timeZone: "Europe/\uD800",
+          referrer: "https://example.com/\u0000start",
+        },
+        networkLog: [request],
+        networkErrors: [request],
+      }),
+    );
+    expect(fitted.environment).toEqual({ ...environment, timeZone: "Europe/�" });
+    expect(fitted.networkLog).toEqual(fitted.networkErrors);
+    expect(fitted.networkLog?.[0]?.url).toBe("https://example.com/api?token=%5Bredacted%5D&id=7");
+    expect(threadContextSchema.safeParse(fitted).success).toBe(true);
+  });
+
+  it("trims the oldest log entries before errors and preserves room for the largest recording", () => {
+    const log = Array.from({ length: NETWORK_LOG_MAX }, (_, index) =>
+      network({
+        status: 200,
+        url: `https://example.com/${String(index)}/${WIDE.repeat(260)}`,
+      }),
+    );
+    const fitted = fitThreadContext(
+      context({
+        environment,
+        networkLog: log,
+        networkErrors: [network()],
+        consoleErrors: [record()],
+      }),
+    );
+    expect(fitted.networkLog?.length).toBeGreaterThan(0);
+    expect(fitted.networkLog?.length).toBeLessThan(NETWORK_LOG_MAX);
+    expect(fitted.networkLog).toEqual(log.slice(-(fitted.networkLog?.length ?? 0)));
+    expect(fitted.networkErrors).toEqual([network()]);
+    expect(fitted.consoleErrors).toEqual([record()]);
+    expect(parseThreadContext(withRecording(fitted, WORST_RECORDING))).not.toBeNull();
+    const heavy = fitThreadContext(
+      context({
+        networkLog: log,
+        networkErrors: [network()],
+        consoleErrors: Array.from({ length: CONSOLE_ERRORS_MAX }, () =>
+          record({ stack: "k".repeat(CONSOLE_STACK_MAX) }),
+        ),
+      }),
+    );
+    expect(heavy.networkLog).toEqual([]);
+    expect(heavy.consoleErrors.length).toBeLessThan(CONSOLE_ERRORS_MAX);
+    expect(parseThreadContext(withRecording(heavy, WORST_RECORDING))).not.toBeNull();
   });
 });
 

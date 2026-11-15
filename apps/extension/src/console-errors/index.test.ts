@@ -282,6 +282,28 @@ describe("installErrorCapture", () => {
 });
 
 describe("the request channel", () => {
+  it("includes a separate network log in the main-world reply", () => {
+    const original = vi.fn();
+    const postMessage = vi.fn();
+    const win = Object.assign(new EventTarget(), {
+      location: { origin: "https://example.test" },
+      console: { error: original },
+      postMessage,
+    }) as unknown as CaptureTarget;
+    const log = createNetworkBuffer(() => NOW, 30);
+    log.push({ kind: "fetch", method: "GET", url: "https://example.test/api", status: 200 });
+    installErrorCapture(win, createErrorBuffer(), createNetworkBuffer(), log);
+    const event = new MessageEvent("message", {
+      origin: win.location.origin,
+      data: { source: MESSAGE_SOURCE, type: ERRORS_REQUEST_TYPE, nonce: "log-1" },
+    });
+    Object.defineProperty(event, "source", { value: win });
+    win.dispatchEvent(event);
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ network: [], networkLog: log.snapshot() }),
+      win.location.origin,
+    );
+  });
   it("answers a matching request to its own origin with the records, the network records and the nonce", () => {
     const { buffer, network, posted, request } = setup();
     buffer.push({ kind: "error", message: "one" });

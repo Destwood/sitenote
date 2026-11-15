@@ -1,4 +1,5 @@
-import { type RecordingStep } from "@sitenote/core";
+import * as core from "@sitenote/core";
+import { STEP_SELECTOR_MAX, type RecordingStep } from "@sitenote/core";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import { createStepRecorder, type StepRecorder } from ".";
@@ -68,6 +69,7 @@ afterEach(() => {
     recorder.stop();
   }
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe("createStepRecorder", () => {
@@ -97,6 +99,74 @@ describe("createStepRecorder", () => {
     click(el("a span"));
 
     expect(sent()).toEqual([expect.objectContaining({ kind: "click", label: "Open menu" })]);
+  });
+
+  it("adds nth-of-type to only the last segment of a non-unique selector", () => {
+    mount(
+      '<section><div class="slide">One</div><span>Gap</span><div class="slide">Two</div></section>',
+    );
+    vi.spyOn(core, "buildCssSelector").mockReturnValue("section > div.slide");
+    makeRecorder().start(START);
+    const target = el("div.slide:nth-of-type(2)");
+
+    click(target);
+
+    expect(sent()[0]?.selector).toBe("section > div.slide:nth-of-type(2)");
+    expect([...document.querySelectorAll(sent()[0]?.selector ?? "")]).toEqual([target]);
+  });
+
+  it("leaves an already unique selector untouched", () => {
+    mount('<button id="save">Save</button><button>Cancel</button>');
+    vi.spyOn(core, "buildCssSelector").mockReturnValue("#save");
+    makeRecorder().start(START);
+
+    click(el("#save"));
+
+    expect(sent()[0]?.selector).toBe("#save");
+  });
+
+  it("keeps the original selector when the nth-of-type suffix exceeds the limit", () => {
+    const className = "s".repeat(STEP_SELECTOR_MAX - "div.".length);
+    const selector = `div.${className}`;
+    mount(`<div class="${className}">One</div><div class="${className}">Two</div>`);
+    vi.spyOn(core, "buildCssSelector").mockReturnValue(selector);
+    makeRecorder().start(START);
+    const target = el(`${selector}:nth-of-type(2)`);
+    expect([...document.querySelectorAll(`${selector}:nth-of-type(2)`)]).toEqual([target]);
+
+    click(target);
+
+    expect(sent()[0]?.selector).toBe(selector);
+  });
+
+  it("keeps the original selector when the suffix still matches multiple elements", () => {
+    mount("<section><button>One</button><button>Two</button></section>".repeat(2));
+    vi.spyOn(core, "buildCssSelector").mockReturnValue("button");
+    makeRecorder().start(START);
+
+    click(el("button:nth-of-type(2)"));
+
+    expect(sent()[0]?.selector).toBe("button");
+  });
+
+  it("keeps the original selector when no sibling shares the element's tag", () => {
+    mount("<section><button>Save</button><span>Other</span></section>".repeat(2));
+    vi.spyOn(core, "buildCssSelector").mockReturnValue("button");
+    makeRecorder().start(START);
+
+    click(el("button"));
+
+    expect(sent()[0]?.selector).toBe("button");
+  });
+
+  it("keeps an invalid selector without interrupting recording", () => {
+    mount("<button>Save</button>");
+    vi.spyOn(core, "buildCssSelector").mockReturnValue("[");
+    makeRecorder().start(START);
+
+    click(el("button"));
+
+    expect(sent()[0]?.selector).toBe("[");
   });
 
   it("ignores clicks into text fields and keeps clicks on checkboxes", () => {
