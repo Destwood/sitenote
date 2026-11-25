@@ -25,6 +25,10 @@ import {
   recordingReadySchema,
   recordingStateSchema,
   requestSchema,
+  recordingDraftInputSchema,
+  recordingThreadCreatedSchema,
+  recordingThreadFailedSchema,
+  RECORDING_DRAFT_MAX_LENGTH,
 } from ".";
 import { RECORDING_STEPS_MAX } from "@sitenote/core";
 
@@ -243,6 +247,80 @@ const CREATE = {
   body: "  Looks wrong  ",
   mentions: [],
 };
+
+describe("recording draft schemas", () => {
+  const input = {
+    draftId: THREAD_ID,
+    siteId: SITE_ID,
+    pageUrl: PAGE_URL,
+    anchor: TEXT_ANCHOR,
+    context: CONTEXT,
+    body: "  Hi  ",
+    mentions: [],
+  };
+  it("parses and trims the draft and both outcomes", () => {
+    expect(recordingDraftInputSchema.parse(input).body).toBe("Hi");
+    expect(dataRequestSchema.safeParse({ type: "recording.draft", draft: input }).success).toBe(
+      true,
+    );
+    expect(
+      RESPONSE_SCHEMAS["recording.draft"].safeParse(
+        success({ state: "recording", draftId: THREAD_ID }),
+      ).success,
+    ).toBe(true);
+    expect(
+      RESPONSE_SCHEMAS["recording.draft"].safeParse(success({ state: "posted", thread: THREAD }))
+        .success,
+    ).toBe(true);
+  });
+
+  it.each([
+    { draftId: "bad" },
+    { body: " " },
+    { body: "a".repeat(10001) },
+    { mentions: Array.from({ length: 21 }, () => THREAD_ID) },
+    { anchor: { ...TEXT_ANCHOR, container: "a".repeat(RECORDING_DRAFT_MAX_LENGTH) } },
+    { context: null },
+  ])("rejects malformed or oversized data %j", (override) => {
+    expect(recordingDraftInputSchema.safeParse({ ...input, ...override }).success).toBe(false);
+  });
+
+  it.each(["tabId", "userId", "workspaceId", "attachRecording"])(
+    "rejects trusted field %s",
+    (field) => {
+      expect(recordingDraftInputSchema.safeParse({ ...input, [field]: true }).success).toBe(false);
+    },
+  );
+
+  it("validates push messages", () => {
+    expect(
+      recordingThreadCreatedSchema.safeParse({
+        type: "recording.threadCreated",
+        draftId: THREAD_ID,
+        thread: THREAD,
+        withoutVideo: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      recordingThreadCreatedSchema.safeParse({
+        type: "recording.threadCreated",
+        draftId: THREAD_ID,
+        thread: {},
+      }).success,
+    ).toBe(false);
+    expect(
+      recordingThreadFailedSchema.safeParse({
+        type: "recording.threadFailed",
+        draftId: THREAD_ID,
+        message: "Network failed",
+      }).success,
+    ).toBe(true);
+    expect(
+      recordingThreadFailedSchema.safeParse({ type: "recording.threadFailed", draftId: THREAD_ID })
+        .success,
+    ).toBe(false);
+  });
+});
 const ENABLE = { type: "sites.enable", tabId: 0, origin: ORIGIN, workspaceId: WORKSPACE_ID };
 
 describe("dataRequestSchema", () => {
@@ -813,5 +891,41 @@ describe("recording steps messages", () => {
       offscreenResponseSchema.safeParse(success({ ...pending, steps: [{ ...STEP, kind: "x" }] }))
         .success,
     ).toBe(false);
+  });
+});
+
+describe("recording placement and prepare schemas", () => {
+  it.each([
+    { type: "recording.prepare", tabId: 7 },
+    { type: "preferences.getRecordingPlacement" },
+    { type: "preferences.setRecordingPlacement", placement: "start" },
+    { type: "preferences.setRecordingPlacement", placement: "end" },
+  ])("accepts %j", (request) => {
+    expect(requestSchema.safeParse(request).success).toBe(true);
+  });
+
+  it.each([
+    { type: "recording.prepare" },
+    { type: "recording.prepare", tabId: -1 },
+    { type: "recording.prepare", tabId: "7" },
+    { type: "recording.prepare", tabId: 1.5 },
+    { type: "preferences.setRecordingPlacement" },
+    { type: "preferences.setRecordingPlacement", placement: "START" },
+    { type: "preferences.setRecordingPlacement", placement: null },
+  ])("rejects %j", (request) => {
+    expect(requestSchema.safeParse(request).success).toBe(false);
+  });
+
+  it("validates placements and null-only responses including failures", () => {
+    const get = RESPONSE_SCHEMAS["preferences.getRecordingPlacement"];
+    expect(get.safeParse(success("start")).success).toBe(true);
+    expect(get.safeParse(success("end")).success).toBe(true);
+    expect(get.safeParse(success("left")).success).toBe(false);
+    expect(get.safeParse(failure("unknown")).success).toBe(true);
+    for (const type of ["recording.prepare", "preferences.setRecordingPlacement"] as const) {
+      expect(RESPONSE_SCHEMAS[type].safeParse(success(null)).success).toBe(true);
+      expect(RESPONSE_SCHEMAS[type].safeParse(success({})).success).toBe(false);
+      expect(RESPONSE_SCHEMAS[type].safeParse(failure("recording_failed")).success).toBe(true);
+    }
   });
 });

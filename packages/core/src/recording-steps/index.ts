@@ -25,6 +25,12 @@ function stepLines(step: RecordingStep): string[] {
       return [...comment, `  await ${locator}.press("Enter");`];
     case "navigate":
       return [...comment, `  await page.waitForURL(${JSON.stringify(`**${step.url ?? ""}`)});`];
+    case "back":
+      return ["  await page.goBack();"];
+    case "forward":
+      return ["  await page.goForward();"];
+    case "reload":
+      return ["  await page.reload();"];
   }
 }
 

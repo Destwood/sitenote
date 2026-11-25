@@ -31,6 +31,7 @@ import {
   type NotificationList,
   type Preferences,
   type ReplayProgress,
+  type RecordingDraftOutcome,
   type SiteInfo,
   type ThreadRecord,
   type ThreadShareInfo,
@@ -41,6 +42,7 @@ import * as z from "zod/mini";
 export const OTP_LENGTH = 6;
 export const COMMENT_MAX_LENGTH = 10000;
 export const MENTIONS_MAX = 20;
+export const RECORDING_DRAFT_MAX_LENGTH = 256 * 1024;
 export const NOTIFICATIONS_PAGE_MAX = 100;
 export const PAGE_PORT_NAME = "sitenote:page";
 const MAX_EMAIL_LENGTH = 254;
@@ -67,6 +69,8 @@ function isBareOrigin(value: string): boolean {
 }
 
 const idSchema = z.guid();
+const recordingPlacementSchema = z.enum(["start", "end"]);
+export type RecordingPlacement = z.infer<typeof recordingPlacementSchema>;
 const selectionPlacementSchema = z.enum(["below", "above"]);
 export type SelectionPlacement = z.infer<typeof selectionPlacementSchema>;
 const originSchema = z.string().check(z.refine(isBareOrigin));
@@ -81,6 +85,24 @@ const notificationLimitSchema = z.int().check(z.minimum(1), z.maximum(NOTIFICATI
 const notificationIdsSchema = z
   .array(idSchema)
   .check(z.minLength(1), z.maxLength(NOTIFICATIONS_PAGE_MAX));
+export const recordingDraftInputSchema = z
+  .strictObject({
+    draftId: idSchema,
+    siteId: idSchema,
+    pageUrl: pageUrlSchema,
+    anchor: anchorSchema,
+    context: threadContextSchema,
+    captureId: z.optional(idSchema),
+    body: bodySchema,
+    mentions: mentionsSchema,
+    startsSignedOut: z.optional(z.boolean()),
+  })
+  .check(z.refine((input) => JSON.stringify(input).length <= RECORDING_DRAFT_MAX_LENGTH));
+
+export const recordingDraftOutcomeSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("recording"), draftId: idSchema }),
+  z.object({ state: z.literal("posted"), thread: threadRecordSchema }),
+]);
 export const replaySourceSchema = z.object({
   threadId: idSchema,
   pageUrl: z.string(),
@@ -131,6 +153,11 @@ export const dataRequestSchema = z.discriminatedUnion("type", [
     type: z.literal("preferences.set"),
     siteId: idSchema,
     showResolved: z.boolean(),
+  }),
+  z.object({ type: z.literal("preferences.getRecordingPlacement") }),
+  z.object({
+    type: z.literal("preferences.setRecordingPlacement"),
+    placement: recordingPlacementSchema,
   }),
   z.object({ type: z.literal("preferences.getSelectionPlacement") }),
   z.object({
@@ -184,6 +211,8 @@ export const dataRequestSchema = z.discriminatedUnion("type", [
     tabId: tabIdSchema,
     streamId: streamIdSchema,
   }),
+  z.object({ type: z.literal("recording.prepare"), tabId: tabIdSchema }),
+  z.strictObject({ type: z.literal("recording.draft"), draft: recordingDraftInputSchema }),
   z.object({ type: z.literal("recording.stop"), tabId: z.optional(tabIdSchema) }),
   z.object({ type: z.literal("recording.status"), tabId: z.optional(tabIdSchema) }),
   z.object({
@@ -261,6 +290,23 @@ export const recordingReadySchema = z.object({
 
 export type RecordingReadyMessage = z.infer<typeof recordingReadySchema>;
 
+export const recordingCommentFirstSchema = z.object({ type: z.literal("recording.commentFirst") });
+export const recordingThreadCreatedSchema = z.object({
+  type: z.literal("recording.threadCreated"),
+  draftId: idSchema,
+  thread: threadRecordSchema,
+  withoutVideo: z.optional(z.boolean()),
+});
+export const recordingThreadFailedSchema = z.object({
+  type: z.literal("recording.threadFailed"),
+  draftId: idSchema,
+  message: z.string().check(z.maxLength(10000)),
+});
+export type RecordingDraftMessage =
+  | z.infer<typeof recordingCommentFirstSchema>
+  | z.infer<typeof recordingThreadCreatedSchema>
+  | z.infer<typeof recordingThreadFailedSchema>;
+
 export const offscreenCommandSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("offscreen.start"),
@@ -301,6 +347,8 @@ export interface DataByType {
   "screenshot.capture": CapturedScreenshot;
   "preferences.get": Preferences;
   "preferences.set": null;
+  "preferences.getRecordingPlacement": RecordingPlacement;
+  "preferences.setRecordingPlacement": null;
   "preferences.getSelectionPlacement": SelectionPlacement;
   "preferences.setSelectionPlacement": null;
   "threads.setStatus": ThreadRecord;
@@ -322,6 +370,8 @@ export interface DataByType {
   "jira.linkIssue": JiraLinkResult;
   "threads.getShare": ThreadShareInfo | null;
   "threads.setShare": ThreadShareInfo | null;
+  "recording.prepare": null;
+  "recording.draft": RecordingDraftOutcome;
   "recording.start": RecordingStatus;
   "recording.stop": null;
   "recording.status": RecordingStatus;
@@ -357,6 +407,8 @@ export const RESPONSE_SCHEMAS: {
   "screenshot.capture": resultSchema(capturedScreenshotSchema),
   "preferences.get": resultSchema(preferencesSchema),
   "preferences.set": resultSchema(z.null()),
+  "preferences.getRecordingPlacement": resultSchema(recordingPlacementSchema),
+  "preferences.setRecordingPlacement": resultSchema(z.null()),
   "preferences.getSelectionPlacement": resultSchema(selectionPlacementSchema),
   "preferences.setSelectionPlacement": resultSchema(z.null()),
   "threads.setStatus": resultSchema(threadRecordSchema),
@@ -378,6 +430,8 @@ export const RESPONSE_SCHEMAS: {
   "jira.linkIssue": resultSchema(jiraLinkResultSchema),
   "threads.getShare": resultSchema(z.nullable(threadShareInfoSchema)),
   "threads.setShare": resultSchema(z.nullable(threadShareInfoSchema)),
+  "recording.prepare": resultSchema(z.null()),
+  "recording.draft": resultSchema(recordingDraftOutcomeSchema),
   "recording.start": resultSchema(recordingStatusSchema),
   "recording.stop": resultSchema(z.null()),
   "recording.status": resultSchema(recordingStatusSchema),

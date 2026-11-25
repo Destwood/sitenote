@@ -25,6 +25,16 @@ export interface StepRecorder {
 
 type StepKind = RecordingStep["kind"];
 
+interface NavigationEvent extends Event {
+  userInitiated?: boolean;
+  navigationType: string;
+  destination: { index: number };
+}
+
+interface Navigation extends EventTarget {
+  currentEntry: { index: number } | null;
+}
+
 const NAVIGATION_POLL_MS = 500;
 const INTERACTIVE_SELECTOR =
   "a,button,input,select,textarea,summary,label,[role=button],[role=link],[role=menuitem],[role=tab],[role=checkbox],[role=switch],[onclick]";
@@ -170,11 +180,21 @@ export function createStepRecorder(deps: StepRecorderDeps): StepRecorder {
 
   function report(kind: StepKind, element: Element): void {
     checkNavigation();
+    const href = kind === "click" ? element.closest("a[href]")?.getAttribute("href") : null;
+    const url = href == null ? null : URL.parse(href, deps.doc.baseURI);
+    const destination =
+      url !== null &&
+      url.origin === deps.win.location.origin &&
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      !href?.trim().startsWith("#")
+        ? `${url.pathname}${url.search}${url.hash}`
+        : undefined;
     emit({
       kind,
       selector: selectorOf(element),
       label: labelOf(deps.doc, element),
       sensitive: isSensitive(element),
+      ...(destination === undefined ? {} : { url: destination }),
     });
   }
 
@@ -255,12 +275,31 @@ export function createStepRecorder(deps: StepRecorderDeps): StepRecorder {
       deps.doc.addEventListener(type, listener, true);
     }
     lastHref = deps.win.location.href;
+    const navigation = (deps.win as { navigation?: Navigation }).navigation;
+    const onNavigate = (event: Event): void => {
+      const { userInitiated, navigationType, destination } = event as NavigationEvent;
+      if (userInitiated !== true) {
+        return;
+      }
+      if (navigationType === "reload") {
+        emit({ kind: "reload", selector: "", label: "" });
+      } else if (navigationType === "traverse" && navigation?.currentEntry != null) {
+        const current = navigation.currentEntry.index;
+        if (destination.index < current) {
+          emit({ kind: "back", selector: "", label: "" });
+        } else if (destination.index > current) {
+          emit({ kind: "forward", selector: "", label: "" });
+        }
+      }
+    };
+    navigation?.addEventListener("navigate", onNavigate);
     const timer = deps.win.setInterval(checkNavigation, NAVIGATION_POLL_MS);
     cleanup = () => {
       for (const [type, listener] of listeners) {
         deps.doc.removeEventListener(type, listener, true);
       }
       deps.win.clearInterval(timer);
+      navigation?.removeEventListener("navigate", onNavigate);
     };
     if (options.announceNavigation) {
       emitNavigation();

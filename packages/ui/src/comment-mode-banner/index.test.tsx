@@ -6,6 +6,17 @@ import { Z_INDEX } from "../z-index";
 import { CommentModeBanner } from ".";
 
 describe("CommentModeBanner", () => {
+  it("renders a custom comment-first message", () => {
+    render(
+      <CommentModeBanner
+        onExit={vi.fn()}
+        message="Pin a comment. Recording starts after you post it."
+      />,
+    );
+    expect(screen.getByRole("status").textContent).toContain(
+      "Pin a comment. Recording starts after you post it.",
+    );
+  });
   it("announces comment mode with the instructions", () => {
     render(<CommentModeBanner onExit={vi.fn()} />);
 

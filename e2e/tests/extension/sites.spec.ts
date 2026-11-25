@@ -187,11 +187,11 @@ test("the comment mode button reaches the content script and toggles the attribu
   const host = hostOf(page);
   await expect(host).toHaveAttribute("data-comment-mode", "off");
 
-  await popup.getByRole("button", { name: "Comment mode" }).click();
+  await popup.getByRole("button", { name: /^Comment Alt\+Shift\+C$/ }).click();
   await expect(host).toHaveAttribute("data-comment-mode", "on");
   await expect(popup.getByRole("status").filter({ hasText: "Comment mode is on." })).toBeVisible();
 
-  await popup.getByRole("button", { name: "Comment mode" }).click();
+  await popup.getByRole("button", { name: /^Comment Alt\+Shift\+C$/ }).click();
   await expect(host).toHaveAttribute("data-comment-mode", "off");
   await expect(popup.getByRole("status").filter({ hasText: "Comment mode is off." })).toBeVisible();
 });

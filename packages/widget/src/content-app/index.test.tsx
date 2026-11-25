@@ -101,6 +101,7 @@ function makeState(overrides: Partial<ContentState> = {}): ContentState {
     screenshots: new Map(),
     recordings: new Map(),
     recordingAttached: false,
+    recordingDraft: null,
     resolutions: new Map(),
     positions: new Map(),
     commentMode: false,
@@ -136,6 +137,9 @@ function makeController(store: Store<ContentState>) {
     exitCommentMode: vi.fn(),
     enterCommentMode: vi.fn(() => true),
     attachRecording: vi.fn(() => true),
+    beginRecordingComment: vi.fn(() => true),
+    recordingThreadCreated: vi.fn(),
+    recordingThreadFailed: vi.fn(),
     commentOnContextTarget: vi.fn(() => false),
     toggleSidebar: vi.fn(),
     closeSidebar: vi.fn(),
@@ -186,6 +190,24 @@ afterEach(() => {
 });
 
 describe("launcher and sidebar", () => {
+  it("shows the comment-first banner and planned recording checkbox", () => {
+    setup({
+      commentMode: true,
+      recordingDraft: { state: "armed", draftId: FIRST_ID },
+      pending: {
+        anchor: {
+          kind: "text",
+          quote: { exact: "a", prefix: "", suffix: "" },
+          position: { start: 0, end: 1 },
+          container: "p",
+        },
+        target: { kind: "element", element: document.body, offset: { x: 0, y: 0 } },
+        captureId: null,
+      },
+    });
+    expect(screen.getByText("Pin a comment. Recording starts after you post it.")).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Recording starts signed out" })).toBeTruthy();
+  });
   it("shows the number of open threads on the launcher", () => {
     setup({
       threads: [thread(FIRST_ID), thread(SECOND_ID, { status: "resolved" })],
@@ -862,6 +884,47 @@ describe("thread panel", () => {
 });
 
 describe("off-page comment card", () => {
+  it("wires share access, pending state and copy to the off-page thread", async () => {
+    const user = userEvent.setup();
+    const { store, actions } = setup({
+      siteThreads: [thread(SECOND_ID, { pageUrl: "https://example.test/other" })],
+      offPageThreadId: SECOND_ID,
+      shares: new Map([
+        [SECOND_ID, { token: "a".repeat(64), expiresAt: "2026-12-14T10:00:00.000Z" }],
+      ]),
+      sharePending: new Set([SECOND_ID]),
+    });
+
+    const card = screen.getByRole("dialog", { name: "Comment on another page" });
+    const access = within(card).getByRole("button", { name: "Who can open the link" });
+    expect(access).toHaveProperty("disabled", true);
+    act(() => {
+      store.setState((state) => ({ ...state, sharePending: new Set() }));
+    });
+    await user.click(access);
+    expect(
+      within(card)
+        .getByRole("menuitemradio", { name: "Anyone with the link" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    await user.click(within(card).getByRole("menuitemradio", { name: "Workspace members" }));
+    expect(actions.setShareAccess).toHaveBeenCalledWith(SECOND_ID, "workspace");
+    await user.click(within(card).getByRole("button", { name: "Copy link" }));
+    expect(actions.copyThreadLink).toHaveBeenCalledWith(SECOND_ID);
+  });
+
+  it("omits sharing for an off-page thread viewed by a guest", () => {
+    setup({
+      site: { ...SITE, role: "guest" },
+      siteThreads: [thread(SECOND_ID, { pageUrl: "https://example.test/other" })],
+      offPageThreadId: SECOND_ID,
+    });
+
+    const card = screen.getByRole("dialog", { name: "Comment on another page" });
+    expect(within(card).queryByRole("button", { name: "Copy link" })).toBeNull();
+    expect(within(card).queryByRole("button", { name: "Who can open the link" })).toBeNull();
+  });
+
   it("toggles the status of the thread from the card", async () => {
     const user = userEvent.setup();
     const { actions } = setup({

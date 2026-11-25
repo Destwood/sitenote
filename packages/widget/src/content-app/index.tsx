@@ -17,6 +17,7 @@ import {
   type AnchorRect,
   type PinLayerPin,
   type SiteThreadItem,
+  type ThreadShareControl,
   type ThreadView,
 } from "@sitenote/ui";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
@@ -248,6 +249,19 @@ export function ContentApp({ controller }: ContentAppProps) {
     Z_INDEX.pins,
   );
 
+  function shareOf(id: string): ThreadShareControl | undefined {
+    return site === null || site.role === "guest"
+      ? undefined
+      : {
+          access: state.shares.get(id) ? "link" : "workspace",
+          pending: state.sharePending.has(id),
+          onAccessChange: (access) => {
+            void controller.setShareAccess(id, access);
+          },
+          onCopy: () => controller.copyThreadLink(id),
+        };
+  }
+
   let panel: ReactNode = null;
   if (state.pending !== null) {
     panel = (
@@ -262,6 +276,7 @@ export function ContentApp({ controller }: ContentAppProps) {
         error={state.panelError}
         mentionCandidates={mentionCandidates}
         recordingAttached={state.recordingAttached}
+        recordingPlanned={state.recordingDraft !== null}
         onSubmit={controller.submitNewThread}
         onEditComment={() => Promise.resolve()}
         onDeleteComment={() => Promise.resolve()}
@@ -310,18 +325,7 @@ export function ContentApp({ controller }: ContentAppProps) {
             void controller.linkJiraIssue(activeView.id, issueKey);
           },
         }}
-        share={
-          site.role === "guest"
-            ? undefined
-            : {
-                access: state.shares.get(activeView.id) ? "link" : "workspace",
-                pending: state.sharePending.has(activeView.id),
-                onAccessChange: (access) => {
-                  void controller.setShareAccess(activeView.id, access);
-                },
-                onCopy: () => controller.copyThreadLink(activeView.id),
-              }
-        }
+        share={shareOf(activeView.id)}
         onSubmit={(submission) => controller.reply(activeView.id, submission)}
         onEditComment={controller.editComment}
         onDeleteComment={controller.deleteComment}
@@ -351,7 +355,16 @@ export function ContentApp({ controller }: ContentAppProps) {
         onSelectPin={controller.togglePin}
         zIndex={pinLayerZIndex}
       />
-      {state.commentMode ? <CommentModeBanner onExit={controller.exitCommentMode} /> : null}
+      {state.commentMode ? (
+        <CommentModeBanner
+          onExit={controller.exitCommentMode}
+          message={
+            state.recordingDraft === null
+              ? undefined
+              : "Pin a comment. Recording starts after you post it."
+          }
+        />
+      ) : null}
       {selectionMeasurement?.visible === true ? (
         <SelectionButton
           rect={selectionMeasurement.rect}
@@ -409,6 +422,7 @@ export function ContentApp({ controller }: ContentAppProps) {
           item={offPageItem}
           thread={offPageThread}
           sidebarOpen={sidebarOpen}
+          share={shareOf(offPageItem.id)}
           onReproduce={(mode) => {
             controller.reproduceOffPage(offPageItem.id, mode);
           }}

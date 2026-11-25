@@ -23,6 +23,16 @@ function setup(options: { limit?: number; ttlMs?: number } = {}) {
 }
 
 describe("createCaptureStore", () => {
+  it("restores the capture and fixed thread id with a fresh TTL", () => {
+    const { store } = setup();
+    store.restore("restored", {
+      ...image(),
+      at: -CAPTURE_TTL_MS,
+      threadId: "thread",
+      uploaded: false,
+    });
+    expect(store.get("restored")).toMatchObject({ at: 1000, threadId: "thread", width: 10 });
+  });
   it("returns the stored image with an unassigned thread and no upload", () => {
     const { store } = setup();
 

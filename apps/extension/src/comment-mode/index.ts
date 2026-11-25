@@ -6,13 +6,21 @@ import {
   pageThreadsRequestSchema,
   recordingReadySchema,
   recordingStateSchema,
+  recordingCommentFirstSchema,
+  recordingThreadCreatedSchema,
+  recordingThreadFailedSchema,
   type CommentModeState,
   type CommentOnElementState,
   type PageOpenSidebarState,
   type PageOpenThreadState,
   type RecordingStatus,
 } from "../messages";
-import { type MessageResult, type PageThreadSummary } from "@sitenote/widget";
+import {
+  success,
+  type MessageResult,
+  type PageThreadSummary,
+  type ThreadRecord,
+} from "@sitenote/widget";
 import type { StepRecorder, StepRecorderOptions } from "../step-recorder";
 
 export interface ToggleSender {
@@ -24,6 +32,9 @@ export interface RecordingControls {
   show: (startedAt: number) => void;
   hide: () => void;
   attach: () => MessageResult<null>;
+  commentFirst?: () => MessageResult<null>;
+  threadCreated?: (thread: ThreadRecord, withoutVideo: boolean) => void;
+  threadFailed?: (message: string) => void;
 }
 
 export type StepControls = Pick<StepRecorder, "start" | "stop">;
@@ -60,6 +71,8 @@ export function createToggleListener(deps: ToggleListenerDeps): ToggleListener {
     }
     const open = pageOpenThreadSchema.safeParse(message);
     const recording = recordingStateSchema.safeParse(message);
+    const created = recordingThreadCreatedSchema.safeParse(message);
+    const failed = recordingThreadFailedSchema.safeParse(message);
     if (commentModeToggleSchema.safeParse(message).success) {
       sendResponse(deps.toggle());
     } else if (commentOnElementSchema.safeParse(message).success) {
@@ -81,6 +94,20 @@ export function createToggleListener(deps: ToggleListenerDeps): ToggleListener {
       }
     } else if (recordingReadySchema.safeParse(message).success) {
       sendResponse(deps.recording.attach());
+    } else if (recordingCommentFirstSchema.safeParse(message).success) {
+      const response = deps.recording.commentFirst?.();
+      if (response !== undefined) {
+        sendResponse(response);
+      }
+    } else if (created.success) {
+      deps.recording.threadCreated?.(
+        created.data.thread,
+        created.data.withoutVideo ?? created.data.thread.context?.recording === undefined,
+      );
+      sendResponse(success(null));
+    } else if (failed.success) {
+      deps.recording.threadFailed?.(failed.data.message);
+      sendResponse(success(null));
     }
   };
 }

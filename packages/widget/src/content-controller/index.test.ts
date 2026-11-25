@@ -210,6 +210,17 @@ function fakeBackend(
     getSiteInfo: (origin) => respond("getSiteInfo", [origin]),
     listThreads: (siteId, pageUrl) => respond("listThreads", [siteId, pageUrl]),
     createThread: (input) => respond("createThread", [input]),
+    ...(handlers.submitRecordingDraft === undefined
+      ? {}
+      : {
+          submitRecordingDraft: (
+            input: Parameters<NonNullable<WidgetBackend["submitRecordingDraft"]>>[0],
+          ) =>
+            respond<Awaited<ReturnType<NonNullable<WidgetBackend["submitRecordingDraft"]>>>>(
+              "submitRecordingDraft",
+              [input],
+            ),
+        }),
     setStatus: (threadId, status) => respond("setStatus", [threadId, status]),
     createComment: (input) => respond("createComment", [input]),
     updateComment: (input) => respond("updateComment", [input]),
@@ -887,6 +898,155 @@ describe("text comments", () => {
     const anchor = createTextAnchor(textRange(), document);
 
     expect(anchor?.quote.exact).toBe("quick brown fox");
+  });
+});
+
+describe("comment-first recording", () => {
+  async function armed(handlers: Handlers = {}, deps: Partial<ContentControllerDeps> = {}) {
+    const harness = await setup(
+      [],
+      {
+        submitRecordingDraft: () => success({ state: "recording", draftId: THREAD_ID }),
+        ...handlers,
+      },
+      deps,
+    );
+    expect(harness.controller.beginRecordingComment()).toBe(true);
+    return harness;
+  }
+
+  async function pin(harness: Harness) {
+    under = element("#cta");
+    element("#cta").dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }),
+    );
+    await vi.waitFor(() => {
+      expect(harness.state().pending).not.toBeNull();
+    });
+  }
+
+  it("arms before pinning and submits a draft instead of creating a thread", async () => {
+    const harness = await armed();
+    const { controller: api, state, calls } = harness;
+    const draftId = state().recordingDraft?.draftId;
+    expect(draftId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(state().commentMode).toBe(true);
+    expect(calls().some((call) => call.method === "submitRecordingDraft")).toBe(false);
+    await pin(harness);
+    expect(state().commentMode).toBe(false);
+    expect(state().recordingDraft?.draftId).toBe(draftId);
+    await api.submitNewThread({ body: "Issue", mentions: [OLENA], startsSignedOut: true });
+    expect(calls().find((call) => call.method === "submitRecordingDraft")?.args[0]).toMatchObject({
+      draftId,
+      siteId: SITE.siteId,
+      pageUrl: PAGE,
+      anchor: { kind: "element" },
+      context: CONTEXT,
+      captureId: CAPTURE_ID,
+      body: "Issue",
+      mentions: [OLENA],
+      startsSignedOut: true,
+    });
+    expect(calls().some((call) => call.method === "createThread")).toBe(false);
+    expect(state().recordingDraft).toBeNull();
+    expect(state().pending).toBeNull();
+    expect(state().threads).toHaveLength(0);
+    expect(state().toasts.at(-1)?.message).toBe(
+      "Recording started. Your comment is posted when you stop.",
+    );
+  });
+
+  it("supports text anchors and missing screenshots", async () => {
+    const harness = await armed({}, { screenshot: { take: vi.fn().mockResolvedValue(null) } });
+    document.getSelection()?.addRange(textRange());
+    document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    harness.controller.startTextComment();
+    await vi.waitFor(() => {
+      expect(harness.state().pending).not.toBeNull();
+    });
+    await harness.controller.submitNewThread({ body: "Text issue", mentions: [] });
+    const input = harness.calls().find((call) => call.method === "submitRecordingDraft")?.args[0];
+    expect(input).toMatchObject({ anchor: { kind: "text" } });
+    expect(input).not.toHaveProperty("captureId");
+  });
+
+  it("opens a thread posted by the start-failure fallback", async () => {
+    const harness = await armed({
+      submitRecordingDraft: () => success({ state: "posted", thread: thread() }),
+    });
+    await pin(harness);
+    await harness.controller.submitNewThread({ body: "Issue", mentions: [] });
+    expect(harness.state().threads).toEqual([thread()]);
+    expect(harness.state().activeThreadId).toBe(THREAD_ID);
+    expect(harness.state().toasts.at(-1)?.message).toBe(
+      "Could not start recording. Comment posted without video.",
+    );
+  });
+
+  it("upserts Stop results by id and opens off-page results through the existing card", async () => {
+    const { controller: api, state } = await setup();
+    api.recordingThreadCreated(thread());
+    api.recordingThreadCreated(thread());
+    expect(state().threads).toHaveLength(1);
+    expect(state().siteThreads).toHaveLength(1);
+    expect(state().activeThreadId).toBe(THREAD_ID);
+    api.recordingThreadCreated(
+      thread({ id: SECOND_THREAD_ID, pageUrl: `${PAGE}/elsewhere` }),
+      true,
+    );
+    expect(state().threads).toHaveLength(1);
+    expect(state().siteThreads).toHaveLength(2);
+    expect(state().offPageThreadId).toBe(SECOND_THREAD_ID);
+    expect(state().toasts.at(-1)?.message).toContain("without video");
+    api.recordingThreadCreated(thread({ id: "foreign", siteId: "foreign" }));
+    expect(state().siteThreads).toHaveLength(2);
+  });
+
+  it("shows final thread failures as error toasts", async () => {
+    const { controller: api, state } = await setup();
+    api.recordingThreadFailed("Could not post");
+    expect(state().toasts.at(-1)).toMatchObject({ message: "Could not post", variant: "error" });
+  });
+
+  it.each(["exit", "escape", "cancel", "toggle"])(
+    "disarms through %s without submitting",
+    async (action) => {
+      const harness = await armed();
+      if (action === "exit") {
+        harness.controller.exitCommentMode();
+      }
+      if (action === "escape") {
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      }
+      if (action === "toggle") {
+        harness.controller.toggleCommentMode();
+      }
+      if (action === "cancel") {
+        await pin(harness);
+        harness.controller.closePanel();
+      }
+      expect(harness.state().recordingDraft).toBeNull();
+      expect(harness.calls().some((call) => call.method === "submitRecordingDraft")).toBe(false);
+    },
+  );
+
+  it("retains the composer on submit failure and prevents double submission", async () => {
+    const harness = await armed({ submitRecordingDraft: () => failure("recording_failed") });
+    await pin(harness);
+    const first = harness.controller.submitNewThread({ body: "Issue", mentions: [] });
+    await expect(
+      harness.controller.submitNewThread({ body: "Issue", mentions: [] }),
+    ).rejects.toThrow();
+    await expect(first).rejects.toThrow();
+    expect(harness.state().pending).not.toBeNull();
+    expect(harness.state().recordingDraft?.state).toBe("armed");
+    expect(harness.state().toasts.at(-1)?.variant).toBe("error");
+  });
+
+  it("refuses to arm a backend without draft support", async () => {
+    const { controller: api, state } = await setup();
+    expect(api.beginRecordingComment()).toBe(false);
+    expect(state().recordingDraft).toBeNull();
   });
 });
 

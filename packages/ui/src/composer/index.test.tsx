@@ -36,6 +36,17 @@ afterEach(() => {
 });
 
 describe("Composer", () => {
+  it("renders an extra action in the button row before cancel and submit", () => {
+    renderComposer({ extraAction: <button type="button">Resolve</button>, onCancel: vi.fn() });
+
+    const action = screen.getByRole("button", { name: "Resolve" });
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    const submit = screen.getByRole("button", { name: "Send" });
+    expect(action.parentElement).toBe(submit.parentElement);
+    expect(action.nextElementSibling).toBe(cancel);
+    expect(cancel.nextElementSibling).toBe(submit);
+  });
+
   it("renders a labelled textarea with the placeholder and a disabled submit button", () => {
     renderComposer();
 

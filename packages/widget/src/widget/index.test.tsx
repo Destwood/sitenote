@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WidgetBackend } from "../backend";
 import { failure, success } from "../result";
 import type { SiteInfo, ThreadRecord } from "../transport";
-import { mountWidget, type WidgetHandle } from ".";
+import { createWidget, mountWidget, type WidgetHandle } from ".";
 
 const ME = "00000000-0000-4000-8000-000000000002";
 const SITE: SiteInfo = {
@@ -113,6 +113,25 @@ function fakeBackend(threads: ThreadRecord[]) {
 
 let handle: WidgetHandle | null = null;
 let host: HTMLElement;
+
+it("exposes comment-first controls through the widget", async () => {
+  const { backend } = fakeBackend([]);
+  backend.submitRecordingDraft = vi
+    .fn()
+    .mockResolvedValue(success({ state: "recording", draftId: THREAD_ID }));
+  const widget = createWidget({ backend, document, window, webUrl: "https://app.test" });
+  await widget.start();
+  try {
+    expect(widget.beginRecordingComment()).toBe(true);
+    expect(widget.store.getState().recordingDraft?.state).toBe("armed");
+    widget.recordingThreadCreated(thread());
+    expect(widget.store.getState().activeThreadId).toBe(THREAD_ID);
+    widget.recordingThreadFailed("Posting failed");
+    expect(widget.store.getState().toasts.at(-1)?.message).toBe("Posting failed");
+  } finally {
+    widget.stop();
+  }
+});
 
 beforeEach(() => {
   document.body.innerHTML =

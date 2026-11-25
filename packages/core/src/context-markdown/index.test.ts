@@ -51,6 +51,27 @@ function networkError(
 }
 
 describe("formatThreadContextMarkdown", () => {
+  it("lists browser navigation actions", () => {
+    const markdown = formatThreadContextMarkdown({
+      excerpt: "x",
+      pageUrl: PAGE,
+      context: context({
+        recording: {
+          path: "ws/thread.webm",
+          durationMs: 1000,
+          size: 100,
+          steps: (["back", "forward", "reload"] as const).map((kind) => ({
+            t: 0,
+            kind,
+            selector: "",
+            label: "",
+          })),
+        },
+      }),
+    });
+    expect(markdown).toContain("### Steps to reproduce\n1. Back\n2. Forward\n3. Reload");
+  });
+
   it("adds environment details and a chronological network log with durations", () => {
     const markdown = formatThreadContextMarkdown({
       excerpt: "x",

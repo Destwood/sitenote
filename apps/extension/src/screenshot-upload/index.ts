@@ -12,7 +12,11 @@ export interface ScreenshotAttachment {
 }
 
 export interface ThreadScreenshots {
-  attach: (captureId: string, workspaceId: string) => Promise<ScreenshotAttachment | null>;
+  attach: (
+    captureId: string,
+    workspaceId: string,
+    threadId?: string,
+  ) => Promise<ScreenshotAttachment | null>;
   discard: (captureId: string) => void;
 }
 
@@ -42,12 +46,15 @@ export function createScreenshotUploader(deps: ScreenshotUploaderDeps): ThreadSc
   const newId = deps.newId ?? (() => crypto.randomUUID());
 
   return {
-    attach: async (captureId, workspaceId) => {
+    attach: async (captureId, workspaceId, fixedThreadId) => {
       const capture = deps.store.get(captureId);
       if (capture === null) {
         return null;
       }
-      const threadId = capture.threadId ?? newId();
+      const threadId = fixedThreadId ?? capture.threadId ?? newId();
+      if (capture.threadId !== threadId) {
+        capture.uploaded = false;
+      }
       capture.threadId = threadId;
       if (capture.uploaded) {
         return { threadId, path: `${workspaceId}/${threadId}.${extensionOf(capture.blob.type)}` };

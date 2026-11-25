@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 
 import { PANEL_SURFACE } from "../control-classes";
 import { VIEWPORT_MARGIN } from "../placement";
@@ -47,6 +47,46 @@ afterEach(() => {
 });
 
 describe("ThreadPanel", () => {
+  it.each([{ recordingPlanned: true }, { recordingAttached: true }])(
+    "offers signed-out recording for a new comment %j",
+    async (props) => {
+      const { onSubmit } = renderPanel({ thread: null, ...props });
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("checkbox", { name: "Recording starts signed out" }));
+      await user.type(screen.getByRole("textbox", { name: "Comment" }), "Issue");
+      await user.click(screen.getByRole("button", { name: "Comment" }));
+      expect(onSubmit).toHaveBeenCalledExactlyOnceWith({
+        body: "Issue",
+        mentions: [],
+        startsSignedOut: true,
+      });
+    },
+  );
+  it.each(["open", "resolved"] as const)(
+    "places the %s status action beside Reply in the footer",
+    async (status) => {
+      const user = userEvent.setup();
+      const { onToggleStatus, onSubmit } = renderPanel({ thread: makeThread({ status }) });
+
+      const label = status === "resolved" ? "Reopen" : "Resolve";
+      const header = screen.getByRole("heading", { name: "Thread 1" }).parentElement;
+      assert(header !== null);
+      expect(within(header).queryByRole("button", { name: label })).toBeNull();
+      const action = screen.getByRole("button", { name: label });
+      const reply = screen.getByRole("button", { name: "Reply" });
+      expect(action.parentElement).toBe(reply.parentElement);
+      expect(action.nextElementSibling).toBe(reply);
+      await user.type(screen.getByRole("textbox", { name: "Reply" }), "Draft");
+      await user.tab();
+      expect(document.activeElement).toBe(action);
+      await user.keyboard("{Enter}");
+      expect(onToggleStatus).toHaveBeenCalledTimes(1);
+      expect(onSubmit).not.toHaveBeenCalled();
+      await user.tab();
+      expect(document.activeElement).toBe(reply);
+    },
+  );
+
   it("stacks above the given z-index when the anchor sits higher", () => {
     renderPanel({ zIndex: Z_INDEX.panel + 500 });
 

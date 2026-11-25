@@ -55,7 +55,7 @@ vi.mock("wxt/browser", () => ({
 
 const ORIGIN = "https://example.test";
 const HOST = "example.test";
-const COMMENT_MODE = /^Comment mode/;
+const COMMENT_MODE = /^Comment Alt\+Shift\+C$/;
 const NORTHWIND: WorkspaceInfo = {
   id: "10000000-0000-4000-8000-000000000001",
   name: "Northwind",
@@ -615,6 +615,17 @@ describe("SitePanel when the site is enabled", () => {
       expect(screen.getByRole("status").textContent).toBe("Comment mode is off.");
     });
     expect(mocks.toggleCommentMode).toHaveBeenCalledWith(7);
+  });
+
+  it("keeps Comment narrow with its icon and shortcut", async () => {
+    enabled();
+    renderPanel();
+    const button = await screen.findByRole("button", { name: COMMENT_MODE });
+    expect(button.classList.contains("flex-1")).toBe(false);
+    expect(button.classList.contains("gap-2")).toBe(true);
+    expect(button.getAttribute("aria-keyshortcuts")).toBe("Alt+Shift+C");
+    expect(button.querySelector("kbd")?.textContent).toBe("Alt+Shift+C");
+    expect(button.querySelector("svg")).toBeTruthy();
   });
 
   it("shows a fixed message when the page does not answer", async () => {

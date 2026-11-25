@@ -3,16 +3,20 @@ import { Z_INDEX } from "../z-index";
 
 export interface CommentModeBannerProps {
   onExit: () => void;
+  message?: string | undefined;
 }
 
-export function CommentModeBanner({ onExit }: CommentModeBannerProps) {
+export function CommentModeBanner({
+  onExit,
+  message = "Comment mode: click an element or select text · Esc to exit",
+}: CommentModeBannerProps) {
   return (
     <div
       role="status"
       style={{ zIndex: Z_INDEX.banner }}
       className="pointer-events-auto fixed inset-x-0 top-3 mx-auto flex w-fit max-w-[calc(100vw-32px)] items-center gap-3 rounded-full bg-neutral-900 py-1.5 pr-1.5 pl-4 font-sans text-sm text-white shadow-lg"
     >
-      <span>Comment mode: click an element or select text · Esc to exit</span>
+      <span>{message}</span>
       <button
         type="button"
         onClick={onExit}

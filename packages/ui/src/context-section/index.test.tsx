@@ -6,7 +6,7 @@ import {
 } from "@sitenote/core";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 
 import {
   CONTEXT_UNAVAILABLE_TEXT,
@@ -164,9 +164,11 @@ describe("ContextSection console errors", () => {
         })}
       />,
     );
-    const summary = screen.getByText("Network (3)");
+    const summary = screen.getByText("Network (3)").closest("summary");
+    assert(summary !== null);
     expect(summary.tagName).toBe("SUMMARY");
     expect(summary.closest("details")?.open).toBe(false);
+    expect(within(summary).getByText("0 errors").className).toContain("text-neutral-600");
     await user.click(summary);
     expect(summary.closest("details")?.open).toBe(true);
     expect(screen.getByTitle(url).className).toContain("truncate");
@@ -177,15 +179,37 @@ describe("ContextSection console errors", () => {
     expect(screen.getByText("Failed").className).toContain("text-red");
     expect(screen.getAllByRole("listitem")).toHaveLength(3);
     rerender(<ContextSection hasScreenshot={false} context={context({ networkLog: [] })} />);
-    expect(screen.queryByText(/Network \(/)).toBeNull();
+    expect(screen.getByText("Network (0)").closest("details")).toBeNull();
+    expect(screen.getByText("Network (0)").closest("summary")).toBeNull();
+    expect(screen.getByText("0 errors")).toBeTruthy();
     rerender(<ContextSection hasScreenshot={false} context={context()} />);
     expect(screen.queryByText(/Network \(/)).toBeNull();
   });
-  it("says there are none when the list is empty", () => {
+  it("omits the network row and console error message for old data without errors", () => {
     render(<ContextSection context={context()} hasScreenshot={false} />);
 
-    expect(screen.getByText("No console errors.")).toBeTruthy();
+    expect(screen.queryByText("No console errors.")).toBeNull();
+    expect(screen.queryByText(/Network \(/)).toBeNull();
+    expect(screen.queryByText("0 errors")).toBeNull();
     expect(screen.queryByText(/Console errors \(/)).toBeNull();
+  });
+
+  it.each([1, 2])("shows %i console errors beside an empty network log", (count) => {
+    render(
+      <ContextSection
+        hasScreenshot={false}
+        context={context({ consoleErrors: Array.from({ length: count }, () => record()) })}
+      />,
+    );
+
+    const row = screen.getByText("Network (0)").parentElement;
+    assert(row !== null);
+    expect(row.tagName).toBe("DIV");
+    expect(row.closest("details")).toBeNull();
+    const counter = within(row).getByText(`${String(count)} ${count === 1 ? "error" : "errors"}`);
+    expect(counter.className).toContain("text-red-900");
+    expect(screen.getByText(`Console errors (${String(count)})`).tagName).toBe("SUMMARY");
+    expect(screen.queryByText("No console errors.")).toBeNull();
   });
 
   it("lists the errors under a collapsible summary with their count", () => {
@@ -409,6 +433,34 @@ describe("recording formatters", () => {
 });
 
 describe("ContextSection recording steps", () => {
+  it("shows browser navigation actions in the Steps list", () => {
+    render(
+      <ContextSection
+        hasScreenshot={false}
+        context={context({
+          recording: {
+            path: "ws/thread.webm",
+            durationMs: 1000,
+            size: 100,
+            steps: (["back", "forward", "reload"] as const).map((kind) => ({
+              t: 0,
+              kind,
+              selector: "",
+              label: "",
+            })),
+          },
+        })}
+      />,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Steps (3)" }));
+    const list = screen.getByRole("list", { name: "What the reporter did (3)" });
+    expect(
+      within(list)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["0:00Back", "0:00Forward", "0:00Reload"]);
+  });
+
   const steps: RecordingStep[] = [
     { t: 0, kind: "click", selector: "#buy", label: "Buy now" },
     { t: 4_200, kind: "input", selector: "#email", label: "" },

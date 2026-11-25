@@ -22,6 +22,8 @@ export type { RouteLabelProps } from "./route-label";
 export { formatRelativeTime } from "./relative-time";
 export { ReplayBar } from "./replay-bar";
 export type { ReplayBarProps, ReplayBarStatus } from "./replay-bar";
+export { SplitButton } from "./split-button";
+export type { SplitButtonProps } from "./split-button";
 export { ReplayButton } from "./replay-button";
 export type { ReplayButtonProps } from "./replay-button";
 export { ReplayGateModal } from "./replay-gate-modal";

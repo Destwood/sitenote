@@ -413,11 +413,11 @@ export function SitePanel({ webUrl, onManageSites, onWorkspaceControl }: SitePan
               onClick={() => void toggle(tab)}
               disabled={busy}
               aria-keyshortcuts={TOGGLE_COMMENT_MODE_SHORTCUT}
-              className="flex h-11 flex-1 items-center justify-between rounded-lg bg-neutral-900 px-3 text-sm font-semibold text-white hover:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex h-11 shrink-0 items-center gap-2 rounded-lg bg-neutral-900 px-3 text-sm font-semibold text-white hover:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="flex items-center gap-2">
                 <Icon name="comment" size={17} />
-                Comment mode
+                Comment
               </span>
               <kbd className="rounded border border-neutral-600 bg-neutral-800 px-1.5 py-1 font-sans text-[10px] font-normal text-neutral-300">
                 {TOGGLE_COMMENT_MODE_SHORTCUT}

@@ -4,7 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { AuthService } from "../auth-service";
 import type { DataService } from "../data-service";
 import type { NotificationCenter } from "../notification-center";
+import type { RecordingPreference } from "../recording-preference";
 import type { RecordingService } from "../recording-service";
+import type { RecordingDraftService } from "../recording-draft-service";
 import type { ReplayProgressService } from "../replay-progress";
 import type { ResolvedPreference } from "../resolved-preference";
 import type { ScreenshotService } from "../screenshot-service";
@@ -123,6 +125,10 @@ function createFakes() {
     load: vi.fn<ResolvedPreference["load"]>(() => Promise.resolve(true)),
     save: vi.fn<ResolvedPreference["save"]>(() => Promise.resolve()),
   };
+  const recordingPlacement = {
+    load: vi.fn<RecordingPreference["load"]>(() => Promise.resolve("start")),
+    save: vi.fn<RecordingPreference["save"]>(() => Promise.resolve()),
+  };
   const selectionPlacement = {
     load: vi.fn<SelectionPlacementPreference["load"]>(() => Promise.resolve("below")),
     save: vi.fn<SelectionPlacementPreference["save"]>(() => Promise.resolve()),
@@ -142,10 +148,17 @@ function createFakes() {
     replay,
     preferences,
     selectionPlacement,
+    recordingPlacement,
   };
 }
 
-function setup(options: { enabled?: boolean; onWake?: () => Promise<void> } = {}) {
+function setup(
+  options: {
+    enabled?: boolean;
+    onWake?: () => Promise<void>;
+    recordingDrafts?: RecordingDraftService;
+  } = {},
+) {
   const fakes = createFakes();
   const onWake = vi.fn(options.onWake ?? (() => Promise.resolve()));
   const getEnabledSite = vi.fn((origin: string) =>
@@ -160,6 +173,7 @@ function setup(options: { enabled?: boolean; onWake?: () => Promise<void> } = {}
     ...fakes,
     getEnabledSite,
     onWake,
+    ...(options.recordingDrafts === undefined ? {} : { recordingDrafts: options.recordingDrafts }),
   });
   return { route, onWake, getEnabledSite, ...fakes };
 }
@@ -169,6 +183,96 @@ describe("senderOriginOf", () => {
     expect(senderOriginOf(CONTENT)).toBe(ORIGIN);
     expect(senderOriginOf({})).toBeNull();
     expect(senderOriginOf({ url: "not a url" })).toBeNull();
+  });
+});
+
+describe("recording draft routing", () => {
+  const input = {
+    draftId: THREAD_ID,
+    siteId: SITE_ID,
+    pageUrl: PAGE_URL,
+    anchor: ANCHOR,
+    context: CONTEXT,
+    captureId: CAPTURE_ID,
+    body: "Hi",
+    mentions: [],
+  };
+  function drafts(): RecordingDraftService {
+    return {
+      prepare: vi.fn().mockResolvedValue(success(null)),
+      submit: vi.fn().mockResolvedValue(success({ state: "recording", draftId: THREAD_ID })),
+      start: vi.fn().mockResolvedValue(success({ state: "recording" })),
+      onFinished: vi.fn(),
+      onTabRemoved: vi.fn(),
+    };
+  }
+
+  it("derives the tab from the main-frame content sender", async () => {
+    const recordingDrafts = drafts();
+    const { route } = setup({ recordingDrafts });
+    expect(
+      await route({ type: "recording.draft", draft: input }, { ...CONTENT, frameId: 0 }),
+    ).toEqual(success({ state: "recording", draftId: THREAD_ID }));
+    expect(recordingDrafts.submit).toHaveBeenCalledExactlyOnceWith(4, input);
+  });
+
+  it.each([
+    POPUP,
+    POPUP_TAB,
+    { ...CONTENT, frameId: 1 },
+    CONTENT,
+    { ...CONTENT, frameId: 0, id: "foreign" },
+  ])("rejects a non-main-frame or foreign sender %j", async (sender) => {
+    const recordingDrafts = drafts();
+    const { route } = setup({ recordingDrafts });
+    expect(await route({ type: "recording.draft", draft: input }, sender)).toEqual(
+      failure("forbidden_sender"),
+    );
+    expect(recordingDrafts.submit).not.toHaveBeenCalled();
+  });
+
+  it.each([{ siteId: WORKSPACE_ID }, { pageUrl: "https://other.test/pricing" }])(
+    "rejects wrong site or origin %j",
+    async (override) => {
+      const recordingDrafts = drafts();
+      const { route } = setup({ recordingDrafts });
+      expect(
+        await route(
+          { type: "recording.draft", draft: { ...input, ...override } },
+          { ...CONTENT, frameId: 0 },
+        ),
+      ).toEqual(failure("forbidden"));
+      expect(recordingDrafts.submit).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects disabled sites and forged trusted fields", async () => {
+    const { route } = setup({ enabled: false });
+    expect(
+      await route({ type: "recording.draft", draft: input }, { ...CONTENT, frameId: 0 }),
+    ).toEqual(failure("forbidden"));
+    for (const field of ["tabId", "userId", "workspaceId", "attachRecording"]) {
+      expect(
+        await setup().route(
+          { type: "recording.draft", draft: { ...input, [field]: true } },
+          { ...CONTENT, frameId: 0 },
+        ),
+      ).toEqual(failure("invalid_request"));
+    }
+  });
+
+  it("uses the real prepare and guards legacy starts through the same coordinator", async () => {
+    const recordingDrafts = drafts();
+    const { route, recordings } = setup({ recordingDrafts });
+    expect(await route({ type: "recording.prepare", tabId: 4 }, POPUP)).toEqual(success(null));
+    expect(recordingDrafts.prepare).toHaveBeenCalledExactlyOnceWith(4);
+    await route({ type: "recording.start", tabId: 4, streamId: "x" }, POPUP);
+    expect(recordingDrafts.start).toHaveBeenCalledExactlyOnceWith({
+      type: "recording.start",
+      tabId: 4,
+      streamId: "x",
+    });
+    expect(recordings.start).not.toHaveBeenCalled();
   });
 });
 
@@ -391,6 +495,71 @@ describe("createMessageRouter preferences", () => {
     expect(
       await route({ type: "preferences.set", siteId: SITE_ID, showResolved: true }, CONTENT),
     ).toEqual(failure("unknown"));
+  });
+});
+
+describe("createMessageRouter recording placement and preparation", () => {
+  it("reads the stored placement from popup and content script", async () => {
+    const { route, recordingPlacement } = setup({ enabled: false });
+    recordingPlacement.load.mockResolvedValue("end");
+    for (const sender of [POPUP, CONTENT]) {
+      expect(await route({ type: "preferences.getRecordingPlacement" }, sender)).toEqual(
+        success("end"),
+      );
+    }
+    expect(recordingPlacement.load).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["start", "end"])("saves %s from a popup", async (placement) => {
+    const { route, recordingPlacement } = setup();
+    expect(await route({ type: "preferences.setRecordingPlacement", placement }, POPUP)).toEqual(
+      success(null),
+    );
+    expect(recordingPlacement.save).toHaveBeenCalledExactlyOnceWith(placement);
+  });
+
+  it("rejects writes from content scripts and invalid placement values", async () => {
+    const { route, recordingPlacement } = setup();
+    expect(
+      await route({ type: "preferences.setRecordingPlacement", placement: "end" }, CONTENT),
+    ).toEqual(failure("forbidden_sender"));
+    expect(
+      await route({ type: "preferences.setRecordingPlacement", placement: "left" }, POPUP),
+    ).toEqual(failure("invalid_request"));
+    expect(recordingPlacement.save).not.toHaveBeenCalled();
+  });
+
+  it("returns explicit failures for storage read and write errors", async () => {
+    const { route, recordingPlacement } = setup();
+    recordingPlacement.load.mockRejectedValueOnce(new Error("unavailable"));
+    recordingPlacement.save.mockRejectedValueOnce(new Error("quota"));
+    expect(await route({ type: "preferences.getRecordingPlacement" }, POPUP)).toEqual(
+      failure("unknown"),
+    );
+    expect(
+      await route({ type: "preferences.setRecordingPlacement", placement: "start" }, POPUP),
+    ).toEqual(failure("unknown"));
+  });
+
+  it("stubs prepare for extension pages without starting recording", async () => {
+    const { route, recordings } = setup();
+    expect(await route({ type: "recording.prepare", tabId: 7 }, POPUP)).toEqual(
+      failure("recording_failed"),
+    );
+    expect(recordings.start).not.toHaveBeenCalled();
+    expect(recordings.status).not.toHaveBeenCalled();
+  });
+
+  it("rejects prepare from content scripts and invalid tab ids", async () => {
+    const { route, recordings, onWake } = setup();
+    expect(await route({ type: "recording.prepare", tabId: 7 }, CONTENT)).toEqual(
+      failure("forbidden_sender"),
+    );
+    expect(await route({ type: "recording.prepare", tabId: -1 }, POPUP)).toEqual(
+      failure("invalid_request"),
+    );
+    expect(onWake).not.toHaveBeenCalled();
+    expect(recordings.start).not.toHaveBeenCalled();
   });
 });
 

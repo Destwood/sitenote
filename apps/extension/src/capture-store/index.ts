@@ -24,6 +24,7 @@ export interface CaptureStore {
   add: (image: CapturedImage) => string;
   get: (id: string) => StoredCapture | null;
   remove: (id: string) => void;
+  restore: (id: string, capture: StoredCapture) => void;
 }
 
 export function createCaptureStore(options: CaptureStoreOptions = {}): CaptureStore {
@@ -43,6 +44,9 @@ export function createCaptureStore(options: CaptureStoreOptions = {}): CaptureSt
   }
 
   return {
+    restore: (id, capture) => {
+      entries.set(id, { ...capture, at: now() });
+    },
     add: (image) => {
       prune();
       const id = newId();

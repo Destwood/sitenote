@@ -11,6 +11,7 @@ export function createExtensionBackend(): WidgetBackend {
     listThreads: (siteId, pageUrl) => sendMessage({ type: "threads.list", siteId, pageUrl }),
     listSiteThreads: (siteId) => sendMessage({ type: "threads.listSite", siteId }),
     createThread: (input) => sendMessage({ type: "threads.create", ...input }),
+    submitRecordingDraft: (draft) => sendMessage({ type: "recording.draft", draft }),
     setStatus: (threadId, status) => sendMessage({ type: "threads.setStatus", threadId, status }),
     createComment: (input) => sendMessage({ type: "comments.create", ...input }),
     updateComment: (input) => sendMessage({ type: "comments.update", ...input }),

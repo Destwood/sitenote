@@ -49,6 +49,15 @@ describe("extensionOf", () => {
 });
 
 describe("createScreenshotUploader", () => {
+  it("uses an internal fixed thread id for the screenshot path", async () => {
+    const { uploader, captureId, upload } = setup();
+    const id = "30000000-0000-4000-8000-000000000002";
+    expect(await uploader.attach(captureId, WORKSPACE_ID, id)).toEqual({
+      threadId: id,
+      path: `${WORKSPACE_ID}/${id}.webp`,
+    });
+    expect(upload.mock.calls[0]?.[0]).toBe(`${WORKSPACE_ID}/${id}.webp`);
+  });
   it("uploads the blob under the workspace folder without upsert and returns the path", async () => {
     const { uploader, upload, from, captureId, store } = setup();
 

@@ -25,6 +25,9 @@ import { createNotificationCenter } from "../notification-center";
 import { createPendingEnable } from "../pending-enable";
 import { createChannelFactory, createNotificationChannelFactory } from "../realtime-channels";
 import { createRealtimeHub } from "../realtime-hub";
+import { createRecordingPreference } from "../recording-preference";
+import { createRecordingDraftStore } from "../recording-draft-store";
+import { createRecordingDraftService } from "../recording-draft-service";
 import { createRecordingUploader } from "../recording-upload";
 import { createRecordingService, RECORDING_BADGE_COLOR } from "../recording-service";
 import { RECORDING_MAX_MS, RECORDING_STOP_BYTES } from "../recording-store";
@@ -105,6 +108,7 @@ export function startBackground(): void {
   });
 
   const recordings = createRecordingService({
+    onDraftFinished: (finished) => recordingDrafts.onFinished(finished),
     tabs: {
       get: async (tabId) => {
         try {
@@ -163,6 +167,33 @@ export function startBackground(): void {
       }
     },
     wait: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  });
+  const recordingDrafts = createRecordingDraftService({
+    store: createRecordingDraftStore(browser.storage.session),
+    captures,
+    auth: service,
+    data,
+    recordings,
+    getTab: async (tabId) => {
+      try {
+        return await browser.tabs.get(tabId);
+      } catch {
+        return null;
+      }
+    },
+    getEnabledSite: store.get,
+    isRecording: async () => {
+      if (!(await browser.offscreen.hasDocument())) {
+        return false;
+      }
+      const status = await sendToOffscreen({ type: "offscreen.query" });
+      if (!status.ok) {
+        throw new Error(status.error.message);
+      }
+      return status.data.state === "recording";
+    },
+    getMediaStreamId: (tabId) => browser.tabCapture.getMediaStreamId({ targetTabId: tabId }),
+    sendToTab: (tabId, message) => browser.tabs.sendMessage(tabId, message, { frameId: 0 }),
   });
   const replay = createReplayProgress(browser.storage.session);
   const hub = createRealtimeHub({
@@ -255,8 +286,10 @@ export function startBackground(): void {
     screenshots,
     recordings,
     replay,
+    recordingDrafts,
     preferences: createResolvedPreference(browser.storage.local),
     selectionPlacement: createSelectionPlacementPreference(browser.storage.local),
+    recordingPlacement: createRecordingPreference(browser.storage.local),
     getEnabledSite: store.get,
     onWake: keepSessionFresh,
     handleTestMessage: hooks?.handle,
@@ -289,6 +322,7 @@ export function startBackground(): void {
     }
   });
   browser.tabs.onRemoved.addListener((tabId) => {
+    ignoreFailure(recordingDrafts.onTabRemoved(tabId));
     recordings.onTabRemoved(tabId);
     ignoreFailure(replay.clear(tabId));
   });

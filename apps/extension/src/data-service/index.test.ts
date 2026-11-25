@@ -680,6 +680,63 @@ describe("thread shares", () => {
 });
 
 describe("createThread", () => {
+  const draftOptions = {
+    threadId: THREAD_ID,
+    expectedUserId: USER_ID,
+    expectedWorkspaceId: WORKSPACE_ID,
+    startUrl: `${PAGE_URL}?start=1`,
+  };
+  it("uses a fixed draft id for screenshot, video and RPC with persisted startUrl", async () => {
+    const { service, screenshots, recordings, queries } = setup(
+      { "rpc:create_thread": [ok({ id: THREAD_ID })], threads: [ok(threadRow())] },
+      {
+        attach: () => Promise.resolve({ threadId: OTHER_ID, path: "screenshot.png" }),
+        recordAttach: () => Promise.resolve(RECORDING),
+      },
+    );
+    await service.createThread(
+      { ...REQUEST, captureId: CAPTURE_ID, attachRecording: true, startsSignedOut: true },
+      { tabId: 4 },
+      draftOptions,
+    );
+    expect(screenshots.attach).toHaveBeenCalledExactlyOnceWith(CAPTURE_ID, WORKSPACE_ID, THREAD_ID);
+    expect(recordings.attach).toHaveBeenCalledExactlyOnceWith(4, WORKSPACE_ID, THREAD_ID);
+    expect(callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0]).toMatchObject({
+      p_id: THREAD_ID,
+      p_screenshot_path: "screenshot.png",
+      p_context: {
+        recording: { ...RECORDING, startUrl: draftOptions.startUrl, startsSignedOut: true },
+      },
+    });
+  });
+
+  it("always sends the fixed draft id even when both attachments are absent", async () => {
+    const { service, queries } = setup({
+      "rpc:create_thread": [ok({ id: THREAD_ID })],
+      threads: [ok(threadRow())],
+    });
+    await service.createThread(REQUEST, { tabId: 4 }, draftOptions);
+    expect(callsOf(queries, "rpc:create_thread")[0]?.[0]?.args[0]).toMatchObject({
+      p_id: THREAD_ID,
+    });
+  });
+
+  it.each([{ expectedUserId: OTHER_ID }, { expectedWorkspaceId: OTHER_ID }])(
+    "checks draft identity before uploads %j",
+    async (override) => {
+      const { service, queries, screenshots, recordings } = setup({});
+      expect(
+        await service.createThread(
+          { ...REQUEST, captureId: CAPTURE_ID, attachRecording: true },
+          { tabId: 4 },
+          { ...draftOptions, ...override },
+        ),
+      ).toEqual(failure("forbidden"));
+      expect(queries).toEqual([]);
+      expect(screenshots.attach).not.toHaveBeenCalled();
+      expect(recordings.attach).not.toHaveBeenCalled();
+    },
+  );
   const REQUEST: Extract<DataRequest, { type: "threads.create" }> = {
     type: "threads.create",
     siteId: SITE_ID,

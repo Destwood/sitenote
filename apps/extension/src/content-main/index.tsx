@@ -138,6 +138,10 @@ export async function startContentScript(ctx: ContentScriptContext, css: string)
         recordingPill.hide();
       },
       attach: () => (widget.attachRecording() ? success(null) : failure("page_unavailable")),
+      commentFirst: () =>
+        widget.beginRecordingComment() ? success(null) : failure("page_unavailable"),
+      threadCreated: widget.recordingThreadCreated,
+      threadFailed: widget.recordingThreadFailed,
     },
     steps: stepRecorder,
   });

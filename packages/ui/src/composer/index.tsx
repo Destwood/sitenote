@@ -7,6 +7,7 @@ import {
   useState,
   type ChangeEvent,
   type KeyboardEvent,
+  type ReactNode,
   type SubmitEvent as FormSubmitEvent,
   type SyntheticEvent,
 } from "react";
@@ -48,6 +49,7 @@ export interface ComposerProps {
   error?: string | undefined;
   mentionCandidates?: readonly PersonView[] | undefined;
   startsSignedOutOption?: boolean | undefined;
+  extraAction?: ReactNode;
   onSubmit: (submission: ComposerSubmission) => Promise<void>;
   onCancel?: (() => void) | undefined;
 }
@@ -62,6 +64,7 @@ export function Composer({
   error,
   mentionCandidates,
   startsSignedOutOption = false,
+  extraAction,
   onSubmit,
   onCancel,
 }: ComposerProps) {
@@ -333,6 +336,7 @@ export function Composer({
           )}
         </span>
         <span className="flex shrink-0 items-center gap-2">
+          {extraAction}
           {onCancel === undefined ? null : (
             <button type="button" onClick={onCancel} disabled={busy} className={SECONDARY_BUTTON}>
               Cancel

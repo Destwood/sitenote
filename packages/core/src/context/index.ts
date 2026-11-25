@@ -28,7 +28,7 @@ const shortText = z.string().check(z.maxLength(CONTEXT_NAME_MAX));
 
 export const recordingStepSchema = z.object({
   t: nonNegativeInteger,
-  kind: z.enum(["click", "input", "submit", "navigate"]),
+  kind: z.enum(["click", "input", "submit", "navigate", "back", "forward", "reload"]),
   selector: z.string().check(z.maxLength(STEP_SELECTOR_MAX)),
   label: z.string().check(z.maxLength(STEP_LABEL_MAX)),
   url: z.optional(z.string().check(z.maxLength(STEP_URL_MAX))),

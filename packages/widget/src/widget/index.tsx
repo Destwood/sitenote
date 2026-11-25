@@ -26,6 +26,9 @@ export interface Widget {
   toggleCommentMode: ContentController["toggleCommentMode"];
   enterCommentMode: ContentController["enterCommentMode"];
   attachRecording: ContentController["attachRecording"];
+  beginRecordingComment: ContentController["beginRecordingComment"];
+  recordingThreadCreated: ContentController["recordingThreadCreated"];
+  recordingThreadFailed: ContentController["recordingThreadFailed"];
   commentOnContextTarget: ContentController["commentOnContextTarget"];
   selectThread: ContentController["selectThread"];
   openThread: ContentController["openThread"];
@@ -101,6 +104,9 @@ export function createWidget({ backend, document, window, webUrl }: WidgetOption
     toggleCommentMode: controller.toggleCommentMode,
     enterCommentMode: controller.enterCommentMode,
     attachRecording: controller.attachRecording,
+    beginRecordingComment: controller.beginRecordingComment,
+    recordingThreadCreated: controller.recordingThreadCreated,
+    recordingThreadFailed: controller.recordingThreadFailed,
     commentOnContextTarget: controller.commentOnContextTarget,
     selectThread: controller.selectThread,
     openThread: controller.openThread,

@@ -34,6 +34,7 @@ export interface ThreadPanelProps {
   screenshot?: ScreenshotState | undefined;
   recording?: ScreenshotState | undefined;
   recordingAttached?: boolean | undefined;
+  recordingPlanned?: boolean | undefined;
   clickUp?: ClickUpTaskState | undefined;
   jira?: JiraIssueState | undefined;
   share?: ThreadShareControl | undefined;
@@ -64,6 +65,7 @@ export function ThreadPanel({
   screenshot,
   recording,
   recordingAttached,
+  recordingPlanned,
   clickUp,
   jira,
   share,
@@ -201,11 +203,6 @@ export function ThreadPanel({
           </button>
         )}
         {thread !== null && share !== undefined ? <ShareControl {...share} /> : null}
-        {thread !== null && canChangeStatus ? (
-          <button type="button" onClick={onToggleStatus} className={SECONDARY_BUTTON}>
-            {resolved ? "Reopen" : "Resolve"}
-          </button>
-        ) : null}
         <button type="button" aria-label="Close thread" onClick={onClose} className={ICON_BUTTON}>
           <span aria-hidden="true">×</span>
         </button>
@@ -251,7 +248,14 @@ export function ThreadPanel({
           autoFocus
           error={error}
           mentionCandidates={mentionCandidates}
-          startsSignedOutOption={isNew && recordingAttached === true}
+          startsSignedOutOption={isNew && (recordingAttached === true || recordingPlanned === true)}
+          extraAction={
+            thread !== null && canChangeStatus ? (
+              <button type="button" onClick={onToggleStatus} className={SECONDARY_BUTTON}>
+                {resolved ? "Reopen" : "Resolve"}
+              </button>
+            ) : null
+          }
           onSubmit={onSubmit}
           onCancel={isNew ? onClose : undefined}
         />

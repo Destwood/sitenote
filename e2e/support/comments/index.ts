@@ -68,7 +68,7 @@ export async function openInSecondContext(
 }
 
 export async function enterCommentMode({ page, popup }: ReviewSession): Promise<void> {
-  await popup.getByRole("button", { name: "Comment mode" }).click();
+  await popup.getByRole("button", { name: /^Comment Alt\+Shift\+C$/ }).click();
   await expect(hostOf(page)).toHaveAttribute("data-comment-mode", "on");
   await expect(page.getByRole("status").filter({ hasText: "Comment mode:" })).toBeVisible();
 }

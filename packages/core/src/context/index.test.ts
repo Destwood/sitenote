@@ -640,6 +640,12 @@ describe("withRecording", () => {
 });
 
 describe("recording steps", () => {
+  it.each(["back", "forward", "reload"])("accepts a %s step", (kind) => {
+    expect(recordingStepSchema.safeParse({ t: 0, kind, selector: "", label: "" }).success).toBe(
+      true,
+    );
+  });
+
   it("accepts a recording with and without steps", () => {
     expect(
       threadContextSchema.safeParse(context({ recording: { ...RECORDING, steps: [STEP] } }))

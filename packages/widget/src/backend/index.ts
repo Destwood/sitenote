@@ -57,6 +57,18 @@ export interface CreateCommentInput {
   mentions: string[];
 }
 
+export type RecordingDraftInput = Omit<
+  CreateThreadInput,
+  "attachRecording" | "captureId" | "startsSignedOut"
+> & {
+  draftId: string;
+  captureId?: string | undefined;
+  startsSignedOut?: boolean | undefined;
+};
+
+export type RecordingDraftOutcome =
+  { state: "recording"; draftId: string } | { state: "posted"; thread: ThreadRecord };
+
 export interface UpdateCommentInput {
   commentId: string;
   body: string;
@@ -67,6 +79,9 @@ export interface WidgetBackend {
   listThreads: (siteId: string, pageUrl: string) => Promise<MessageResult<ThreadRecord[]>>;
   listSiteThreads?: (siteId: string) => Promise<MessageResult<ThreadRecord[]>>;
   createThread: (input: CreateThreadInput) => Promise<MessageResult<ThreadRecord>>;
+  submitRecordingDraft?: (
+    input: RecordingDraftInput,
+  ) => Promise<MessageResult<RecordingDraftOutcome>>;
   setStatus: (threadId: string, status: ThreadStatus) => Promise<MessageResult<ThreadRecord>>;
   createComment: (input: CreateCommentInput) => Promise<MessageResult<CommentRecord>>;
   updateComment: (input: UpdateCommentInput) => Promise<MessageResult<CommentRecord>>;

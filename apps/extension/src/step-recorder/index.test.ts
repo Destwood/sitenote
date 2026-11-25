@@ -73,6 +73,115 @@ afterEach(() => {
 });
 
 describe("createStepRecorder", () => {
+  it.each([
+    ['<a href="/user/a"><span>Anna Trainer</span></a>', "/user/a"],
+    ['<a href="/user/a?tab=info#bio"><span>Anna Trainer</span></a>', "/user/a?tab=info#bio"],
+    ['<a href="https://elsewhere.test/user/a"><span>Anna Trainer</span></a>', undefined],
+    ['<a href="javascript:void(0)"><span>Anna Trainer</span></a>', undefined],
+    ['<a href="#bio"><span>Anna Trainer</span></a>', undefined],
+    ['<a href="mailto:anna@example.test"><span>Anna Trainer</span></a>', undefined],
+    ['<a href="tel:123"><span>Anna Trainer</span></a>', undefined],
+    ["<button><span>Anna Trainer</span></button>", undefined],
+  ])("records only same-origin link destinations from %s", (html, url) => {
+    mount(html);
+    makeRecorder().start(START);
+    const target = el("span");
+    target.addEventListener("click", (event) => {
+      event.preventDefault();
+    });
+    target.dispatchEvent(
+      trusted(new MouseEvent("click", { bubbles: true, composed: true, cancelable: true })),
+    );
+    expect(sent()).toHaveLength(1);
+    expect(sent()[0]).toMatchObject({ kind: "click", label: "Anna Trainer" });
+    if (url === undefined) {
+      expect(sent()[0]).not.toHaveProperty("url");
+    } else {
+      expect(sent()[0]?.url).toBe(url);
+    }
+    const steps = sent();
+    expect(core.stepsToPlaywright(window.location.href, steps)).toBe(
+      core.stepsToPlaywright(
+        window.location.href,
+        steps.map((step) => ({
+          t: step.t,
+          kind: step.kind,
+          selector: step.selector,
+          label: step.label,
+        })),
+      ),
+    );
+  });
+
+  it("records toolbar actions synchronously and keeps polling after a restart", () => {
+    const navigation = Object.assign(new EventTarget(), { currentEntry: { index: 2 } });
+    Object.defineProperty(window, "navigation", { value: navigation, configurable: true });
+    const recorder = makeRecorder();
+    const navigate = (navigationType: string, index: number, userInitiated = true): void => {
+      navigation.dispatchEvent(
+        Object.assign(new Event("navigate"), {
+          userInitiated,
+          navigationType,
+          destination: { index },
+        }),
+      );
+    };
+    try {
+      recorder.start(START);
+      vi.advanceTimersByTime(100);
+      navigate("reload", 2);
+      navigate("traverse", 1);
+      navigate("traverse", 3);
+      expect(sent()).toEqual([
+        { t: 100, kind: "reload", selector: "", label: "" },
+        { t: 100, kind: "back", selector: "", label: "" },
+        { t: 100, kind: "forward", selector: "", label: "" },
+      ]);
+      navigate("reload", 2, false);
+      navigate("traverse", 1, false);
+      navigate("traverse", 3, false);
+      navigate("push", 3);
+      navigate("replace", 2);
+      navigate("traverse", 2);
+      expect(sent()).toHaveLength(3);
+      history.pushState(null, "", "/previous");
+      vi.advanceTimersByTime(500);
+      expect(sent().at(-1)).toEqual({
+        t: 500,
+        kind: "navigate",
+        selector: "",
+        label: "",
+        url: "/previous",
+      });
+      recorder.stop();
+      navigate("reload", 2);
+      expect(sent()).toHaveLength(4);
+      recorder.start(START, { announceNavigation: true });
+      expect(sent().at(-1)).toEqual({
+        t: 600,
+        kind: "navigate",
+        selector: "",
+        label: "",
+        url: "/previous",
+      });
+      navigate("reload", 2);
+      expect(sent()).toHaveLength(6);
+    } finally {
+      recorder.stop();
+      Reflect.deleteProperty(window, "navigation");
+    }
+  });
+
+  it("starts and stops without the Navigation API", () => {
+    expect(Reflect.get(window, "navigation")).toBeUndefined();
+    const recorder = makeRecorder();
+    recorder.start(START);
+    expect(recorder.active()).toBe(true);
+    recorder.stop();
+    expect(recorder.active()).toBe(false);
+    expect(sent()).toEqual([]);
+  });
+
   it("records a click on a button nested in spans with the button's label and selector", () => {
     mount('<button class="primary"><span><span>Save draft</span></span></button>');
     const recorder = makeRecorder();

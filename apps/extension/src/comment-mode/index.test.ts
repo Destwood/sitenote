@@ -59,6 +59,66 @@ function listenerWith(
 }
 
 describe("createToggleListener", () => {
+  it("passes parsed thread-created results to the widget", () => {
+    const recording = { ...recordingControls(), threadCreated: vi.fn() };
+    const thread = {
+      id: OPEN_THREAD.threadId,
+      siteId: OPEN_THREAD.threadId,
+      pageUrl: "https://example.test",
+      status: "open",
+      anchor: null,
+      context: null,
+      author: { id: "u", displayName: "Me", avatarUrl: null },
+      createdAt: "2026-11-16T10:00:00.000Z",
+      hasScreenshot: false,
+      comments: [],
+    };
+    const listener = listenerWith(undefined, undefined, undefined, undefined, undefined, recording);
+    const message = {
+      type: "recording.threadCreated",
+      draftId: OPEN_THREAD.threadId,
+      thread,
+    };
+    const respond = vi.fn();
+    listener(message, { id: EXTENSION_ID }, respond);
+    listener(message, { id: "foreign" }, vi.fn());
+    listener(message, { id: EXTENSION_ID, tab: {} }, vi.fn());
+    expect(recording.threadCreated).toHaveBeenCalledExactlyOnceWith(thread, true);
+    expect(respond).toHaveBeenCalledExactlyOnceWith(success(null));
+  });
+  it("enters comment-first without showing the recording pill or starting steps", () => {
+    const recording = { ...recordingControls(), commentFirst: vi.fn(() => success(null)) };
+    const steps = stepControls();
+    const respond = vi.fn();
+    listenerWith(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      recording,
+      steps,
+    )({ type: "recording.commentFirst" }, { id: EXTENSION_ID }, respond);
+    expect(recording.commentFirst).toHaveBeenCalledTimes(1);
+    expect(respond).toHaveBeenCalledWith(success(null));
+    expect(recording.show).not.toHaveBeenCalled();
+    expect(steps.start).not.toHaveBeenCalled();
+  });
+
+  it("parses final failures and rejects page or foreign senders", () => {
+    const recording = { ...recordingControls(), threadFailed: vi.fn() };
+    const listener = listenerWith(undefined, undefined, undefined, undefined, undefined, recording);
+    const message = {
+      type: "recording.threadFailed",
+      draftId: OPEN_THREAD.threadId,
+      message: "Network error",
+    };
+    listener(message, { id: EXTENSION_ID }, vi.fn());
+    listener(message, { id: "foreign" }, vi.fn());
+    listener(message, { id: EXTENSION_ID, tab: {} }, vi.fn());
+    listener({ ...message, message: 1 }, { id: EXTENSION_ID }, vi.fn());
+    expect(recording.threadFailed).toHaveBeenCalledExactlyOnceWith("Network error");
+  });
   it("answers a toggle from the extension with the new state", () => {
     const toggle = vi.fn(() => success({ active: true }));
     const respond = vi.fn();

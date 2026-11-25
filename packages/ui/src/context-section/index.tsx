@@ -187,6 +187,9 @@ const STEP_KIND_LABELS: Readonly<Record<RecordedAction["kind"], string>> = {
   click: "Click",
   input: "Field changed",
   submit: "Form submitted",
+  back: "Back",
+  forward: "Forward",
+  reload: "Reload",
 };
 
 const COPY_LABELS = {
@@ -394,7 +397,7 @@ interface ConsoleErrorsProps {
 
 function ConsoleErrors({ records }: ConsoleErrorsProps) {
   if (records.length === 0) {
-    return <p className="text-neutral-600">No console errors.</p>;
+    return null;
   }
   return (
     <details className="rounded-md border border-neutral-200">
@@ -457,14 +460,33 @@ interface DetailsProps {
   context: ThreadContext;
 }
 
-function NetworkLog({ records }: NetworkErrorsProps) {
-  if (records.length === 0) {
+function NetworkLog({
+  networkLog,
+  consoleErrors,
+}: Pick<ThreadContext, "networkLog" | "consoleErrors">) {
+  if (networkLog === undefined && consoleErrors.length === 0) {
     return null;
+  }
+  const records = networkLog ?? [];
+  const heading = (
+    <>
+      <span>Network ({records.length})</span>
+      <span
+        className={`float-right ml-2 ${consoleErrors.length === 0 ? "text-neutral-600" : "text-red-900"}`}
+      >
+        {consoleErrors.length} {consoleErrors.length === 1 ? "error" : "errors"}
+      </span>
+    </>
+  );
+  if (records.length === 0) {
+    return (
+      <div className="rounded-md border border-neutral-200 px-2 py-1 font-medium">{heading}</div>
+    );
   }
   return (
     <details className="rounded-md border border-neutral-200">
       <summary className={`cursor-pointer rounded-md px-2 py-1 font-medium ${FOCUS_RING}`}>
-        Network ({records.length})
+        {heading}
       </summary>
       <ul className="max-h-60 overflow-y-auto border-t border-neutral-200">
         {records.map((record, index) => (
@@ -548,7 +570,7 @@ function Details({ context }: DetailsProps) {
         <dd className="break-words">{context.pageTitle === "" ? "Untitled" : context.pageTitle}</dd>
       </dl>
       <Environment environment={context.environment} />
-      <NetworkLog records={context.networkLog ?? []} />
+      <NetworkLog networkLog={context.networkLog} consoleErrors={context.consoleErrors} />
       <NetworkErrors records={context.networkErrors ?? []} />
       <ConsoleErrors records={context.consoleErrors} />
     </>

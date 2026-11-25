@@ -52,6 +52,12 @@ const UNIQUE_VIOLATION = "23505";
 const functionErrorSchema = z.object({ error: z.object({ code: z.string() }) });
 
 export const MEMBERS_CACHE_TTL_MS = 60_000;
+export interface DraftCreateOptions {
+  threadId: string;
+  expectedUserId: string;
+  expectedWorkspaceId: string;
+  startUrl?: string;
+}
 export const SIGNED_URL_TTL_SECONDS = 3600;
 export const SIGNED_URL_REFRESH_MARGIN_MS = 5 * 60 * 1000;
 export const EXCERPT_LENGTH = 140;
@@ -151,6 +157,7 @@ export interface DataService {
   createThread: (
     request: Handled<"threads.create">,
     sender?: { tabId?: number | undefined },
+    draftOptions?: DraftCreateOptions,
   ) => Promise<MessageResult<ThreadRecord>>;
   screenshotUrl: (
     request: Handled<"threads.screenshotUrl">,
@@ -448,19 +455,33 @@ export function createDataService(deps: DataServiceDeps): DataService {
         attachRecording,
       },
       sender,
+      draftOptions,
     ) =>
-      guarded(async () => {
+      guarded(async (userId) => {
         const origin = parsePageUrl(pageUrl)?.site;
         const enabled = origin === undefined ? null : await deps.getEnabledSite(origin);
         if (enabled?.siteId !== siteId) {
+          return failure("forbidden");
+        }
+        if (
+          draftOptions !== undefined &&
+          (draftOptions.expectedUserId !== userId ||
+            draftOptions.expectedWorkspaceId !== enabled.workspaceId)
+        ) {
           return failure("forbidden");
         }
         const fitted = fitThreadContext(context);
         const attachment =
           captureId === undefined
             ? null
-            : await deps.screenshots.attach(captureId, enabled.workspaceId);
-        const threadId = attachment?.threadId ?? crypto.randomUUID();
+            : draftOptions === undefined
+              ? await deps.screenshots.attach(captureId, enabled.workspaceId)
+              : await deps.screenshots.attach(
+                  captureId,
+                  enabled.workspaceId,
+                  draftOptions.threadId,
+                );
+        const threadId = draftOptions?.threadId ?? attachment?.threadId ?? crypto.randomUUID();
         const tabId = sender?.tabId;
         const recording =
           tabId === undefined || attachRecording !== true
@@ -471,6 +492,9 @@ export function createDataService(deps: DataServiceDeps): DataService {
             ? fitted
             : withRecording(fitted, {
                 ...recording,
+                ...(draftOptions?.startUrl === undefined
+                  ? {}
+                  : { startUrl: draftOptions.startUrl }),
                 ...(startsSignedOut === true ? { startsSignedOut: true } : {}),
               });
         const created = await client.rpc("create_thread", {
@@ -480,7 +504,9 @@ export function createDataService(deps: DataServiceDeps): DataService {
           p_context: enabled.captureErrors ? stored : withoutConsoleErrors(stored),
           p_body: body,
           p_mentions: mentions,
-          ...(attachment === null && recording === null ? {} : { p_id: threadId }),
+          ...(draftOptions === undefined && attachment === null && recording === null
+            ? {}
+            : { p_id: threadId }),
           ...(attachment?.path == null ? {} : { p_screenshot_path: attachment.path }),
         });
         if (created.error !== null) {

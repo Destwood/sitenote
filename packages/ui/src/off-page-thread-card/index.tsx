@@ -7,6 +7,7 @@ import { ICON_BUTTON, PANEL_SURFACE, SECONDARY_BUTTON } from "../control-classes
 import { useNow } from "../now";
 import { ReplayButton } from "../replay-button";
 import { RouteLabel } from "../route-label";
+import { ShareControl, type ThreadShareControl } from "../share-control";
 import { ThreadTypeBadge } from "../thread-type-badge";
 import type { SiteThreadItem, ThreadView } from "../types";
 import { Z_INDEX } from "../z-index";
@@ -15,6 +16,7 @@ export interface OffPageThreadCardProps {
   item: SiteThreadItem;
   thread?: ThreadView | undefined;
   sidebarOpen: boolean;
+  share?: ThreadShareControl | undefined;
   onReproduce: (mode: ReplayMode) => void;
   onOpenPage: () => void;
   onToggleStatus: () => void;
@@ -27,6 +29,7 @@ export function OffPageThreadCard({
   item,
   thread,
   sidebarOpen,
+  share,
   onReproduce,
   onOpenPage,
   onToggleStatus,
@@ -35,6 +38,7 @@ export function OffPageThreadCard({
   onClose,
 }: OffPageThreadCardProps) {
   const now = useNow();
+  const resolved = item.status === "resolved";
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape" && !event.defaultPrevented) {
@@ -51,8 +55,15 @@ export function OffPageThreadCard({
       style={{ zIndex: Z_INDEX.panel }}
       className={`fixed top-20 flex max-h-[calc(100vh-112px)] w-[300px] max-w-[calc(100vw-32px)] flex-col gap-2 p-3 font-sans ${sidebarOpen ? "right-[336px]" : "right-4"} ${PANEL_SURFACE}`}
     >
-      <div className="flex shrink-0 items-center gap-2">
-        <h2 className="flex-1 text-sm font-semibold">Comment on another page</h2>
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <h2 className="text-sm font-semibold">Comment on another page</h2>
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-medium ${resolved ? "bg-neutral-200 text-neutral-800" : "bg-blue-100 text-blue-900"}`}
+        >
+          {resolved ? "Resolved" : "Open"}
+        </span>
+        <span className="flex-1" />
+        {share === undefined ? null : <ShareControl {...share} />}
         <button type="button" aria-label="Close" onClick={onClose} className={ICON_BUTTON}>
           <span aria-hidden="true">×</span>
         </button>
@@ -67,11 +78,6 @@ export function OffPageThreadCard({
           {item.authorName} · {item.replies} {item.replies === 1 ? "reply" : "replies"}
         </span>
         <ThreadTypeBadge video={item.hasRecording} />
-        {item.status === "resolved" ? (
-          <span className="rounded-full bg-neutral-200 px-2 py-0.5 font-medium text-neutral-800">
-            Resolved
-          </span>
-        ) : null}
       </p>
       {thread === undefined ? (
         <p className="line-clamp-3 break-words">{item.excerpt}</p>

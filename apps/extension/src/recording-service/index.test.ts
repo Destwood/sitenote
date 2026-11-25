@@ -93,6 +93,42 @@ function setup(
 }
 
 describe("createRecordingService start", () => {
+  it("suppresses ready when the draft hook handles Stop", async () => {
+    const { deps, pushes } = setup();
+    const hook = vi.fn().mockResolvedValue(true);
+    const service = createRecordingService({ ...deps, onDraftFinished: hook });
+    expect(await service.onFinished(FINISHED)).toEqual(success(null));
+    expect(hook).toHaveBeenCalledExactlyOnceWith(FINISHED);
+    expect(pushes.map((push) => push.message)).toEqual([
+      { type: "recording.state", recording: false },
+    ]);
+    expect(deps.badge.clear).toHaveBeenCalledWith(4);
+  });
+
+  it("keeps legacy ready when the hook finds no draft", async () => {
+    const { deps, pushes } = setup();
+    const service = createRecordingService({
+      ...deps,
+      onDraftFinished: () => Promise.resolve(false),
+    });
+    await service.onFinished(FINISHED);
+    expect(pushes.map((push) => push.message)).toContainEqual({
+      type: "recording.ready",
+      durationMs: FINISHED.durationMs,
+    });
+  });
+
+  it("does not turn a failed draft hook into a legacy ready event", async () => {
+    const { deps, pushes } = setup();
+    const service = createRecordingService({
+      ...deps,
+      onDraftFinished: () => Promise.reject(new Error("storage")),
+    });
+    expect(await service.onFinished(FINISHED)).toEqual(failure("recording_failed"));
+    expect(pushes.map((push) => push.message)).toEqual([
+      { type: "recording.state", recording: false },
+    ]);
+  });
   it("creates the offscreen document once under concurrent starts", async () => {
     const { service, deps } = setup();
 

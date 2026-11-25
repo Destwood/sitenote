@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { RecordingStep } from "../context";
-import { stepsToPlaywright } from ".";
+import { isRecordedAction, stepsToPlaywright } from ".";
 
 const START = "https://example.test/pricing?plan=pro";
 const HEADER = [
@@ -15,6 +15,16 @@ function statements(script: string): string[] {
 }
 
 describe("stepsToPlaywright", () => {
+  it.each([
+    ["back", "goBack"],
+    ["forward", "goForward"],
+    ["reload", "reload"],
+  ] as const)("exports %s without a locator or comment", (kind, method) => {
+    const step: RecordingStep = { t: 0, kind, selector: "", label: "" };
+    expect(isRecordedAction(step)).toBe(true);
+    expect(statements(stepsToPlaywright(START, [step]))).toEqual([`  await page.${method}();`]);
+  });
+
   it("writes a test that only opens the start page when there are no steps", () => {
     expect(stepsToPlaywright(START, [])).toBe(`${[...HEADER, "});"].join("\n")}\n`);
   });

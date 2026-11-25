@@ -61,6 +61,25 @@ beforeEach(() => {
 });
 
 describe("createExtensionBackend", () => {
+  it("sends a recording draft and parses the recording outcome", async () => {
+    const input = {
+      draftId: THREAD_ID,
+      siteId: SITE_ID,
+      pageUrl: PAGE,
+      anchor: ANCHOR,
+      context: CONTEXT,
+      body: "Hi",
+      mentions: [],
+      startsSignedOut: true,
+    };
+    const outcome = { ok: true, data: { state: "recording", draftId: THREAD_ID } };
+    mocks.sendMessage.mockResolvedValueOnce(outcome);
+    expect(await createExtensionBackend().submitRecordingDraft?.(input)).toEqual(outcome);
+    expect(mocks.sendMessage).toHaveBeenCalledExactlyOnceWith({
+      type: "recording.draft",
+      draft: input,
+    });
+  });
   it.each([
     [
       "getSiteInfo",

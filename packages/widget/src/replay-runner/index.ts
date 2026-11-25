@@ -1,5 +1,6 @@
 import {
   isRecordedAction,
+  SITENOTE_ROOT_TAG,
   STEP_URL_MAX,
   type RecordingStep,
   type ReplayMode,
@@ -43,14 +44,14 @@ export interface ReplayTiming {
 }
 
 export const DEFAULT_REPLAY_TIMING: ReplayTiming = {
-  elementTimeoutMs: 20_000,
+  elementTimeoutMs: 8_000,
   pollMs: 100,
-  settleQuietMs: 700,
-  settleMaxMs: 15_000,
+  settleQuietMs: 400,
+  settleMaxMs: 3_000,
   navigateTimeoutMs: 20_000,
   minPaceMs: 700,
   maxPaceMs: 3_000,
-  stableMaxMs: 2_000,
+  stableMaxMs: 1_000,
   progressTtlMs: 600_000,
 };
 
@@ -88,6 +89,7 @@ type Located = Element | true | Jump;
 
 const INPUT_MESSAGE = "Fill in this field yourself, then continue.";
 const ELEMENT_MISSING_MESSAGE = "Could not find this element on the page.";
+const LINK_MISSING_MESSAGE = "Could not find this element. Next opens the page it led to.";
 const NAVIGATE_MISSING_MESSAGE = "The page did not open as recorded.";
 const OFFSCREEN_MESSAGE =
   "This element is outside the visible area, for example in a slider. Next still clicks it.";
@@ -96,8 +98,21 @@ const INTERACTIVE_SELECTOR =
   "a,button,input,select,textarea,summary,label,[role=button],[role=link],[role=menuitem],[role=tab],[role=checkbox],[role=switch],[onclick]";
 
 function stepLabel(step: RecordingStep): string {
+  if (step.kind === "back") {
+    return "Go back";
+  }
+  if (step.kind === "forward") {
+    return "Go forward";
+  }
+  if (step.kind === "reload") {
+    return "Reload the page";
+  }
   const candidates = [step.kind === "navigate" ? step.url : undefined, step.label, step.selector];
   return candidates.find((text) => text !== undefined && text !== "") ?? "";
+}
+
+function isBrowserNavigation(kind: RecordingStep["kind"] | undefined): boolean {
+  return kind === "back" || kind === "forward" || kind === "reload";
 }
 
 function isAborted(signal: AbortSignal): boolean {
@@ -151,6 +166,7 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
   let threadId = "";
   let steps: RecordingStep[] = [];
   let index = 0;
+  let anchorRoute = "";
   let paused = false;
   let progressWrite = Promise.resolve();
 
@@ -269,7 +285,20 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
 
   function settle(signal: AbortSignal): Promise<void> {
     return new Promise((resolve) => {
-      const observer = new MutationObserver(restartQuiet);
+      const observer = new MutationObserver((mutations) => {
+        if (
+          mutations.some(({ target }) => {
+            for (let node: Node | null = target; node !== null; node = node.parentNode) {
+              if (node instanceof Element && node.localName === SITENOTE_ROOT_TAG) {
+                return false;
+              }
+            }
+            return true;
+          })
+        ) {
+          restartQuiet();
+        }
+      });
       const cap = win.setTimeout(finish, timing.settleMaxMs);
       const resourceObserver = observeResources(restartQuiet);
       const poll =
@@ -281,6 +310,7 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
         childList: true,
         subtree: true,
         attributes: true,
+        attributeFilter: ["href", "src", "hidden", "aria-busy", "disabled"],
         characterData: true,
       });
       function finish(): void {
@@ -377,26 +407,24 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
     );
   }
 
-  function findVisible(selector: string, label: string): Element | null {
-    let matches: NodeListOf<Element>;
-    try {
-      matches = doc.querySelectorAll(selector);
-    } catch {
-      return null;
-    }
-    const visible = Array.from(matches).filter(
-      (element) =>
-        element.getClientRects().length > 0 &&
-        win.getComputedStyle(element).visibility !== "hidden",
+  function normalize(text: string): string {
+    return text.trim().replace(/\s+/g, " ").toLowerCase();
+  }
+
+  function laidOut(element: Element): boolean {
+    return (
+      element.getClientRects().length > 0 && win.getComputedStyle(element).visibility !== "hidden"
     );
-    let best = visible[0] ?? null;
-    const normalize = (text: string): string => text.trim().replace(/\s+/g, " ").toLowerCase();
+  }
+
+  function bestMatch(elements: Element[], label: string, minimumScore = 0): Element | null {
+    let best = minimumScore === 0 ? (elements[0] ?? null) : null;
     const normalizedLabel = normalize(label);
-    if (visible.length <= 1 || normalizedLabel === "") {
+    if (normalizedLabel === "") {
       return best;
     }
-    let bestScore = 0;
-    for (const element of visible) {
+    let bestScore = minimumScore - 1;
+    for (const element of elements) {
       const text = normalize(
         (element instanceof HTMLElement ? element.innerText : "") || element.textContent || "",
       );
@@ -416,7 +444,46 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
     return best;
   }
 
+  function findVisible(selector: string, label: string): Element | null {
+    try {
+      return bestMatch(Array.from(doc.querySelectorAll(selector)).filter(laidOut), label);
+    } catch {
+      return null;
+    }
+  }
+
+  function findFallback(step: RecordingStep): Element | null {
+    if (step.url !== undefined) {
+      const links = Array.from(doc.querySelectorAll("a[href]")).filter((element) => {
+        const url = URL.parse(element.getAttribute("href") ?? "", doc.baseURI);
+        return (
+          laidOut(element) &&
+          url !== null &&
+          url.origin === win.location.origin &&
+          url.pathname + url.search + url.hash === step.url
+        );
+      });
+      const link = bestMatch(links, step.label);
+      if (link !== null) {
+        return link;
+      }
+    }
+    if (normalize(step.label).length < 3) {
+      return null;
+    }
+    const tag = step.selector
+      .trim()
+      .split(/[\s>+~]+/)
+      .at(-1)
+      ?.match(/^[a-z][\w-]*/i)?.[0];
+    const selector = tag === undefined ? INTERACTIVE_SELECTOR : `${INTERACTIVE_SELECTOR},${tag}`;
+    return bestMatch(Array.from(doc.querySelectorAll(selector)).filter(laidOut), step.label, 2);
+  }
+
   function reachedAhead(): { index: number; step: RecordingStep } | null {
+    if (win.location.pathname + win.location.search === anchorRoute) {
+      return null;
+    }
     for (let at = index + 1; at < steps.length; at += 1) {
       const candidate = steps[at];
       if (
@@ -434,7 +501,7 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
     if (step.kind === "navigate") {
       return routeReached(step.url) ? true : null;
     }
-    const element = findVisible(step.selector, step.label);
+    const element = findVisible(step.selector, step.label) ?? findFallback(step);
     if (element !== null) {
       return element;
     }
@@ -502,6 +569,7 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
     if (isAborted(signal)) {
       return;
     }
+    anchorRoute = win.location.pathname + win.location.search;
     if (waitForLoad) {
       await whenLoaded(signal);
       if (isAborted(signal)) {
@@ -519,16 +587,21 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
       }
       const label = stepLabel(step);
       const isNavigate = step.kind === "navigate";
+      const browserNavigation = isBrowserNavigation(step.kind);
       publish(signal, "waiting", isNavigate ? `Waiting for ${label || "the page"}` : label, null);
-      const found = await waitFor(
-        signal,
-        () => locate(step),
-        isNavigate ? timing.navigateTimeoutMs : timing.elementTimeoutMs,
-      );
+      const found = browserNavigation
+        ? null
+        : await waitFor(
+            signal,
+            () => locate(step),
+            isNavigate ? timing.navigateTimeoutMs : timing.elementTimeoutMs,
+          );
       if (isAborted(signal)) {
         return;
       }
-      if (found === null) {
+      const openLink =
+        found === null && !isNavigate && !browserNavigation && step.url !== undefined;
+      if (found === null && !browserNavigation && !openLink) {
         publish(
           signal,
           "missing",
@@ -549,7 +622,7 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
         index += 1;
         continue;
       }
-      if (!(found instanceof Element)) {
+      if (found !== null && !(found instanceof Element)) {
         index = found.jumpTo;
         publish(
           signal,
@@ -560,40 +633,45 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
         );
         continue;
       }
-      found.scrollIntoView({
-        block: "center",
-        inline: "center",
-        behavior: win.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-      });
-      await nextFrame();
-      if (isAborted(signal)) {
-        return;
-      }
-      await waitStable(signal, found);
-      if (isAborted(signal)) {
-        return;
-      }
-      if (step.kind === "input") {
-        publish(signal, "input", label, found, INPUT_MESSAGE);
-        if (found instanceof HTMLElement) {
-          found.focus({ preventScroll: true });
-        }
-        const action = await awaitAction(signal, ["next", "resume", "back"]);
-        if (action === null) {
+      if (found !== null) {
+        found.scrollIntoView({
+          block: "center",
+          inline: "center",
+          behavior: win.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        });
+        await nextFrame();
+        if (isAborted(signal)) {
           return;
         }
-        index = action === "back" ? Math.max(0, index - 1) : index + 1;
-        continue;
+        await waitStable(signal, found);
+        if (isAborted(signal)) {
+          return;
+        }
+        if (step.kind === "input") {
+          publish(signal, "input", label, found, INPUT_MESSAGE);
+          if (found instanceof HTMLElement) {
+            found.focus({ preventScroll: true });
+          }
+          const action = await awaitAction(signal, ["next", "resume", "back"]);
+          if (action === null) {
+            return;
+          }
+          index = action === "back" ? Math.max(0, index - 1) : index + 1;
+          continue;
+        }
       }
-      const rect = found.getBoundingClientRect();
+      const rect = found?.getBoundingClientRect();
       const message =
-        rect.right <= 0 ||
-        rect.bottom <= 0 ||
-        rect.left >= win.innerWidth ||
-        rect.top >= win.innerHeight
+        rect !== undefined &&
+        (rect.right <= 0 ||
+          rect.bottom <= 0 ||
+          rect.left >= win.innerWidth ||
+          rect.top >= win.innerHeight)
           ? OFFSCREEN_MESSAGE
-          : undefined;
-      if (mode === "step") {
+          : openLink
+            ? LINK_MISSING_MESSAGE
+            : undefined;
+      if (mode === "step" || openLink) {
         publish(signal, "ready", label, found, message);
         const action = await awaitAction(signal, ["next", "back"]);
         if (action === null) {
@@ -621,15 +699,25 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
       if (isAborted(signal)) {
         return;
       }
-      if (step.kind === "submit") {
+      if (openLink && step.url !== undefined) {
+        win.location.assign(new URL(step.url, win.location.href).href);
+        return;
+      } else if (step.kind === "back") {
+        win.history.back();
+      } else if (step.kind === "forward") {
+        win.history.forward();
+      } else if (step.kind === "reload") {
+        win.location.reload();
+      } else if (found !== null && step.kind === "submit") {
         performSubmit(found);
-      } else {
+      } else if (found !== null) {
         performClick(found);
       }
       await settle(signal);
       if (isAborted(signal)) {
         return;
       }
+      anchorRoute = win.location.pathname + win.location.search;
       index += 1;
     }
     if (isAborted(signal)) {
@@ -668,9 +756,12 @@ export function createReplayRunner(deps: ReplayRunnerDeps): ReplayRunner {
     if (saved === null || epoch !== before || saved.at + timing.progressTtlMs < now()) {
       return false;
     }
+    const previous = saved.steps[saved.nextIndex - 1];
     if (
       saved.nextIndex >= saved.steps.length ||
-      saved.steps[saved.nextIndex]?.kind !== "navigate"
+      (saved.steps[saved.nextIndex]?.kind !== "navigate" &&
+        !isBrowserNavigation(previous?.kind) &&
+        !(previous?.kind === "click" && previous.url !== undefined))
     ) {
       await writeProgress(() => store.clear());
       return false;

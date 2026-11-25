@@ -53,6 +53,7 @@ export interface RecordingServiceDeps {
   maxMs: number;
   stopBytes: number;
   recordings: ThreadRecordings;
+  onDraftFinished?: (finished: RecordingFinished) => Promise<boolean>;
 }
 
 type QueryCommand = Extract<OffscreenCommand, { type: "offscreen.query" }>;
@@ -183,6 +184,15 @@ export function createRecordingService(deps: RecordingServiceDeps): RecordingSer
       const { tabId } = finished;
       await quiet(deps.badge.clear(tabId));
       await quiet(deps.sendToTab(tabId, { type: "recording.state", recording: false }));
+      if (deps.onDraftFinished !== undefined) {
+        try {
+          if (await deps.onDraftFinished(finished)) {
+            return success(null);
+          }
+        } catch {
+          return failure("recording_failed");
+        }
+      }
       if ((await deps.tabs.get(tabId)) === null) {
         await quiet(releaseTab(tabId));
         return success(null);

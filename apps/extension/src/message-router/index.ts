@@ -6,7 +6,9 @@ import type { EnabledEntry } from "../enablement-store";
 import { requestSchema, type DataByRequestType, type ExtensionRequest } from "../messages";
 import { failure, success, type MessageResult } from "@sitenote/widget";
 import type { NotificationCenter } from "../notification-center";
+import type { RecordingPreference } from "../recording-preference";
 import type { RecordingService } from "../recording-service";
+import type { RecordingDraftService } from "../recording-draft-service";
 import type { ReplayProgressService } from "../replay-progress";
 import type { ResolvedPreference } from "../resolved-preference";
 import type { ScreenshotService } from "../screenshot-service";
@@ -14,6 +16,7 @@ import type { SelectionPlacementPreference } from "../selection-placement";
 import type { SiteEnablement } from "../site-enablement";
 
 export interface RouterSender {
+  frameId?: number | undefined;
   id?: string | undefined;
   url?: string | undefined;
   tab?: { id?: number | undefined; windowId?: number | undefined } | undefined;
@@ -27,9 +30,11 @@ export interface MessageRouterDeps {
   notifications: Pick<NotificationCenter, "list" | "markRead" | "markAllRead">;
   screenshots: ScreenshotService;
   recordings: RecordingService;
+  recordingDrafts?: RecordingDraftService;
   replay: ReplayProgressService;
   preferences: ResolvedPreference;
   selectionPlacement: SelectionPlacementPreference;
+  recordingPlacement: RecordingPreference;
   getEnabledSite: (origin: string) => Promise<EnabledEntry | null>;
   onWake: () => Promise<void>;
   handleTestMessage?: ((message: unknown) => boolean) | undefined;
@@ -63,6 +68,7 @@ const PAGE_SCOPED: ReadonlySet<ExtensionRequest["type"]> = new Set([
   "threads.getShare",
   "threads.setShare",
   "recording.step",
+  "recording.draft",
   "replay.save",
   "replay.load",
   "replay.clear",
@@ -84,6 +90,7 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
     replay,
     preferences,
     selectionPlacement,
+    recordingPlacement,
   } = deps;
   const extensionPrefix = `chrome-extension://${deps.extensionId}/`;
 
@@ -109,9 +116,14 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
     if (enabled === null) {
       return failure("forbidden");
     }
-    if (request.type === "threads.list" || request.type === "threads.create") {
-      const sameSite = enabled.siteId === request.siteId;
-      const samePage = parsePageUrl(request.pageUrl)?.site === origin;
+    if (
+      request.type === "threads.list" ||
+      request.type === "threads.create" ||
+      request.type === "recording.draft"
+    ) {
+      const threadRequest = request.type === "recording.draft" ? request.draft : request;
+      const sameSite = enabled.siteId === threadRequest.siteId;
+      const samePage = parsePageUrl(threadRequest.pageUrl)?.site === origin;
       if (!sameSite || !samePage) {
         return failure("forbidden");
       }
@@ -144,6 +156,12 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
       return failure("invalid_request");
     }
     const request = parsed.data;
+    if (
+      request.type === "recording.draft" &&
+      (kind !== "contentScript" || sender.frameId !== 0 || sender.tab?.id === undefined)
+    ) {
+      return failure("forbidden_sender");
+    }
 
     if (PAGE_SCOPED.has(request.type)) {
       const denied = await authorizePage(request, sender);
@@ -165,7 +183,11 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
       ) {
         return failure("forbidden");
       }
-    } else if (request.type !== "preferences.getSelectionPlacement" && kind !== "extensionPage") {
+    } else if (
+      request.type !== "preferences.getSelectionPlacement" &&
+      request.type !== "preferences.getRecordingPlacement" &&
+      kind !== "extensionPage"
+    ) {
       return failure("forbidden_sender");
     }
 
@@ -196,8 +218,16 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
         return data.recordingUrl(request);
       case "threads.replaySource":
         return data.replaySource(request);
+      case "recording.prepare":
+        return deps.recordingDrafts?.prepare(request.tabId) ?? failure("recording_failed");
+      case "recording.draft": {
+        const tabId = sender.tab?.id;
+        return tabId === undefined
+          ? failure("forbidden_sender")
+          : (deps.recordingDrafts?.submit(tabId, request.draft) ?? failure("recording_failed"));
+      }
       case "recording.start":
-        return recordings.start(request);
+        return deps.recordingDrafts?.start(request) ?? recordings.start(request);
       case "recording.stop":
         return recordings.stop(kind === "contentScript" ? sender.tab?.id : request.tabId);
       case "recording.status":
@@ -253,6 +283,19 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
       case "preferences.set":
         try {
           await preferences.save(request.siteId, request.showResolved);
+          return success(null);
+        } catch {
+          return failure("unknown");
+        }
+      case "preferences.getRecordingPlacement":
+        try {
+          return success(await recordingPlacement.load());
+        } catch {
+          return failure("unknown");
+        }
+      case "preferences.setRecordingPlacement":
+        try {
+          await recordingPlacement.save(request.placement);
           return success(null);
         } catch {
           return failure("unknown");

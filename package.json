@@ -31,7 +31,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@next/eslint-plugin-next": "16.4.2",
+    "@next/eslint-plugin-next": "16.4.6",
     "@sitenote/tsconfig": "workspace:*",
     "@types/node": "24.19.2",
     "eslint": "10.13.0",

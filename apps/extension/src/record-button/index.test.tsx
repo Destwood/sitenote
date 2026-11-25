@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,8 +22,14 @@ const TAB_ID = 7;
 const RECORD = /^Record$/;
 const STOP = /^Stop recording$/;
 
-function route(status: { state: "idle" | "recording" | "pending" } | "unavailable") {
+function route(
+  status: { state: "idle" | "recording" | "pending" } | "unavailable",
+  placement = "end",
+) {
   mocks.sendMessage.mockImplementation((request: { type: string }) => {
+    if (request.type === "preferences.getRecordingPlacement") {
+      return Promise.resolve(success(placement));
+    }
     if (request.type === "recording.status") {
       return Promise.resolve(
         status === "unavailable" ? failure("unavailable") : success({ state: status.state }),
@@ -40,6 +46,148 @@ beforeEach(() => {
 });
 
 describe("RecordButton", () => {
+  it("defaults to At start, prepares the recording without capture and closes on success", async () => {
+    const user = userEvent.setup();
+    const close = vi.fn();
+    route({ state: "idle" }, "start");
+    render(<RecordButton tabId={TAB_ID} close={close} />);
+    await user.click(await screen.findByRole("button", { name: "Attach comment" }));
+    expect(
+      screen.getByRole("menuitemradio", { name: "At start" }).getAttribute("aria-checked"),
+    ).toBe("true");
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: RECORD }));
+    expect(mocks.sendMessage).toHaveBeenCalledWith({ type: "recording.prepare", tabId: TAB_ID });
+    expect(mocks.getMediaStreamId).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("only saves the preference when choosing At end and restores that selection", async () => {
+    const user = userEvent.setup();
+    route({ state: "idle" }, "start");
+    render(<RecordButton tabId={TAB_ID} close={vi.fn()} />);
+    await user.click(await screen.findByRole("button", { name: "Attach comment" }));
+    expect(
+      screen.getByRole("menuitemradio", { name: "At start" }).getAttribute("aria-checked"),
+    ).toBe("true");
+    await user.click(screen.getByRole("menuitemradio", { name: "At end" }));
+    expect(mocks.sendMessage).toHaveBeenCalledWith({
+      type: "preferences.setRecordingPlacement",
+      placement: "end",
+    });
+    expect(mocks.sendMessage.mock.calls.map(([request]) => request.type)).toEqual([
+      "recording.status",
+      "preferences.getRecordingPlacement",
+      "preferences.setRecordingPlacement",
+    ]);
+    expect(mocks.getMediaStreamId).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Attach comment" }));
+    expect(screen.getByRole("menuitemradio", { name: "At end" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+  });
+
+  it("does not replace a user's choice with a late stored preference", async () => {
+    const user = userEvent.setup();
+    let resolvePreference: (value: unknown) => void = () => undefined;
+    const loaded = new Promise((resolve) => {
+      resolvePreference = resolve;
+    });
+    mocks.sendMessage.mockImplementation((request) =>
+      request.type === "preferences.getRecordingPlacement"
+        ? loaded
+        : Promise.resolve(success(request.type === "recording.status" ? { state: "idle" } : null)),
+    );
+    render(<RecordButton tabId={TAB_ID} close={vi.fn()} />);
+    await user.click(await screen.findByRole("button", { name: "Attach comment" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "At end" }));
+    await act(async () => {
+      resolvePreference(success("start"));
+      await loaded;
+    });
+    await user.click(screen.getByRole("button", { name: "Attach comment" }));
+    expect(screen.getByRole("menuitemradio", { name: "At end" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+  });
+
+  it("keeps the selected placement and shows a notice when saving fails", async () => {
+    const user = userEvent.setup();
+    mocks.sendMessage.mockImplementation((request) =>
+      Promise.resolve(
+        request.type === "preferences.setRecordingPlacement"
+          ? failure("unknown")
+          : request.type === "preferences.getRecordingPlacement"
+            ? success("start")
+            : success({ state: "idle" }),
+      ),
+    );
+    render(<RecordButton tabId={TAB_ID} close={vi.fn()} />);
+    await user.click(await screen.findByRole("button", { name: "Attach comment" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "At end" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(ERROR_MESSAGES.unknown);
+    await user.click(screen.getByRole("button", { name: "Attach comment" }));
+    expect(screen.getByRole("menuitemradio", { name: "At end" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+  });
+
+  it("shows preference load failures while keeping the default start choice", async () => {
+    const user = userEvent.setup();
+    mocks.sendMessage.mockImplementation((request) =>
+      Promise.resolve(
+        request.type === "preferences.getRecordingPlacement"
+          ? failure("unknown")
+          : success({ state: "idle" }),
+      ),
+    );
+    render(<RecordButton tabId={TAB_ID} close={vi.fn()} />);
+    expect((await screen.findByRole("alert")).textContent).toBe(ERROR_MESSAGES.unknown);
+    await user.click(screen.getByRole("button", { name: "Attach comment" }));
+    expect(
+      screen.getByRole("menuitemradio", { name: "At start" }).getAttribute("aria-checked"),
+    ).toBe("true");
+  });
+
+  it("shows prepare failures, keeps the popup open and allows retry", async () => {
+    const user = userEvent.setup();
+    const close = vi.fn();
+    mocks.sendMessage.mockImplementation((request) =>
+      Promise.resolve(
+        request.type === "recording.prepare"
+          ? failure("recording_failed")
+          : request.type === "preferences.getRecordingPlacement"
+            ? success("start")
+            : success({ state: "idle" }),
+      ),
+    );
+    render(<RecordButton tabId={TAB_ID} close={close} />);
+    await user.click(await screen.findByRole("button", { name: RECORD }));
+    expect((await screen.findByRole("alert")).textContent).toBe(ERROR_MESSAGES.recording_failed);
+    await user.click(screen.getByRole("button", { name: RECORD }));
+    expect(
+      mocks.sendMessage.mock.calls.filter(([request]) => request.type === "recording.prepare"),
+    ).toHaveLength(2);
+    expect(close).not.toHaveBeenCalled();
+    expect(mocks.getMediaStreamId).not.toHaveBeenCalled();
+  });
+
+  it("disables both idle actions during preparation to prevent duplicate recording", async () => {
+    const user = userEvent.setup();
+    route({ state: "idle" }, "start");
+    const onRecordAtStart = vi.fn(
+      () => new Promise<ReturnType<typeof success<null>>>(() => undefined),
+    );
+    render(<RecordButton tabId={TAB_ID} close={vi.fn()} onRecordAtStart={onRecordAtStart} />);
+    const record = await screen.findByRole("button", { name: RECORD });
+    await user.dblClick(record);
+    expect(onRecordAtStart).toHaveBeenCalledExactlyOnceWith(TAB_ID);
+    expect(record.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Attach comment" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+  });
+
   it("offers Record when the tab is idle or has a pending recording", async () => {
     route({ state: "pending" });
 
@@ -110,7 +258,9 @@ describe("RecordButton", () => {
       Promise.resolve(
         request.type === "recording.status"
           ? success({ state: "idle" })
-          : failure("recording_busy"),
+          : request.type === "preferences.getRecordingPlacement"
+            ? success("end")
+            : failure("recording_busy"),
       ),
     );
 
@@ -128,6 +278,7 @@ describe("RecordButton", () => {
     render(<RecordButton tabId={TAB_ID} close={vi.fn()} />);
     await user.click(await screen.findByRole("button", { name: STOP }));
 
+    expect(screen.queryByRole("button", { name: "Attach comment" })).toBeNull();
     expect(mocks.sendMessage).toHaveBeenCalledWith({ type: "recording.stop", tabId: TAB_ID });
     expect(mocks.getMediaStreamId).not.toHaveBeenCalled();
     await waitFor(() => {
@@ -137,13 +288,30 @@ describe("RecordButton", () => {
     });
   });
 
+  it("shows stop errors and keeps the popup open", async () => {
+    const close = vi.fn();
+    mocks.sendMessage.mockImplementation((request) =>
+      Promise.resolve(
+        request.type === "recording.stop"
+          ? failure("recording_failed")
+          : request.type === "preferences.getRecordingPlacement"
+            ? success("end")
+            : success({ state: "recording" }),
+      ),
+    );
+    render(<RecordButton tabId={TAB_ID} close={close} />);
+    await userEvent.click(await screen.findByRole("button", { name: STOP }));
+    expect((await screen.findByRole("alert")).textContent).toBe(ERROR_MESSAGES.recording_failed);
+    expect(close).not.toHaveBeenCalled();
+  });
+
   it("renders nothing when the recording status cannot be read", async () => {
     route("unavailable");
 
     const { container } = render(<RecordButton tabId={TAB_ID} close={vi.fn()} />);
 
     await waitFor(() => {
-      expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
+      expect(mocks.sendMessage).toHaveBeenCalledTimes(2);
     });
     expect(container.innerHTML).toBe("");
     expect(screen.queryByRole("button")).toBeNull();

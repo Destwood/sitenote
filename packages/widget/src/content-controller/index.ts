@@ -117,6 +117,7 @@ export interface ContentState {
   screenshots: ReadonlyMap<string, ScreenshotState>;
   recordings: ReadonlyMap<string, ScreenshotState>;
   recordingAttached: boolean;
+  recordingDraft: { state: "armed"; draftId: string } | null;
   resolutions: ReadonlyMap<string, Resolution>;
   positions: Measurements;
   commentMode: boolean;
@@ -161,6 +162,9 @@ export interface ContentController {
   exitCommentMode: () => void;
   enterCommentMode: (notice: string) => boolean;
   attachRecording: () => boolean;
+  beginRecordingComment: () => boolean;
+  recordingThreadCreated: (thread: ThreadRecord, withoutVideo?: boolean) => void;
+  recordingThreadFailed: (message: string) => void;
   commentOnContextTarget: () => boolean;
   toggleSidebar: () => void;
   closeSidebar: () => void;
@@ -252,6 +256,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     screenshots: new Map(),
     recordings: new Map(),
     recordingAttached: false,
+    recordingDraft: null,
     resolutions: new Map(),
     positions: new Map(),
     commentMode: false,
@@ -572,7 +577,9 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
   function exitCommentMode(): void {
     setCommentMode(false);
     store.setState((state) =>
-      state.recordingAttached ? { ...state, recordingAttached: false } : state,
+      state.recordingAttached || state.recordingDraft !== null
+        ? { ...state, recordingAttached: false, recordingDraft: null }
+        : state,
     );
   }
 
@@ -870,6 +877,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
             activeThreadId: null,
             panelError: undefined,
             recordingAttached: state.pending === null && state.recordingAttached,
+            recordingDraft: state.pending === null ? state.recordingDraft : null,
           },
     );
   }
@@ -1164,7 +1172,7 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
   });
 
   async function submitNewThread(submission: ComposerSubmission): Promise<void> {
-    const { pending, site, recordingAttached } = store.getState();
+    const { pending, site, recordingAttached, recordingDraft } = store.getState();
     const pageUrl = readPageUrl();
     if (pending === null || site === null || pageUrl === null || creating) {
       throw new Error(ERROR_MESSAGES.page_unavailable);
@@ -1173,6 +1181,46 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
     store.setState((state) => ({ ...state, panelError: undefined }));
     try {
       const context = await deps.backend.collectContext();
+      if (recordingDraft !== null) {
+        const submit = deps.backend.submitRecordingDraft;
+        if (submit === undefined) {
+          throw new Error(ERROR_MESSAGES.recording_failed);
+        }
+        const result = await submit({
+          draftId: recordingDraft.draftId,
+          siteId: site.siteId,
+          pageUrl,
+          anchor: pending.anchor,
+          context,
+          ...(pending.captureId === null ? {} : { captureId: pending.captureId }),
+          body: submission.body,
+          mentions: submission.mentions,
+          ...(submission.startsSignedOut === true ? { startsSignedOut: true } : {}),
+        });
+        if (!result.ok) {
+          store.setState((state) => ({ ...state, panelError: result.error.message }));
+          pushToast({ message: result.error.message, variant: "error" });
+          throw new Error(result.error.message);
+        }
+        store.setState((state) => ({
+          ...state,
+          recordingDraft: null,
+          pending: state.pending === pending ? null : state.pending,
+        }));
+        if (result.data.state === "posted") {
+          recordingThreadCreated(result.data.thread);
+          pushToast({
+            message: "Could not start recording. Comment posted without video.",
+            variant: "info",
+          });
+        } else {
+          pushToast({
+            message: "Recording started. Your comment is posted when you stop.",
+            variant: "info",
+          });
+        }
+        return;
+      }
       const result = await deps.backend.createThread({
         siteId: site.siteId,
         pageUrl,
@@ -1229,6 +1277,26 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       threads: upsertComment(state.threads, comment),
       siteThreads: upsertComment(state.siteThreads, comment),
     }));
+  }
+
+  function recordingThreadCreated(thread: ThreadRecord, withoutVideo = false): void {
+    if (store.getState().site?.siteId !== thread.siteId) {
+      return;
+    }
+    store.setState((state) => ({
+      ...state,
+      threads:
+        thread.pageUrl === readPageUrl() ? upsertThread(state.threads, thread) : state.threads,
+      siteThreads: upsertThread(state.siteThreads, thread),
+    }));
+    reresolve();
+    openThread(thread.id);
+    if (withoutVideo) {
+      pushToast({
+        message: "Recording could not be saved. Comment posted without video.",
+        variant: "info",
+      });
+    }
   }
 
   async function reply(threadId: string, submission: ComposerSubmission): Promise<void> {
@@ -1312,6 +1380,27 @@ export function createContentController(deps: ContentControllerDeps): ContentCon
       return true;
     },
     exitCommentMode,
+    beginRecordingComment: () => {
+      if (
+        deps.backend.submitRecordingDraft === undefined ||
+        store.getState().status !== "ready" ||
+        store.getState().recordingDraft !== null
+      ) {
+        return false;
+      }
+      closePanel();
+      store.setState((state) => ({
+        ...state,
+        recordingAttached: false,
+        recordingDraft: { state: "armed", draftId: crypto.randomUUID() },
+      }));
+      setCommentMode(true);
+      return true;
+    },
+    recordingThreadCreated,
+    recordingThreadFailed: (message) => {
+      pushToast({ message, variant: "error" });
+    },
     enterCommentMode: enterCommentModeWith,
     attachRecording: () => {
       const entered = enterCommentModeWith(RECORDING_ATTACHED_MESSAGE);

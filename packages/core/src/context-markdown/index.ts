@@ -140,6 +140,12 @@ function stepText(step: RecordedAction): string {
       return `Type into${quoted === "" ? " a field" : quoted} (value not recorded)`;
     case "submit":
       return `submit${quoted === "" ? " form" : quoted}`;
+    case "back":
+      return "Back";
+    case "forward":
+      return "Forward";
+    case "reload":
+      return "Reload";
   }
 }
 

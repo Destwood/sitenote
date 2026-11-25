@@ -1,6 +1,6 @@
 import type { ThreadContext } from "@sitenote/core";
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { assert, describe, expect, it, vi } from "vitest";
 
 import { BOB, makeComment, makeThread } from "../test-fixtures";
 import type { SiteThreadItem } from "../types";
@@ -52,6 +52,48 @@ function twoComments() {
 }
 
 describe("OffPageThreadCard", () => {
+  it("shows the status and share control in the header when share is given", () => {
+    const onCopy = vi.fn(() => true);
+    renderCard({
+      share: { access: "workspace", pending: false, onAccessChange: vi.fn(), onCopy },
+    });
+
+    const header = screen.getByRole("heading", { name: "Comment on another page" }).parentElement;
+    assert(header !== null);
+    expect(within(header).getByText("Open")).toBeTruthy();
+    fireEvent.click(within(header).getByRole("button", { name: "Copy link" }));
+    expect(onCopy).toHaveBeenCalledTimes(1);
+    expect(within(header).getByRole("button", { name: "Who can open the link" })).toBeTruthy();
+  });
+
+  it("omits the share control when share is not given", () => {
+    renderCard();
+
+    expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Who can open the link" })).toBeNull();
+  });
+
+  it.each(["open", "resolved"] as const)(
+    "keeps the %s status action in the bottom row",
+    (status) => {
+      const { onToggleStatus } = renderCard({ item: { ...ITEM, status } });
+
+      const header = screen.getByRole("heading", {
+        name: "Comment on another page",
+      }).parentElement;
+      assert(header !== null);
+      const label = status === "resolved" ? "Reopen" : "Resolve";
+      expect(within(header).queryByRole("button", { name: label })).toBeNull();
+      const action = screen.getByRole("button", { name: label });
+      expect(action.parentElement).toBe(
+        screen.getByRole("button", { name: "Open page" }).parentElement,
+      );
+      expect(screen.getAllByText(status === "resolved" ? "Resolved" : "Open")).toHaveLength(1);
+      fireEvent.click(action);
+      expect(onToggleStatus).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it("shows the excerpt when no thread is given", () => {
     renderCard();
 
